@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import pdf from "pdf-parse"
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,49 +21,9 @@ export async function POST(request: NextRequest) {
     // Convert file to buffer
     const buffer = Buffer.from(await file.arrayBuffer())
 
-    // Create a more comprehensive server-side extraction
-    const extractedText = `
-# Server-Side PDF Processing Result
-
-## Document Information
-- **Filename**: ${file.name}
-- **Size**: ${(file.size / 1024 / 1024).toFixed(2)} MB
-- **Processing Date**: ${new Date().toLocaleString()}
-- **Processing Method**: Server-side extraction
-
-## Content Summary
-This document was processed using server-side PDF extraction. The actual implementation would use libraries like:
-
-### Node.js Libraries:
-- **pdf-parse**: For basic text extraction
-- **pdf2pic**: For converting PDF pages to images
-- **tesseract.js**: For OCR processing of image-based PDFs
-
-### Python Libraries (if using Python backend):
-- **PyPDF2**: For text extraction
-- **pdfplumber**: For advanced PDF parsing
-- **pytesseract**: For OCR capabilities
-
-## Sample Content
-This is placeholder content that demonstrates how server-side processing would work. In a production environment, this would contain the actual extracted text from your PDF document.
-
-### Key Features:
-1. **Text Extraction**: Extracting readable text from PDF documents
-2. **Metadata Parsing**: Getting document properties and information
-3. **Page Processing**: Handling multi-page documents
-4. **Error Handling**: Graceful handling of processing errors
-
-## Implementation Notes
-To implement actual server-side PDF processing:
-
-1. Install a PDF processing library
-2. Set up proper error handling
-3. Implement OCR for image-based PDFs
-4. Add support for password-protected files
-5. Optimize for large file processing
-
-This server-side approach provides a reliable fallback when client-side processing fails.
-    `.trim()
+    // Use pdf-parse to extract text
+    const data = await pdf(buffer)
+    const extractedText = data.text
 
     // Create simple chunks
     const chunks = chunkText(extractedText)
@@ -73,9 +34,9 @@ This server-side approach provides a reliable fallback when client-side processi
       chunks,
       metadata: {
         title: file.name,
-        pages: 1,
-        author: "Server Processor",
-        subject: "Server-side PDF extraction",
+        pages: data.numpages,
+        author: data.info.Author || "N/A",
+        subject: data.info.Subject || "N/A",
         processingMethod: "Server",
         originalSize: file.size,
       },
