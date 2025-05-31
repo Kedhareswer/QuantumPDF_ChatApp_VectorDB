@@ -1,39 +1,183 @@
-# PDF RAG Chatbot
+<div align="center">
+  <h1>✨ QuantumPDF ChatApp</h1>
+  <p>
+    <strong>An advanced AI-powered PDF chat application with Retrieval-Augmented Generation (RAG) capabilities</strong>
+  </p>
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
+  
+  <p align="center">
+    <a href="https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers">
+      <img src="https://img.shields.io/github/stars/Kedhareswer/QuantumPDF_ChatApp?style=social" alt="GitHub stars">
+    </a>
+    <a href="https://github.com/Kedhareswer/QuantumPDF_ChatApp/network/members">
+      <img src="https://img.shields.io/github/forks/Kedhareswer/QuantumPDF_ChatApp?style=social" alt="GitHub forks">
+    </a>
+  </p>
 
-A fully functional PDF chatbot using Retrieval-Augmented Generation (RAG) with multiple LLM options.
+  <p align="center">
+    <a href="#features">Features</a> •
+    <a href="#demo">Demo</a> •
+    <a href="#installation">Installation</a> •
+    <a href="#usage">Usage</a> •
+    <a href="#contributing">Contributing</a> •
+    <a href="#license">License</a>
+  </p>
+</div>
 
-## Features
+## 🌟 Features
 
-- **PDF Processing**: Extract and chunk text from PDF documents
-- **Vector Search**: FAISS-based similarity search for relevant content retrieval
-- **Multiple LLM Options**:
-  - Hugging Face models (local, free)
-  - OpenAI GPT models (API)
-  - Google Gemini (API)
+### 📄 Advanced PDF Processing
+- **Smart Text Extraction**: Extract and chunk text from PDF documents with precision
+- **Semantic Chunking**: Intelligent text segmentation for better context understanding
+- **Batch Processing**: Handle multiple documents simultaneously
+
+### 🔍 Powerful Search & Retrieval
+- **FAISS-based Vector Search**: Lightning-fast similarity search
+- **Hybrid Search**: Combine keyword and semantic search for optimal results
+- **Relevance Scoring**: Smart ranking of retrieved content
+
+### 🤖 Multiple AI Model Support
+- **Local Models**: Run completely offline with Hugging Face models
+- **Cloud AI**: Seamless integration with leading AI providers:
+  - OpenAI GPT-4/3.5
+  - Google Gemini
+  - Anthropic Claude
   - AIML API (multiple models)
-- **Real-time Chat Interface**: Interactive web-based chat
-- **Source Citations**: Shows which document chunks were used for answers
+  - Groq API
 
-## Installation
+### 🎨 Modern Web Interface
+- **Real-time Chat**: Interactive conversation interface
+- **Document Management**: Organize and manage your PDF library
+- **Source Citations**: Trace answers back to original document sections
+- **Dark/Light Mode**: Built-in theme support
 
-1. **Clone the repository**:
+### 🔄 Advanced Features
+- **Weights & Biases Integration**: Track experiments and model performance
+- **API Configuration**: Easy setup for different AI providers
+- **Error Handling**: Robust error handling and user feedback
+- **Responsive Design**: Works on desktop and tablet devices
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8+
+- Node.js 16+ (for frontend development)
+- pip (Python package manager)
+
+### Installation
+
+1. **Clone the repository**
    ```bash
    git clone https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
    cd QuantumPDF_ChatApp
    ```
 
-2. **Install Python dependencies**:
+2. **Set up Python environment**
    ```bash
+   # Create and activate virtual environment (recommended)
+   python -m venv venv
+   source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+   
+   # Install dependencies
    pip install -r requirements.txt
    ```
 
-3. **Run the application**:
-   \`\`\`bash
-   python app.py
-   \`\`\`
+3. **Configure environment variables**
+   Create a `.env` file in the root directory:
+   ```env
+   # Required for cloud AI providers (optional for local models)
+   OPENAI_API_KEY=your_openai_key
+   GEMINI_API_KEY=your_gemini_key
+   ANTHROPIC_API_KEY=your_anthropic_key
+   AIML_API_KEY=your_aiml_key
+   GROQ_API_KEY=your_groq_key
+   
+   # Optional: Weights & Biases for experiment tracking
+   WANDB_API_KEY=your_wandb_key
+   ```
 
-4. **Access the interface**:
-   Open your browser to `http://localhost:5000`
+4. **Run the application**
+   ```bash
+   # Start the backend API
+   python app.py
+   
+   # In a new terminal, start the frontend (if developing)
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+5. **Access the application**
+   Open your browser to [http://localhost:3000](http://localhost:3000)
+
+## 🎯 Why QuantumPDF ChatApp?
+
+- **Privacy-First**: Run completely offline with local models
+- **Extensible**: Easy to add new AI providers and features
+- **Production-Ready**: Built with scalability and performance in mind
+- **Open Source**: Full control and transparency over your data
+
+## 🤝 Contributing
+
+We love contributions! Whether you're fixing bugs, improving documentation, or adding new features, your help is appreciated. Here's how to get started:
+
+1. Fork the repository
+2. Create a new branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Submit a pull request
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🌟 Show Your Support
+
+If you find this project useful, please consider giving it a ⭐️ on GitHub! Your support helps us continue to improve and maintain this project.
+
+[![Star on GitHub](https://img.shields.io/github/stars/Kedhareswer/QuantumPDF_ChatApp?style=social)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
+
+💡 **Pro Tip**: Starring the repo also helps others discover this project and shows your appreciation for open-source software!
+
+## 🤝 Join Our Community
+
+- [GitHub Discussions](https://github.com/Kedhareswer/QuantumPDF_ChatApp/discussions) - Ask questions and share ideas
+- [Issues](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues) - Report bugs or request features
+- [Discord](https://discord.gg/your-invite-link) - Chat with the community (coming soon!)
+
+## 📞 Contact
+
+Have questions or suggestions? We'd love to hear from you!
+
+- Open an [issue](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
+- Email: [contact@quantumpdf.app](mailto:contact@quantumpdf.app)
+- Twitter: [@QuantumPDFApp](https://twitter.com/QuantumPDFApp)
+
+## 📚 Additional Resources
+
+- [API Documentation](https://github.com/Kedhareswer/QuantumPDF_ChatApp/wiki/API-Documentation)
+- [Development Guide](https://github.com/Kedhareswer/QuantumPDF_ChatApp/wiki/Development-Guide)
+- [FAQ](https://github.com/Kedhareswer/QuantumPDF_ChatApp/wiki/FAQ)
+- [Release Notes](https://github.com/Kedhareswer/QuantumPDF_ChatApp/releases)
+
+---
+
+<div align="center">
+  <p>Made with ❤️ by the QuantumPDF Team</p>
+  <p>© 2023 QuantumPDF. All rights reserved.</p>
+  
+  [![GitHub contributors](https://img.shields.io/github/contributors/Kedhareswer/QuantumPDF_ChatApp)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/graphs/contributors)
+  [![GitHub issues](https://img.shields.io/github/issues/Kedhareswer/QuantumPDF_ChatApp)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
+  [![GitHub forks](https://img.shields.io/github/forks/Kedhareswer/QuantumPDF_ChatApp)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/network/members)
+  [![GitHub stars](https://img.shields.io/github/stars/Kedhareswer/QuantumPDF_ChatApp)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
+  [![GitHub license](https://img.shields.io/github/license/Kedhareswer/QuantumPDF_ChatApp)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/blob/main/LICENSE)
+  
+  [![Twitter Follow](https://img.shields.io/twitter/follow/QuantumPDFApp?style=social)](https://twitter.com/QuantumPDFApp)
+  [![GitHub last commit](https://img.shields.io/github/last-commit/Kedhareswer/QuantumPDF_ChatApp)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/commits/main)
+  [![GitHub release](https://img.shields.io/github/v/release/Kedhareswer/QuantumPDF_ChatApp)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/releases)
+</div>
 
 ## Usage
 
