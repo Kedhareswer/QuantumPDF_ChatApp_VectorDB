@@ -1,6 +1,6 @@
 # QuantumPDF ChatApp
 
-**QuantumPDF ChatApp** is an AI-powered web application that enables users to interact with the contents of PDF documents using advanced language models. It supports both local and cloud-based LLMs and provides features for efficient document processing, semantic search, and conversational querying.
+**QuantumPDF ChatApp** is an AI-powered web application that enables users to interact with the contents of PDF documents using advanced language models. It supports both local and cloud-based LLMs[...]
 
 ---
 
