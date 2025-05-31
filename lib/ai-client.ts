@@ -122,6 +122,7 @@ export class AIClient {
     console.log("Making server-side Hugging Face API request for embedding")
 
     try {
+      console.log("AIClient: generateHuggingFaceEmbedding - Attempting to POST to /api/huggingface/embedding");
       const response = await fetch("/api/huggingface/embedding", {
         method: "POST",
         headers: {
@@ -160,6 +161,7 @@ export class AIClient {
     const prompt = this.formatMessagesForHuggingFace(messages)
     const context = messages.find((m) => m.role === "system")?.content || ""
 
+    console.log("AIClient: generateHuggingFaceText - Attempting to POST to /api/huggingface/text");
     const response = await fetch("/api/huggingface/text", {
       method: "POST",
       headers: {
@@ -183,6 +185,7 @@ export class AIClient {
 
   private async testHuggingFaceConnection(): Promise<boolean> {
     try {
+      console.log("AIClient: testHuggingFaceConnection - Attempting to POST to /api/test/huggingface");
       const response = await fetch("/api/test/huggingface", {
         method: "POST",
         headers: {
