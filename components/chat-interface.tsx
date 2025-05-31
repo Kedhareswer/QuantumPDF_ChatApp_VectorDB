@@ -86,7 +86,7 @@ export function ChatInterface({ messages, onSendMessage, isProcessing, disabled 
                 <Brain className="w-10 h-10" />
               </div>
               <div>
-                <h3 className="text-2xl font-bold mb-2">RAG CHATBOT READY</h3>
+                <h3 className="text-2xl font-bold mb-2">QUANTUM PDF READY</h3>
                 <p className="text-gray-600 mb-6">
                   {disabled
                     ? "Upload PDF documents and configure your AI provider to start chatting"

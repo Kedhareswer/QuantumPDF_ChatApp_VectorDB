@@ -460,7 +460,7 @@ export default function PDFChatbot() {
                   <Brain className="w-6 h-6" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight">PDF RAG CHATBOT</h1>
+                  <h1 className="text-2xl font-bold tracking-tight">Quantum PDF</h1>
                   <p className="text-xs text-gray-600 mt-1">Enhanced AI Document Analysis & Chat</p>
                 </div>
               </div>
