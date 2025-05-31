@@ -1,4 +1,3 @@
-```markdown
 # 🌌 QuantumPDF ChatApp
 
 [![GitHub Stars](https://img.shields.io/github/stars/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
