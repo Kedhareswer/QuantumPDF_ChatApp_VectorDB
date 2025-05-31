@@ -208,6 +208,11 @@ cd QuantumPDF_ChatApp
     - Be mindful of API rate limits for your chosen `LLM` provider.
 - **Logs:**
     - Always check the terminal output from both the Flask backend (`app.py`) and the Next.js frontend console for detailed error messages.
+- **Hugging Face Connectivity Issues**:
+    - **API Key**: Ensure the `HUGGINGFACE_API_KEY` is correctly set in your `.env` file. The application logs whether this key is found when API routes are accessed. Check server logs for messages like 'Hugging Face API Key found: Yes/No'.
+    - **Test Route**: You can test basic Hugging Face API connectivity by sending a POST request to the `/api/test/huggingface` endpoint. A successful response indicates that the backend can communicate with Hugging Face. Check server logs for details if this test fails.
+    - **Server Logs**: If you encounter issues, check the server-side logs for detailed error messages from the Hugging Face API, including the model name that was being accessed. These logs can provide clues about authentication failures, model access problems, or network issues.
+    - **Client Fallback**: The application may fall back to local (less accurate) embedding or text generation if it cannot reach the Hugging Face API. Check the browser's developer console for warnings like 'Hugging Face ... API failed. Falling back to local ... generation.' This indicates a problem with Hugging Face connectivity.
 ⚠️ *Important: If you encounter persistent issues, consider opening an issue on the [GitHub repository](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues) with detailed logs and steps to reproduce the problem.*
 
 ---
