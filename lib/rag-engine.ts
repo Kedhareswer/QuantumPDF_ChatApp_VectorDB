@@ -442,7 +442,7 @@ export class RAGEngine {
     }
   }
 
-  private async performSemanticSearch(question: string): { chunks: string[]; score: number } {
+  private async performSemanticSearch(question: string): Promise<{ chunks: string[]; score: number }> {
     if (!this.aiClient) {
       throw new Error("AI client not available")
     }

@@ -14,7 +14,20 @@ interface Document {
   chunks: string[]
   embeddings: number[][]
   uploadedAt: Date
-  metadata?: any
+  metadata?: Record<string, any> // More specific than any
+}
+
+// Define these interfaces similar to how they were defined in the other file
+interface PDFInfo {
+  Title?: string;
+  Author?: string;
+  Subject?: string;
+  [key: string]: any;
+}
+
+interface PDFDocumentMetadata {
+  info?: PDFInfo;
+  [key: string]: any;
 }
 
 interface PDFProcessorFinalProps {
@@ -209,13 +222,13 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
       setUploadProgress(100)
 
       // Get metadata
-      let metadata
+      let pdfInfo: PDFInfo | undefined;
       try {
-        const metadataResult = await pdf.getMetadata()
-        metadata = metadataResult.info
+        const metadataResult: PDFDocumentMetadata = await pdf.getMetadata();
+        pdfInfo = metadataResult.info;
       } catch (metaError) {
-        console.warn("Could not extract metadata:", metaError)
-        metadata = {}
+        console.warn("Could not extract metadata:", metaError);
+        // pdfInfo remains undefined, which is fine
       }
 
       const document: Document = {
@@ -226,9 +239,9 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
         embeddings: [],
         uploadedAt: new Date(),
         metadata: {
-          title: metadata?.Title || file.name,
-          author: metadata?.Author || "Unknown",
-          subject: metadata?.Subject || "",
+          title: pdfInfo?.Title || file.name,
+          author: pdfInfo?.Author || "Unknown",
+          subject: pdfInfo?.Subject || "",
           pages: pdf.numPages,
           processingMethod: "PDF.js",
           successfulPages,
