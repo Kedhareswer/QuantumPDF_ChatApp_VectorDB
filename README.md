@@ -72,6 +72,7 @@ flowchart TD
     E2 -->|Retrieve Chunks & History| F1[LLM Answer Generation]
     F1 -->|Prompt LLM (Local/Cloud)| F2[Response Generation]
     F2 --> G[Display Results & Cited Sources (Frontend)]
+```
 
 **Step-by-step:**
 
