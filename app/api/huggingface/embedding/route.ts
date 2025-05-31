@@ -2,8 +2,10 @@ import { type NextRequest, NextResponse } from "next/server"
 import { HfInference } from "@huggingface/inference"
 
 export async function POST(request: NextRequest) {
+  let embeddingModel: string = "sentence-transformers/all-MiniLM-L6-v2"; // Default model
   try {
     const apiKey = process.env.HUGGINGFACE_API_KEY
+    console.log("Hugging Face API Key found:", apiKey ? "Yes" : "No");
 
     if (!apiKey) {
       return NextResponse.json({ error: "HUGGINGFACE_API_KEY not configured on server" }, { status: 500 })
@@ -17,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hf = new HfInference(apiKey)
-    const embeddingModel = model || "sentence-transformers/all-MiniLM-L6-v2"
+    embeddingModel = model || "sentence-transformers/all-MiniLM-L6-v2" // Assign specific model
 
     console.log(`Generating embedding with model: ${embeddingModel}`)
 
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
       dimension: embedding.length,
     })
   } catch (error) {
-    console.error("Hugging Face embedding API error:", error)
+    console.error(`Hugging Face embedding API error for model ${embeddingModel || 'Unknown Model'}:`, error)
 
     let errorMessage = "Failed to generate embedding"
     if (error instanceof Error) {
