@@ -14,20 +14,7 @@ interface Document {
   chunks: string[]
   embeddings: number[][]
   uploadedAt: Date
-  metadata?: Record<string, any> // More specific than any
-}
-
-// Define these interfaces similar to how they were defined in the other file
-interface PDFInfo {
-  Title?: string;
-  Author?: string;
-  Subject?: string;
-  [key: string]: any;
-}
-
-interface PDFDocumentMetadata {
-  info?: PDFInfo;
-  [key: string]: any;
+  metadata?: any
 }
 
 interface PDFProcessorFinalProps {
@@ -114,44 +101,12 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
         throw new Error("PDF.js getDocument function not available")
       }
 
-      // Configure PDF.js to work without external worker
+      // Configure worker if possible
       if (typeof window !== "undefined" && pdfjsLib.GlobalWorkerOptions) {
         try {
-          // Method 1: Try using a data URL worker
-          const workerBlob = new Blob(
-            [
-              `
-      // Minimal worker that imports the actual PDF.js worker
-      importScripts('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js');
-    `,
-            ],
-            { type: "application/javascript" },
-          )
-
-          const workerUrl = URL.createObjectURL(workerBlob)
-          pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
-
-          console.log("PDF.js worker configured successfully")
-        } catch (blobError) {
-          console.warn("Blob worker failed, trying CDN:", blobError)
-
-          try {
-            // Method 2: Use a reliable CDN
-            pdfjsLib.GlobalWorkerOptions.workerSrc =
-              "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"
-            console.log("PDF.js worker configured with CDN")
-          } catch (cdnError) {
-            console.warn("CDN worker failed, trying local fallback:", cdnError)
-
-            try {
-              // Method 3: Try a different CDN
-              pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js"
-              console.log("PDF.js worker configured with unpkg CDN")
-            } catch (unpkgError) {
-              console.warn("All worker methods failed:", unpkgError)
-              throw new Error("Could not configure PDF.js worker")
-            }
-          }
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
+        } catch (workerError) {
+          console.warn("Worker configuration failed:", workerError)
         }
       }
 
@@ -165,15 +120,10 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
 
       const loadingTask = pdfjsLib.getDocument({
         data: arrayBuffer,
-        // Optimized configuration for better compatibility
         useWorkerFetch: false,
         isEvalSupported: false,
         useSystemFonts: true,
         stopAtErrors: false,
-        disableAutoFetch: true,
-        disableStream: true,
-        disableRange: true,
-        // Let the GlobalWorkerOptions handle worker configuration
       })
 
       const pdf = await loadingTask.promise
@@ -222,13 +172,13 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
       setUploadProgress(100)
 
       // Get metadata
-      let pdfInfo: PDFInfo | undefined;
+      let metadata
       try {
-        const metadataResult: PDFDocumentMetadata = await pdf.getMetadata();
-        pdfInfo = metadataResult.info;
+        const metadataResult = await pdf.getMetadata()
+        metadata = metadataResult.info
       } catch (metaError) {
-        console.warn("Could not extract metadata:", metaError);
-        // pdfInfo remains undefined, which is fine
+        console.warn("Could not extract metadata:", metaError)
+        metadata = {}
       }
 
       const document: Document = {
@@ -239,9 +189,9 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
         embeddings: [],
         uploadedAt: new Date(),
         metadata: {
-          title: pdfInfo?.Title || file.name,
-          author: pdfInfo?.Author || "Unknown",
-          subject: pdfInfo?.Subject || "",
+          title: metadata?.Title || file.name,
+          author: metadata?.Author || "Unknown",
+          subject: metadata?.Subject || "",
           pages: pdf.numPages,
           processingMethod: "PDF.js",
           successfulPages,
@@ -253,12 +203,6 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
       setProcessingStage("Complete!")
     } catch (error) {
       console.error("PDF.js processing error:", error)
-
-      // Handle specific worker-related errors
-      if (error instanceof Error && error.message.includes("worker")) {
-        console.log("Worker error detected, this will trigger server-side fallback")
-      }
-
       throw error
     }
   }

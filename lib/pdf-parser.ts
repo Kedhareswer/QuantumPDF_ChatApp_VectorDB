@@ -35,37 +35,20 @@ export class PDFParser {
       this.pdfjsLib = pdfjs.default || pdfjs
 
       console.log("PDF.js loaded, version:", this.pdfjsLib.version)
+      console.log("Available methods:", Object.keys(this.pdfjsLib))
 
-      // Only set worker if we're in the browser and it's safe to do so
-      if (typeof window !== "undefined" && this.pdfjsLib.GlobalWorkerOptions) {
-        try {
-          // Use a data URL worker to avoid external dependencies
-          const workerBlob = new Blob(
-            [
-              `
-      // Minimal PDF.js worker implementation
-      importScripts('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js');
-    `,
-            ],
-            { type: "application/javascript" },
-          )
-
-          const workerUrl = URL.createObjectURL(workerBlob)
-          this.pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
-
-          console.log("PDF.js worker configured with blob URL")
-        } catch (workerError) {
-          console.warn("Blob worker failed, trying alternative approach:", workerError)
-
+      // Only set worker if we're in the browser
+      if (typeof window !== "undefined") {
+        // Check if GlobalWorkerOptions exists and is configurable
+        if (this.pdfjsLib.GlobalWorkerOptions && typeof this.pdfjsLib.GlobalWorkerOptions === "object") {
           try {
-            // Alternative: use a stable CDN
-            this.pdfjsLib.GlobalWorkerOptions.workerSrc =
-              "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"
-            console.log("PDF.js worker configured with CDN")
-          } catch (cdnError) {
-            console.warn("CDN worker failed, disabling worker:", cdnError)
-            // Last resort: try to disable worker entirely
-            this.pdfjsLib.GlobalWorkerOptions.workerSrc = false
+            // Use a reliable worker URL
+            const workerUrl = `https://unpkg.com/pdfjs-dist@${this.pdfjsLib.version}/build/pdf.worker.min.js`
+            this.pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+            console.log("PDF.js worker configured:", workerUrl)
+          } catch (workerError) {
+            console.warn("Could not configure PDF.js worker:", workerError)
+            // Continue without worker - PDF.js can work without it
           }
         }
       }
@@ -88,24 +71,21 @@ export class PDFParser {
       // Check if getDocument function exists
       if (!pdfjsLib.getDocument) {
         console.error("getDocument function not found in PDF.js library")
+        console.log("Available PDF.js methods:", Object.keys(pdfjsLib))
         throw new Error("PDF.js getDocument function not available")
       }
 
       const arrayBuffer = await file.arrayBuffer()
       console.log("File loaded into array buffer, size:", arrayBuffer.byteLength)
 
-      // Create loading task with configuration that handles worker issues gracefully
+      // Create loading task with minimal configuration
       const loadingTask = pdfjsLib.getDocument({
         data: arrayBuffer,
-        // Configuration optimized for reliability
+        // Minimal configuration to avoid issues
         useWorkerFetch: false,
         isEvalSupported: false,
         useSystemFonts: true,
         stopAtErrors: false,
-        disableAutoFetch: true,
-        disableStream: true,
-        disableRange: true,
-        // Don't specify worker here - let GlobalWorkerOptions handle it
       })
 
       console.log("Loading PDF document...")
@@ -138,7 +118,7 @@ export class PDFParser {
               }
               return ""
             })
-            .filter((text: string) => text.trim().length > 0)
+            .filter((text) => text.trim().length > 0)
             .join(" ")
 
           if (pageText.trim()) {
@@ -178,20 +158,20 @@ export class PDFParser {
       if (error instanceof Error) {
         const errorMessage = error.message.toLowerCase()
 
-        if (
-          errorMessage.includes("worker") ||
-          errorMessage.includes("fetch") ||
-          errorMessage.includes("unable to fetch")
-        ) {
-          throw new Error("PDF processing failed due to browser restrictions. Trying alternative method...")
-        } else if (errorMessage.includes("getdocument") || errorMessage.includes("not a function")) {
+        if (errorMessage.includes("getdocument") || errorMessage.includes("not a function")) {
           throw new Error("PDF.js library loading issue. Please refresh the page and try again.")
+        } else if (errorMessage.includes("worker") || errorMessage.includes("script")) {
+          throw new Error(
+            "PDF processing failed due to browser security restrictions. Please try a different browser or disable ad blockers.",
+          )
         } else if (errorMessage.includes("invalid") || errorMessage.includes("corrupt")) {
           throw new Error("The PDF file appears to be corrupted or invalid. Please try a different file.")
         } else if (errorMessage.includes("password") || errorMessage.includes("encrypted")) {
           throw new Error("Password-protected PDFs are not supported. Please use an unprotected PDF.")
         } else if (errorMessage.includes("no readable text") || errorMessage.includes("image-based")) {
           throw new Error("This appears to be an image-based PDF. Please use a text-based PDF or convert it first.")
+        } else if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
+          throw new Error("Network error while processing PDF. Please check your internet connection.")
         }
       }
 

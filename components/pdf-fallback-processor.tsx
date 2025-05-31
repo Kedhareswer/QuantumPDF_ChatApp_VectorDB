@@ -14,19 +14,7 @@ interface Document {
   chunks: string[]
   embeddings: number[][]
   uploadedAt: Date
-  metadata?: Record<string, any> // More specific than any
-}
-
-interface PDFInfo {
-  Title?: string;
-  Author?: string;
-  Subject?: string;
-  [key: string]: any; // Allow other properties
-}
-
-interface PDFDocumentMetadata {
-  info?: PDFInfo;
-  [key: string]: any; // Allow other properties
+  metadata?: any
 }
 
 interface PDFFallbackProcessorProps {
@@ -129,7 +117,7 @@ export function PDFFallbackProcessor({
     })
 
     const pdf = await loadingTask.promise
-    const metadata: PDFDocumentMetadata = await pdf.getMetadata();
+    const metadata = await pdf.getMetadata()
     let fullText = ""
 
     // Extract text from all pages

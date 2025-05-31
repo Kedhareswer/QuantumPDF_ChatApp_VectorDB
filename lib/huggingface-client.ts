@@ -1,7 +1,7 @@
-import type { HfInference } from "@huggingface/inference"; // Keep type import for reference if needed, or remove if truly unused.
+import type { HfInference } from "@huggingface/inference"
 
 export class HuggingFaceClient {
-  // private hf: HfInference; // Removed as it's not initialized or used, and API calls are via server
+  private hf: HfInference
   private embeddingModel = "sentence-transformers/all-MiniLM-L6-v2"
   private textGenerationModel = "HuggingFaceH4/zephyr-7b-beta"
 

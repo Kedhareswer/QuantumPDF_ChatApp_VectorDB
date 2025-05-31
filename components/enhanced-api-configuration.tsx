@@ -11,40 +11,25 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 
 interface AIConfig {
-  provider:
-    | "huggingface"
-    | "openai"
-    | "anthropic"
-    | "aiml"
-    | "groq"
-    | "openrouter"
-    | "cohere"
-    | "deepinfra"
-    | "deepseek"
-    | "google"
-    | "vertex"
-    | "mistral"
-    | "perplexity"
-    | "together"
-    | "xai"
-    | "alibaba"
-    | "minimax"
+  provider: "huggingface" | "openai" | "anthropic" | "aiml" | "groq"
   apiKey: string
   model: string
   baseUrl?: string
+}
+
+interface EnhancedAPIConfigurationProps {
+  config: AIConfig
+  onConfigChange: (config: AIConfig) => void
+  onTestConnection: (config: AIConfig) => Promise<boolean>
+  onError: (error: string, details?: string) => void
+  onSuccess: (message: string) => void
 }
 
 const PROVIDER_INFO = {
   huggingface: {
     name: "Hugging Face",
     description: "Free inference API with rate limits",
-    models: [
-      "HuggingFaceH4/zephyr-7b-beta",
-      "microsoft/DialoGPT-medium",
-      "facebook/blenderbot-400M-distill",
-      "mistralai/Mistral-7B-Instruct-v0.1",
-      "meta-llama/Llama-2-7b-chat-hf",
-    ],
+    models: ["HuggingFaceH4/zephyr-7b-beta", "microsoft/DialoGPT-medium", "facebook/blenderbot-400M-distill"],
     defaultModel: "HuggingFaceH4/zephyr-7b-beta",
     baseUrl: "https://api-inference.huggingface.co",
     features: ["Text Generation", "Embeddings", "Free Tier"],
@@ -55,7 +40,7 @@ const PROVIDER_INFO = {
   openai: {
     name: "OpenAI",
     description: "Premium API with high-quality models",
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"],
+    models: ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "gpt-4"],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.openai.com/v1",
     features: ["High Quality", "Fast Response", "Latest Models"],
@@ -66,13 +51,7 @@ const PROVIDER_INFO = {
   anthropic: {
     name: "Anthropic",
     description: "Claude models with strong reasoning",
-    models: [
-      "claude-3-5-sonnet-20241022",
-      "claude-3-5-haiku-20241022",
-      "claude-3-haiku-20240307",
-      "claude-3-opus-20240229",
-      "claude-3-sonnet-20240229",
-    ],
+    models: ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307", "claude-3-opus-20240229"],
     defaultModel: "claude-3-5-sonnet-20241022",
     baseUrl: "https://api.anthropic.com",
     features: ["Strong Reasoning", "Long Context", "Safety Focused"],
@@ -83,7 +62,7 @@ const PROVIDER_INFO = {
   aiml: {
     name: "AIML API",
     description: "OpenAI-compatible API with competitive pricing",
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "claude-3-5-sonnet-20241022", "llama-3.1-405b-instruct"],
+    models: ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "claude-3-5-sonnet-20241022"],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.aimlapi.com/v1",
     features: ["OpenAI Compatible", "Competitive Pricing", "Multiple Models"],
@@ -94,13 +73,7 @@ const PROVIDER_INFO = {
   groq: {
     name: "Groq",
     description: "Ultra-fast inference with specialized hardware",
-    models: [
-      "llama-3.1-70b-versatile",
-      "llama-3.1-8b-instant",
-      "mixtral-8x7b-32768",
-      "gemma-7b-it",
-      "llama3-groq-70b-8192-tool-use-preview",
-    ],
+    models: ["llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
     defaultModel: "llama-3.1-8b-instant",
     baseUrl: "https://api.groq.com/openai/v1",
     features: ["Ultra Fast", "Low Latency", "Open Source Models"],
@@ -108,180 +81,6 @@ const PROVIDER_INFO = {
     signupUrl: "https://console.groq.com/keys",
     embeddingSupport: false,
   },
-  openrouter: {
-    name: "OpenRouter",
-    description: "Universal API gateway with access to hundreds of AI models",
-    models: [
-      "anthropic/claude-3.5-sonnet",
-      "openai/gpt-4o",
-      "openai/gpt-4o-mini",
-      "meta-llama/llama-3.1-405b-instruct",
-      "google/gemini-pro-1.5",
-      "mistralai/mistral-large",
-      "cohere/command-r-plus",
-      "deepseek/deepseek-chat",
-      "qwen/qwen-2.5-72b-instruct",
-    ],
-    defaultModel: "openai/gpt-4o-mini",
-    baseUrl: "https://openrouter.ai/api/v1",
-    features: ["Universal Access", "Hundreds of Models", "Transparent Pricing"],
-    limitations: ["Paid Service", "No Embeddings", "Third Party"],
-    signupUrl: "https://openrouter.ai/keys",
-    embeddingSupport: false,
-  },
-  cohere: {
-    name: "Cohere",
-    description: "Enterprise-grade language models with embeddings",
-    models: ["command-r-plus", "command-r", "command", "command-nightly", "command-light"],
-    defaultModel: "command-r",
-    baseUrl: "https://api.cohere.ai/v1",
-    features: ["Enterprise Grade", "Embeddings", "RAG Optimized"],
-    limitations: ["Paid Service", "Limited Free Tier"],
-    signupUrl: "https://dashboard.cohere.ai/api-keys",
-    embeddingSupport: true,
-  },
-  deepinfra: {
-    name: "DeepInfra",
-    description: "Serverless inference for open-source models",
-    models: [
-      "meta-llama/Meta-Llama-3.1-70B-Instruct",
-      "meta-llama/Meta-Llama-3.1-8B-Instruct",
-      "mistralai/Mixtral-8x7B-Instruct-v0.1",
-      "microsoft/WizardLM-2-8x22B",
-      "cognitivecomputations/dolphin-2.6-mixtral-8x7b",
-    ],
-    defaultModel: "meta-llama/Meta-Llama-3.1-8B-Instruct",
-    baseUrl: "https://api.deepinfra.com/v1/openai",
-    features: ["Open Source Models", "Serverless", "Cost Effective"],
-    limitations: ["No Embeddings", "Third Party", "Model Availability"],
-    signupUrl: "https://deepinfra.com/",
-    embeddingSupport: false,
-  },
-  deepseek: {
-    name: "DeepSeek",
-    description: "Advanced reasoning models with competitive performance",
-    models: ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
-    defaultModel: "deepseek-chat",
-    baseUrl: "https://api.deepseek.com/v1",
-    features: ["Advanced Reasoning", "Code Generation", "Competitive Pricing"],
-    limitations: ["No Embeddings", "Limited Availability"],
-    signupUrl: "https://platform.deepseek.com/api_keys",
-    embeddingSupport: false,
-  },
-  google: {
-    name: "Google AI Studio",
-    description: "Google's Gemini models via AI Studio",
-    models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro", "gemini-1.5-pro-002"],
-    defaultModel: "gemini-1.5-flash",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    features: ["Multimodal", "Long Context", "Fast Response"],
-    limitations: ["No Embeddings", "API Quotas"],
-    signupUrl: "https://aistudio.google.com/app/apikey",
-    embeddingSupport: false,
-  },
-  vertex: {
-    name: "Google Vertex AI",
-    description: "Google Cloud's enterprise AI platform",
-    models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro", "text-bison", "chat-bison"],
-    defaultModel: "gemini-1.5-flash",
-    baseUrl: "https://us-central1-aiplatform.googleapis.com/v1",
-    features: ["Enterprise Grade", "Embeddings", "Google Cloud"],
-    limitations: ["Complex Setup", "GCP Required"],
-    signupUrl: "https://console.cloud.google.com/vertex-ai",
-    embeddingSupport: true,
-  },
-  mistral: {
-    name: "Mistral AI",
-    description: "European AI with strong performance models",
-    models: [
-      "mistral-large-latest",
-      "mistral-medium-latest",
-      "mistral-small-latest",
-      "open-mistral-7b",
-      "open-mixtral-8x7b",
-    ],
-    defaultModel: "mistral-small-latest",
-    baseUrl: "https://api.mistral.ai/v1",
-    features: ["European AI", "Strong Performance", "Open Models"],
-    limitations: ["No Embeddings", "Limited Availability"],
-    signupUrl: "https://console.mistral.ai/",
-    embeddingSupport: false,
-  },
-  perplexity: {
-    name: "Perplexity",
-    description: "Search-augmented language models",
-    models: [
-      "llama-3.1-sonar-small-128k-online",
-      "llama-3.1-sonar-large-128k-online",
-      "llama-3.1-sonar-huge-128k-online",
-      "llama-3.1-8b-instruct",
-      "llama-3.1-70b-instruct",
-    ],
-    defaultModel: "llama-3.1-sonar-small-128k-online",
-    baseUrl: "https://api.perplexity.ai",
-    features: ["Search Augmented", "Real-time Info", "Citation Support"],
-    limitations: ["No Embeddings", "Search Focused"],
-    signupUrl: "https://www.perplexity.ai/settings/api",
-    embeddingSupport: false,
-  },
-  together: {
-    name: "Together AI",
-    description: "Fast inference for open-source models",
-    models: [
-      "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-      "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-      "mistralai/Mixtral-8x7B-Instruct-v0.1",
-      "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO",
-      "togethercomputer/RedPajama-INCITE-Chat-3B-v1",
-    ],
-    defaultModel: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-    baseUrl: "https://api.together.xyz/v1",
-    features: ["Fast Inference", "Open Source", "Competitive Pricing"],
-    limitations: ["No Embeddings", "Model Availability"],
-    signupUrl: "https://api.together.xyz/settings/api-keys",
-    embeddingSupport: false,
-  },
-  xai: {
-    name: "xAI (Grok)",
-    description: "Elon Musk's AI with real-time knowledge",
-    models: ["grok-beta", "grok-vision-beta"],
-    defaultModel: "grok-beta",
-    baseUrl: "https://api.x.ai/v1",
-    features: ["Real-time Knowledge", "Uncensored", "X Integration"],
-    limitations: ["No Embeddings", "Limited Access", "Beta"],
-    signupUrl: "https://console.x.ai/",
-    embeddingSupport: false,
-  },
-  alibaba: {
-    name: "Alibaba Cloud",
-    description: "Qwen models from Alibaba Cloud",
-    models: ["qwen-turbo", "qwen-plus", "qwen-max", "qwen-max-longcontext"],
-    defaultModel: "qwen-turbo",
-    baseUrl: "https://dashscope.aliyuncs.com/api/v1",
-    features: ["Chinese Language", "Long Context", "Multimodal"],
-    limitations: ["No Embeddings", "Regional Access"],
-    signupUrl: "https://dashscope.console.aliyun.com/",
-    embeddingSupport: false,
-  },
-  minimax: {
-    name: "MiniMax",
-    description: "Chinese AI company with conversational models",
-    models: ["abab6.5s-chat", "abab6.5-chat", "abab5.5s-chat", "abab5.5-chat"],
-    defaultModel: "abab6.5s-chat",
-    baseUrl: "https://api.minimax.chat/v1",
-    features: ["Conversational AI", "Chinese Support", "Role Playing"],
-    limitations: ["No Embeddings", "Chinese Focused"],
-    signupUrl: "https://www.minimax.chat/",
-    embeddingSupport: false,
-  },
-}
-
-interface EnhancedAPIConfigurationProps {
-  config: AIConfig
-  onConfigChange: (config: AIConfig) => void
-  onTestConnection: (config: AIConfig) => Promise<boolean>
-  onError: (error: string, details?: string) => void
-  onSuccess: (message: string) => void
 }
 
 export function EnhancedAPIConfiguration({

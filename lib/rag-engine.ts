@@ -11,116 +11,65 @@ interface Document {
   metadata?: any
 }
 
+interface QueryResponse {
+  answer: string
+  sources: string[]
+  relevanceScore: number
+  retrievedChunks: Array<{
+    content: string
+    source: string
+    similarity: number
+  }>
+}
+
 interface AIConfig {
-  provider:
-    | "huggingface"
-    | "openai"
-    | "anthropic"
-    | "aiml"
-    | "groq"
-    | "openrouter"
-    | "cohere"
-    | "deepinfra"
-    | "deepseek"
-    | "google"
-    | "vertex"
-    | "mistral"
-    | "perplexity"
-    | "together"
-    | "xai"
-    | "alibaba"
-    | "minimax"
+  provider: "huggingface" | "openai" | "anthropic" | "aiml" | "groq"
   apiKey: string
   model: string
   baseUrl?: string
 }
 
-interface QueryResponse {
-  answer: string
-  sources: string[]
-  relevanceScore: number
-  retrievedChunks: string[]
-  fallbackMode?: boolean
-}
-
 export class RAGEngine {
-  private aiClient: AIClient | null = null
   private documents: Document[] = []
+  private aiClient: AIClient | null = null
   private pdfParser: PDFParser
-  private initialized = false
-  private embeddingFallbackMode = false
+  private isInitialized = false
   private currentConfig: AIConfig | null = null
 
   constructor() {
     this.pdfParser = new PDFParser()
-    console.log("RAG Engine initialized")
   }
 
-  async initialize(config: AIConfig): Promise<void> {
+  async initialize(config: AIConfig) {
     try {
-      console.log(`Initializing RAG Engine with provider: ${config.provider}`)
+      console.log("Initializing RAG Engine with config:", {
+        provider: config.provider,
+        model: config.model,
+        hasApiKey: !!config.apiKey,
+      })
 
-      this.currentConfig = config
+      // Create AI client with the provided configuration
       this.aiClient = new AIClient(config)
+      this.currentConfig = config
 
       // Test the connection
       const connectionTest = await this.aiClient.testConnection()
       if (!connectionTest) {
-        throw new Error(`Failed to connect to ${config.provider}`)
+        throw new Error("Failed to connect to AI provider")
       }
 
-      // Check if provider supports embeddings
-      this.embeddingFallbackMode = !this.supportsEmbeddings(config.provider)
+      // Test embedding generation to ensure models are working
+      const testEmbedding = await this.aiClient.generateEmbedding("test connection")
 
-      if (this.embeddingFallbackMode) {
-        console.warn(`Provider ${config.provider} does not support embeddings. Enabling fallback mode.`)
-      } else {
-        // Test embedding generation for providers that should support it
-        try {
-          const testEmbedding = await this.aiClient.generateEmbedding("test connection")
-          if (!testEmbedding || !Array.isArray(testEmbedding) || testEmbedding.length === 0) {
-            console.warn("Embedding test failed, enabling fallback mode")
-            this.embeddingFallbackMode = true
-          }
-        } catch (embeddingError) {
-          console.warn("Embedding generation failed, enabling fallback mode:", embeddingError)
-          this.embeddingFallbackMode = true
-        }
+      if (!testEmbedding || !Array.isArray(testEmbedding) || testEmbedding.length === 0) {
+        throw new Error("Failed to generate test embedding")
       }
 
-      this.initialized = true
-      console.log(`RAG Engine initialized successfully with ${config.provider}`)
-
-      // Re-process existing documents if any
-      if (this.documents.length > 0) {
-        console.log("Re-processing existing documents with new provider...")
-        await this.reprocessDocuments()
-      }
+      this.isInitialized = true
+      console.log("RAG Engine initialized successfully with embedding dimension:", testEmbedding.length)
     } catch (error) {
       console.error("Failed to initialize RAG Engine:", error)
-      this.initialized = false
-      throw error
-    }
-  }
-
-  private supportsEmbeddings(provider: string): boolean {
-    const embeddingSupportedProviders = ["huggingface", "openai", "aiml", "cohere", "vertex"]
-    return embeddingSupportedProviders.includes(provider)
-  }
-
-  private async reprocessDocuments(): Promise<void> {
-    if (!this.embeddingFallbackMode && this.aiClient) {
-      console.log("Regenerating embeddings for existing documents...")
-      for (const document of this.documents) {
-        try {
-          const embeddings = await this.aiClient.generateEmbeddings(document.chunks)
-          document.embeddings = embeddings
-          console.log(`Updated embeddings for document: ${document.name}`)
-        } catch (error) {
-          console.error(`Failed to update embeddings for ${document.name}:`, error)
-          // Keep existing embeddings or use fallback
-        }
-      }
+      throw new Error(`RAG Engine initialization failed: ${error instanceof Error ? error.message : "Unknown error"}`)
     }
   }
 
@@ -146,7 +95,7 @@ export class RAGEngine {
   }
 
   async processDocument(file: File): Promise<Document> {
-    if (!this.initialized || !this.aiClient) {
+    if (!this.isInitialized || !this.aiClient) {
       throw new Error("RAG engine not initialized")
     }
 
@@ -194,33 +143,49 @@ export class RAGEngine {
     }
   }
 
-  async addDocument(document: Document): Promise<void> {
+  async addDocument(document: Document) {
     try {
-      if (!this.initialized || !this.aiClient) {
-        throw new Error("RAG Engine not initialized")
+      // Validate document structure
+      if (!document || typeof document !== "object") {
+        throw new Error("Invalid document object")
       }
 
-      console.log(`Adding document: ${document.name} with ${document.chunks.length} chunks`)
+      if (!document.chunks || !Array.isArray(document.chunks)) {
+        throw new Error("Document chunks are missing or invalid")
+      }
 
-      // Generate embeddings if provider supports them
-      if (!this.embeddingFallbackMode) {
-        try {
-          console.log("Generating embeddings for document chunks...")
-          const embeddings = await this.aiClient.generateEmbeddings(document.chunks)
-          document.embeddings = embeddings
-          console.log(`Generated ${embeddings.length} embeddings`)
-        } catch (error) {
-          console.error("Failed to generate embeddings, falling back to keyword search:", error)
-          this.embeddingFallbackMode = true
-          document.embeddings = []
+      if (document.chunks.length === 0) {
+        throw new Error("Document has no chunks")
+      }
+
+      // Generate embeddings if they don't exist or are invalid
+      if (
+        !document.embeddings ||
+        !Array.isArray(document.embeddings) ||
+        document.embeddings.length !== document.chunks.length
+      ) {
+        if (!this.aiClient) {
+          throw new Error("AI client not initialized")
         }
-      } else {
-        document.embeddings = []
-        console.log("Skipping embedding generation (fallback mode active)")
+
+        console.log("Generating missing embeddings for document:", document.name)
+        document.embeddings = await this.aiClient.generateEmbeddings(document.chunks)
+      }
+
+      // Validate embeddings
+      if (!document.embeddings || document.embeddings.length !== document.chunks.length) {
+        throw new Error("Failed to generate valid embeddings for document")
+      }
+
+      // Check if embeddings are properly formatted
+      for (let i = 0; i < document.embeddings.length; i++) {
+        if (!Array.isArray(document.embeddings[i]) || document.embeddings[i].length === 0) {
+          throw new Error(`Invalid embedding at index ${i}`)
+        }
       }
 
       this.documents.push(document)
-      console.log(`Document added successfully. Total documents: ${this.documents.length}`)
+      console.log(`Added document to RAG engine: ${document.name} (${document.chunks.length} chunks)`)
     } catch (error) {
       console.error("Error adding document:", error)
       throw error
@@ -228,284 +193,132 @@ export class RAGEngine {
   }
 
   async query(question: string): Promise<QueryResponse> {
+    console.log("RAG query started:", question)
+
+    // Create default response structure
+    const defaultResponse: QueryResponse = {
+      answer: "I apologize, but I couldn't process your question properly.",
+      sources: [],
+      relevanceScore: 0,
+      retrievedChunks: [],
+    }
+
     try {
-      if (!this.initialized || !this.aiClient) {
-        throw new Error("RAG Engine not initialized")
+      if (!this.isInitialized || !this.aiClient) {
+        console.error("RAG engine not initialized")
+        return {
+          ...defaultResponse,
+          answer: "The system is not properly initialized. Please configure your AI provider and try again.",
+        }
       }
 
-      if (!question || question.trim().length === 0) {
-        throw new Error("Invalid question provided")
+      if (!question || typeof question !== "string" || question.trim().length === 0) {
+        console.error("Invalid question provided")
+        return {
+          ...defaultResponse,
+          answer: "Please provide a valid question.",
+        }
       }
 
-      if (this.documents.length === 0) {
-        throw new Error("No documents available for querying")
+      if (!this.documents || !Array.isArray(this.documents) || this.documents.length === 0) {
+        console.error("No documents available")
+        return {
+          ...defaultResponse,
+          answer: "No documents are available for querying. Please upload some documents first.",
+        }
       }
 
-      console.log(`Processing query: "${question}" (Fallback mode: ${this.embeddingFallbackMode})`)
+      console.log(`Processing query: ${question}`)
 
-      let relevantChunks: string[] = []
-      let relevanceScore = 0
+      // Generate embedding for the question
+      let questionEmbedding: number[] = []
+      try {
+        questionEmbedding = await this.aiClient.generateEmbedding(question)
+        if (!questionEmbedding || !Array.isArray(questionEmbedding) || questionEmbedding.length === 0) {
+          throw new Error("Failed to generate question embedding")
+        }
+      } catch (embeddingError) {
+        console.error("Error generating question embedding:", embeddingError)
+        return {
+          ...defaultResponse,
+          answer: "I had trouble processing your question. Please try rephrasing it or check your API configuration.",
+        }
+      }
 
-      if (this.embeddingFallbackMode) {
-        // Use keyword-based search as fallback
-        const result = this.performKeywordSearch(question)
-        relevantChunks = result.chunks
-        relevanceScore = result.score
-        console.log(`Keyword search found ${relevantChunks.length} relevant chunks`)
-      } else {
-        // Use embedding-based semantic search
-        const result = await this.performSemanticSearch(question)
-        relevantChunks = result.chunks
-        relevanceScore = result.score
-        console.log(`Semantic search found ${relevantChunks.length} relevant chunks`)
+      // Find relevant chunks
+      let relevantChunks: Array<{ content: string; source: string; similarity: number }> = []
+      try {
+        relevantChunks = this.findRelevantChunks(questionEmbedding, 3)
+        console.log(`Found ${relevantChunks.length} relevant chunks`)
+      } catch (retrievalError) {
+        console.error("Error finding relevant chunks:", retrievalError)
+        return {
+          ...defaultResponse,
+          answer: "I had trouble searching through the documents. Please try again.",
+        }
       }
 
       if (relevantChunks.length === 0) {
-        console.warn("No relevant chunks found for the query")
         return {
+          ...defaultResponse,
           answer:
-            "I couldn't find relevant information in the uploaded documents to answer your question. Please try rephrasing your question or check if the information exists in your documents.",
-          sources: [],
-          relevanceScore: 0,
-          retrievedChunks: [],
-          fallbackMode: this.embeddingFallbackMode,
+            "I couldn't find relevant information in the uploaded documents to answer your question. Please try rephrasing your question or upload more relevant documents.",
         }
       }
 
-      // Generate response using AI
-      const context = relevantChunks.join("\n\n")
-      const systemPrompt = this.embeddingFallbackMode
-        ? "You are a helpful assistant analyzing documents using keyword-based search. The provided context may be less precisely matched than usual. Answer based on the given context and indicate if you're uncertain about any information."
-        : "You are a helpful assistant analyzing documents. Answer the user's question based on the provided context from the documents."
+      // Generate answer using the relevant context
+      let answer = ""
+      try {
+        const context = relevantChunks.map((chunk) => chunk.content).join("\n\n")
 
-      const messages = [
-        {
-          role: "system" as const,
-          content: systemPrompt,
-        },
-        {
-          role: "user" as const,
-          content: `Context from documents:\n${context}\n\nQuestion: ${question}\n\nPlease provide a comprehensive answer based on the context above.`,
-        },
-      ]
+        const messages = [
+          {
+            role: "system" as const,
+            content:
+              "You are a helpful assistant that answers questions based on the provided context. If the context doesn't contain relevant information, say so clearly.",
+          },
+          {
+            role: "user" as const,
+            content: `Context: ${context}\n\nQuestion: ${question}\n\nAnswer:`,
+          },
+        ]
 
-      console.log("Generating AI response...")
-      const answer = await this.aiClient.generateText(messages)
+        answer = await this.aiClient.generateText(messages)
 
-      const sources = this.extractSources(relevantChunks)
+        if (!answer || typeof answer !== "string" || answer.trim().length === 0) {
+          answer =
+            "I found relevant information but had trouble generating a response. Please try rephrasing your question."
+        }
+      } catch (generationError) {
+        console.error("Error generating answer:", generationError)
+        answer = "I found relevant information but had trouble generating a response. Please try again."
+      }
 
-      return {
-        answer,
+      // Calculate relevance score
+      const relevanceScore = this.calculateRelevanceScore(relevantChunks)
+
+      // Prepare sources
+      const sources = relevantChunks
+        .map((chunk) => chunk.source)
+        .filter((source) => source && typeof source === "string")
+
+      const response: QueryResponse = {
+        answer: answer.trim(),
         sources,
         relevanceScore,
         retrievedChunks: relevantChunks,
-        fallbackMode: this.embeddingFallbackMode,
       }
+
+      console.log("RAG query completed successfully")
+      return response
     } catch (error) {
       console.error("Error processing query:", error)
-      throw error
-    }
-  }
-
-  private performKeywordSearch(question: string): { chunks: string[]; score: number } {
-    console.log("Performing keyword-based search...")
-
-    // Extract keywords from the question
-    const keywords = question
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((word) => word.length > 2)
-      .filter(
-        (word) =>
-          ![
-            "the",
-            "and",
-            "or",
-            "but",
-            "in",
-            "on",
-            "at",
-            "to",
-            "for",
-            "of",
-            "with",
-            "by",
-            "what",
-            "how",
-            "when",
-            "where",
-            "why",
-            "who",
-            "which",
-            "can",
-            "could",
-            "would",
-            "should",
-            "will",
-            "are",
-            "is",
-            "was",
-            "were",
-            "been",
-            "have",
-            "has",
-            "had",
-            "do",
-            "does",
-            "did",
-            "this",
-            "that",
-            "these",
-            "those",
-            "a",
-            "an",
-            "from",
-            "up",
-            "out",
-            "down",
-            "off",
-            "over",
-            "under",
-            "again",
-            "further",
-            "then",
-            "once",
-          ].includes(word),
-      )
-
-    console.log(`Extracted keywords: ${keywords.join(", ")}`)
-
-    const scoredChunks: { chunk: string; score: number; source: string }[] = []
-
-    // Score each chunk based on keyword matches
-    for (const document of this.documents) {
-      for (let i = 0; i < document.chunks.length; i++) {
-        const chunk = document.chunks[i]
-        const chunkLower = chunk.toLowerCase()
-        let score = 0
-
-        // Count keyword matches with different weights
-        for (const keyword of keywords) {
-          // Exact word matches (higher weight)
-          const exactMatches = (chunkLower.match(new RegExp(`\\b${keyword}\\b`, "g")) || []).length
-          score += exactMatches * 3
-
-          // Partial matches (lower weight)
-          const partialMatches = (chunkLower.match(new RegExp(keyword, "g")) || []).length - exactMatches
-          score += partialMatches * 1
-        }
-
-        // Bonus for exact phrase matches
-        if (chunkLower.includes(question.toLowerCase())) {
-          score += 15
-        }
-
-        // Bonus for multiple keyword co-occurrence
-        const keywordsInChunk = keywords.filter((keyword) => chunkLower.includes(keyword)).length
-        if (keywordsInChunk > 1) {
-          score += keywordsInChunk * 2
-        }
-
-        // Bonus for keyword density
-        const chunkWords = chunkLower.split(/\s+/).length
-        if (chunkWords > 0) {
-          const density = (score / chunkWords) * 100
-          score += density * 0.1
-        }
-
-        if (score > 0) {
-          scoredChunks.push({
-            chunk,
-            score,
-            source: `${document.name} (chunk ${i + 1})`,
-          })
-        }
+      return {
+        ...defaultResponse,
+        answer:
+          "I encountered an unexpected error while processing your question. Please try again or check your API configuration.",
       }
     }
-
-    // Sort by score and take top chunks
-    scoredChunks.sort((a, b) => b.score - a.score)
-    const topChunks = scoredChunks.slice(0, 5).map((item) => item.chunk)
-    const avgScore =
-      scoredChunks.length > 0
-        ? scoredChunks.slice(0, 5).reduce((sum, item) => sum + item.score, 0) / Math.min(5, scoredChunks.length)
-        : 0
-    const normalizedScore = Math.min(avgScore / 20, 1) // Normalize to 0-1 range
-
-    console.log(
-      `Keyword search completed. Found ${topChunks.length} relevant chunks with average score: ${normalizedScore.toFixed(2)}`,
-    )
-
-    return {
-      chunks: topChunks,
-      score: normalizedScore,
-    }
-  }
-
-  private async performSemanticSearch(question: string): Promise<{ chunks: string[]; score: number }> {
-    if (!this.aiClient) {
-      throw new Error("AI client not available")
-    }
-
-    console.log("Performing semantic search...")
-
-    // Generate embedding for the question
-    const questionEmbedding = await this.aiClient.generateEmbedding(question)
-
-    const scoredChunks: { chunk: string; score: number }[] = []
-
-    // Calculate similarity with each chunk
-    for (const document of this.documents) {
-      for (let i = 0; i < document.chunks.length; i++) {
-        const chunk = document.chunks[i]
-        const chunkEmbedding = document.embeddings[i]
-
-        if (chunkEmbedding && chunkEmbedding.length > 0) {
-          const similarity = this.aiClient.cosineSimilarity(questionEmbedding, chunkEmbedding)
-          if (similarity > 0.1) {
-            // Threshold for relevance
-            scoredChunks.push({ chunk, score: similarity })
-          }
-        }
-      }
-    }
-
-    // Sort by similarity and take top chunks
-    scoredChunks.sort((a, b) => b.score - a.score)
-    const topChunks = scoredChunks.slice(0, 5).map((item) => item.chunk)
-    const avgScore =
-      scoredChunks.length > 0
-        ? scoredChunks.slice(0, 5).reduce((sum, item) => sum + item.score, 0) / Math.min(5, scoredChunks.length)
-        : 0
-
-    console.log(
-      `Semantic search completed. Found ${topChunks.length} relevant chunks with average similarity: ${avgScore.toFixed(2)}`,
-    )
-
-    return {
-      chunks: topChunks,
-      score: avgScore,
-    }
-  }
-
-  private extractSources(chunks: string[]): string[] {
-    const sources: string[] = []
-
-    for (const chunk of chunks) {
-      // Find which document this chunk belongs to
-      for (const document of this.documents) {
-        if (document.chunks.includes(chunk)) {
-          const chunkIndex = document.chunks.indexOf(chunk)
-          const source = `${document.name} (chunk ${chunkIndex + 1})`
-          if (!sources.includes(source)) {
-            sources.push(source)
-          }
-          break
-        }
-      }
-    }
-
-    return sources
   }
 
   private findRelevantChunks(questionEmbedding: number[], topK: number) {
@@ -611,27 +424,46 @@ export class RAGEngine {
     return Array.isArray(this.documents) ? this.documents : []
   }
 
-  removeDocument(documentId: string): void {
-    const initialLength = this.documents.length
-    this.documents = this.documents.filter((doc) => doc.id !== documentId)
-    console.log(`Removed document ${documentId}. Documents: ${initialLength} -> ${this.documents.length}`)
+  removeDocument(documentId: string) {
+    try {
+      if (!documentId || typeof documentId !== "string") {
+        throw new Error("Invalid document ID")
+      }
+
+      const initialLength = this.documents.length
+      this.documents = this.documents.filter((doc) => doc && doc.id !== documentId)
+
+      const removedCount = initialLength - this.documents.length
+      console.log(`Removed ${removedCount} document(s) with ID: ${documentId}`)
+    } catch (error) {
+      console.error("Error removing document:", error)
+    }
   }
 
-  clearDocuments(): void {
-    this.documents = []
-    console.log("All documents cleared")
+  clearDocuments() {
+    try {
+      this.documents = []
+      console.log("Cleared all documents from RAG engine")
+    } catch (error) {
+      console.error("Error clearing documents:", error)
+    }
   }
 
   // Health check method
   isHealthy(): boolean {
-    return this.initialized && this.aiClient !== null
+    try {
+      return this.isInitialized && this.aiClient !== null && this.pdfParser !== null && Array.isArray(this.documents)
+    } catch (error) {
+      console.error("Error checking RAG engine health:", error)
+      return false
+    }
   }
 
   // Get status information
   getStatus() {
     try {
       return {
-        initialized: this.initialized,
+        initialized: this.isInitialized,
         documentCount: Array.isArray(this.documents) ? this.documents.length : 0,
         totalChunks: Array.isArray(this.documents)
           ? this.documents.reduce((total, doc) => {
@@ -653,17 +485,5 @@ export class RAGEngine {
         currentModel: null,
       }
     }
-  }
-
-  getDocumentCount(): number {
-    return this.documents.length
-  }
-
-  isEmbeddingFallbackActive(): boolean {
-    return this.embeddingFallbackMode
-  }
-
-  getCurrentProvider(): string | null {
-    return this.currentConfig?.provider || null
   }
 }

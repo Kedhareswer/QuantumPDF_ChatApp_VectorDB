@@ -27,30 +27,6 @@ interface Document {
   uploadedAt: Date
 }
 
-interface AIConfig {
-  provider:
-    | "huggingface"
-    | "openai"
-    | "anthropic"
-    | "aiml"
-    | "groq"
-    | "openrouter"
-    | "cohere"
-    | "deepinfra"
-    | "deepseek"
-    | "google"
-    | "vertex"
-    | "mistral"
-    | "perplexity"
-    | "together"
-    | "xai"
-    | "alibaba"
-    | "minimax"
-  apiKey: string
-  model: string
-  baseUrl?: string
-}
-
 interface Message {
   id: string
   role: "user" | "assistant"
@@ -61,8 +37,14 @@ interface Message {
     responseTime: number
     relevanceScore: number
     retrievedChunks: number
-    fallbackMode?: boolean
   }
+}
+
+interface AIConfig {
+  provider: "huggingface" | "openai" | "anthropic" | "aiml" | "groq"
+  apiKey: string
+  model: string
+  baseUrl?: string
 }
 
 interface WandbConfig {
@@ -82,7 +64,6 @@ export default function PDFChatbot() {
   const [modelStatus, setModelStatus] = useState<"loading" | "ready" | "error" | "config">("config")
   const [activeTab, setActiveTab] = useState("setup")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [embeddingFallbackActive, setEmbeddingFallbackActive] = useState(false)
 
   const { errors, addError, dismissError, clearErrors, addApiError, addNetworkError, addValidationError, addSuccess } =
     useErrorHandler()
@@ -161,20 +142,6 @@ export default function PDFChatbot() {
 
       setModelStatus("loading")
       await ragEngine.initialize(config)
-
-      // Check if fallback mode is active
-      const fallbackActive = ragEngine.isEmbeddingFallbackActive()
-      setEmbeddingFallbackActive(fallbackActive)
-
-      if (fallbackActive) {
-        addError({
-          type: "warning",
-          title: "Embedding Fallback Active",
-          message: `${config.provider} doesn't support embeddings. Using keyword-based search with reduced accuracy.`,
-          dismissible: true,
-        })
-      }
-
       setModelStatus("ready")
 
       // Auto-switch to chat tab after successful connection
@@ -186,7 +153,6 @@ export default function PDFChatbot() {
     } catch (error) {
       console.error("API connection test failed:", error)
       setModelStatus("error")
-      setEmbeddingFallbackActive(false)
 
       if (error instanceof Error) {
         addApiError(config.provider, error.message)
@@ -236,10 +202,6 @@ export default function PDFChatbot() {
 
       if (ragEngine && modelStatus === "ready") {
         await ragEngine.addDocument(document)
-
-        // Update fallback status after adding document
-        const fallbackActive = ragEngine.isEmbeddingFallbackActive()
-        setEmbeddingFallbackActive(fallbackActive)
       }
 
       if (wandbTracker && wandbConfig.enabled) {
@@ -363,7 +325,6 @@ export default function PDFChatbot() {
           responseTime,
           relevanceScore,
           retrievedChunks: retrievedChunks.length,
-          fallbackMode: response.fallbackMode || false,
         },
       }
 
@@ -522,11 +483,6 @@ export default function PDFChatbot() {
                   <Badge variant="outline" className="border-green-600 text-green-600 font-mono">
                     <BarChart3 className="w-3 h-3 mr-1" />
                     WANDB
-                  </Badge>
-                )}
-                {embeddingFallbackActive && (
-                  <Badge variant="outline" className="border-yellow-600 text-yellow-600 font-mono">
-                    FALLBACK
                   </Badge>
                 )}
               </div>
@@ -692,7 +648,7 @@ export default function PDFChatbot() {
                     <h2 className="text-xl font-bold">CHAT INTERFACE</h2>
                     <p className="text-sm text-gray-600">
                       {modelStatus === "ready"
-                        ? `Ready with ${apiConfig.model} • ${documents.length} documents loaded${embeddingFallbackActive ? " • Fallback mode" : ""}`
+                        ? `Ready with ${apiConfig.model} • ${documents.length} documents loaded`
                         : "Configure your AI provider to start chatting"}
                     </p>
                   </div>
@@ -726,8 +682,6 @@ export default function PDFChatbot() {
                 onSendMessage={handleSendMessage}
                 isProcessing={isProcessing}
                 disabled={modelStatus !== "ready" || documents.length === 0}
-                embeddingFallbackActive={embeddingFallbackActive}
-                documentsCount={documents.length}
               />
             </div>
           </div>
