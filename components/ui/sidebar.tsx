@@ -1,13 +1,13 @@
 "use client"
 
-import React, { forwardRef, ComponentProps } from "react"
+import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
@@ -253,7 +253,6 @@ const Sidebar = React.forwardRef<
             {children}
           </div>
         </div>
-        <SidebarTrigger />
       </div>
     )
   }
@@ -261,57 +260,27 @@ const Sidebar = React.forwardRef<
 Sidebar.displayName = "Sidebar"
 
 const SidebarTrigger = React.forwardRef<
-  HTMLButtonElement,
-  React.ComponentProps<typeof Button> & {
-    asChild?: boolean
-  }
->(({ className, asChild = false, ...props }, ref) => {
-  const { open, toggleSidebar } = useSidebar()
-  const Comp = asChild ? Slot : "button"
+  React.ElementRef<typeof Button>,
+  React.ComponentProps<typeof Button>
+>(({ className, onClick, ...props }, ref) => {
+  const { toggleSidebar } = useSidebar()
 
   return (
-    <Comp
+    <Button
       ref={ref}
       data-sidebar="trigger"
-      className={cn(
-        "flex h-10 w-10 items-center justify-center rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        className
-      )}
-      onClick={toggleSidebar}
+      variant="ghost"
+      size="icon"
+      className={cn("h-7 w-7", className)}
+      onClick={(event) => {
+        onClick?.(event)
+        toggleSidebar()
+      }}
       {...props}
     >
-      <PanelLeft className="size-4" />
-    </Comp>
-  )
-})
-SidebarTrigger.displayName = "SidebarTrigger"
-
-const SidebarMenuButton = React.forwardRef<
-  React.ElementRef<typeof Button>,
-  React.ComponentProps<typeof Button> & {
-    asChild?: boolean
-    isActive?: boolean
-    children?: React.ReactNode
-  }
->(({ children, className, asChild = false, isActive = false, ...props }, ref) => {
-  const Comp = asChild ? Slot : "button"
-  const { isMobile, state } = useSidebar()
-
-  return (
-    <Comp
-      ref={ref}
-      data-sidebar="menu-button"
-      data-size={"default"}
-      data-active={isActive}
-      className={cn(
-        buttonVariants({ variant: "default", size: "default" }),
-        className,
-        isActive && "bg-sidebar-active"
-      )}
-      {...props}
-    >
-      {children}
-    </Comp>
+      <PanelLeft />
+      <span className="sr-only">Toggle Sidebar</span>
+    </Button>
   )
 })
 SidebarTrigger.displayName = "SidebarTrigger"
@@ -564,7 +533,64 @@ const sidebarMenuButtonVariants = cva(
   }
 )
 
+const SidebarMenuButton = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<"button"> & {
+    asChild?: boolean
+    isActive?: boolean
+    tooltip?: string | React.ComponentProps<typeof TooltipContent>
+  } & VariantProps<typeof sidebarMenuButtonVariants>
+>(
+  (
+    {
+      asChild = false,
+      isActive = false,
+      variant = "default",
+      size = "default",
+      tooltip,
+      className,
+      ...props
+    },
+    ref
+  ) => {
+    const Comp = asChild ? Slot : "button"
+    const { isMobile, state } = useSidebar()
 
+    const button = (
+      <Comp
+        ref={ref}
+        data-sidebar="menu-button"
+        data-size={size}
+        data-active={isActive}
+        className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+        {...props}
+      />
+    )
+
+    if (!tooltip) {
+      return button
+    }
+
+    if (typeof tooltip === "string") {
+      tooltip = {
+        children: tooltip,
+      }
+    }
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent
+          side="right"
+          align="center"
+          hidden={state !== "collapsed" || isMobile}
+          {...tooltip}
+        />
+      </Tooltip>
+    )
+  }
+)
+SidebarMenuButton.displayName = "SidebarMenuButton"
 
 const SidebarMenuAction = React.forwardRef<
   HTMLButtonElement,

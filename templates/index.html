@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Document PDF RAG Chatbot</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-robot"></i>Quantum PDF</h1>
+                <p>Upload multiple PDFs and have context-aware conversations</p>
+            </div>
+            <div class="header-controls">
+                <div class="session-info">
+                    <span>Session: <strong id="currentSession">default</strong></span>
+                    <button class="btn btn-secondary" onclick="newSession()">
+                        <i class="fas fa-plus"></i> New Session
+                    </button>
+                </div>
+                <div class="status-indicator" id="statusIndicator">
+                    <i class="fas fa-circle"></i>
+                    <span id="statusText">Ready</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Upload Section -->
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                        <h3>Upload PDF Documents</h3>
+                        <p>Add multiple PDFs to your knowledge base</p>
+                        <input type="file" id="pdfInput" accept=".pdf" multiple hidden>
+                        <button class="btn btn-primary" onclick="document.getElementById('pdfInput').click()">
+                            <i class="fas fa-folder-open"></i> Choose Files
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="upload-progress" id="uploadProgress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p id="progressText">Processing...</p>
+                </div>
+            </div>
+
+            <!-- Document Library -->
+            <div class="document-library" id="documentLibrary">
+                <h3><i class="fas fa-file-pdf"></i> Document Library</h3>
+                <div class="document-list" id="documentList">
+                    <div class="no-documents">
+                        <i class="fas fa-folder-open"></i>
+                        <p>No documents uploaded yet</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Selection -->
+            <div class="model-section" id="modelSection">
+                <h3><i class="fas fa-cog"></i> Model Configuration</h3>
+                <div class="model-config">
+                    <div class="form-group">
+                        <label for="modelType">Select Model:</label>
+                        <select id="modelType" onchange="toggleApiKey()">
+                            <option value="huggingface">Hugging Face (Local)</option>
+                            <option value="openai">OpenAI GPT</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="aiml">AIML API</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="aimlModelGroup" style="display: none;">
+                        <label for="aimlModel">AIML Model:</label>
+                        <select id="aimlModel">
+                            <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+                            <option value="openai/gpt-4o">GPT-4o</option>
+                            <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            <option value="google/gemini-pro">Gemini Pro</option>
+                            <option value="anthropic/claude-3-sonnet">Claude 3 Sonnet</option>
+                            <option value="meta-llama/llama-3.1-8b-instruct">Llama 3.1 8B</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="apiKeyGroup" style="display: none;">
+                        <label for="apiKey">API Key:</label>
+                        <input type="password" id="apiKey" placeholder="Enter your API key">
+                        <small class="help-text">Your API key is not stored and only used for this session</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session Summary -->
+            <div class="session-summary" id="sessionSummary">
+                <h3><i class="fas fa-chart-bar"></i> Session Summary</h3>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <span class="summary-label">Documents:</span>
+                        <span id="docCount">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Total Chunks:</span>
+                        <span id="chunkCount">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Questions Asked:</span>
+                        <span id="questionCount">0</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Context Used:</span>
+                        <span id="contextUsed">No</span>
+                    </div>
+                </div>
+                <div class="session-actions">
+                    <button class="btn btn-secondary" onclick="clearConversation()">
+                        <i class="fas fa-trash"></i> Clear Chat
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportSession()">
+                        <i class="fas fa-download"></i> Export Session
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Section -->
+            <div class="chat-section" id="chatSection">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="welcome-message">
+                            <i class="fas fa-comments"></i>
+                            <h3>Multi-Document Chat Ready!</h3>
+                            <p>Upload PDFs and ask questions across all documents.</p>
+                            <div class="features">
+                                <div class="feature">
+                                    <i class="fas fa-files"></i>
+                                    <span>Multi-document search</span>
+                                </div>
+                                <div class="feature">
+                                    <i class="fas fa-memory"></i>
+                                    <span>Conversation memory</span>
+                                </div>
+                                <div class="feature">
+                                    <i class="fas fa-link"></i>
+                                    <span>Context-aware responses</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-container">
+                        <div class="chat-input">
+                            <input type="text" id="questionInput" placeholder="Ask a question about your documents..." 
+                                   onkeypress="handleKeyPress(event)">
+                            <button id="sendButton" onclick="askQuestion()" disabled>
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="input-help">
+                            <small>Try: "Compare the main points from all documents" or "What did we discuss about X earlier?"</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

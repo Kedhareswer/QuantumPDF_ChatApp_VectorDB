@@ -1,116 +1,714 @@
-import { Upload } from "lucide-react"
-import Link from "next/link"
+"use client"
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect } from "react"
+import { Upload, MessageCircle, FileText, Brain, Activity, Settings, Zap, Database, BarChart3 } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PDFProcessorFinal } from "@/components/pdf-processor-final"
+import { ChatInterface } from "@/components/chat-interface"
+import { EnhancedAPIConfiguration } from "@/components/enhanced-api-configuration"
+import { WandbConfiguration } from "@/components/wandb-configuration"
+import { DocumentLibrary } from "@/components/document-library"
+import { SystemStatus } from "@/components/system-status"
+import { QuickActions } from "@/components/quick-actions"
+import { ErrorHandler, useErrorHandler } from "@/components/error-handler"
+import { ErrorBoundary } from "@/components/error-boundary"
+import { RAGEngine } from "@/lib/rag-engine"
+import { WandbTracker } from "@/lib/wandb-tracker"
+import { LoadingIndicator } from "@/components/loading-indicator"
 
-export default function Home() {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center justify-between px-4">
-          <div className="hidden md:flex flex-1 pr-4">
-            <Link href="/" className="flex items-center space-x-2">
-              <span className="hidden font-bold sm:inline-block">PDFChat</span>
-            </Link>
-          </div>
-          <div className="flex items-center space-x-4">
-            
-          </div>
+interface Document {
+  id: string
+  name: string
+  content: string
+  chunks: string[]
+  embeddings: number[][]
+  uploadedAt: Date
+}
+
+interface Message {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  timestamp: Date
+  sources?: string[]
+  metadata?: {
+    responseTime: number
+    relevanceScore: number
+    retrievedChunks: number
+  }
+}
+
+interface AIConfig {
+  provider: "huggingface" | "openai" | "anthropic" | "aiml" | "groq"
+  apiKey: string
+  model: string
+  baseUrl?: string
+}
+
+interface WandbConfig {
+  enabled: boolean
+  apiKey: string
+  projectName: string
+  entityName?: string
+  tags: string[]
+}
+
+export default function PDFChatbot() {
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [messages, setMessages] = useState<Message[]>([])
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [ragEngine, setRagEngine] = useState<RAGEngine | null>(null)
+  const [wandbTracker, setWandbTracker] = useState<WandbTracker | null>(null)
+  const [modelStatus, setModelStatus] = useState<"loading" | "ready" | "error" | "config">("config")
+  const [activeTab, setActiveTab] = useState("setup")
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  const { errors, addError, dismissError, clearErrors, addApiError, addNetworkError, addValidationError, addSuccess } =
+    useErrorHandler()
+
+  const [apiConfig, setApiConfig] = useState<AIConfig>({
+    provider: "huggingface",
+    apiKey: "",
+    model: "HuggingFaceH4/zephyr-7b-beta",
+    baseUrl: "https://api-inference.huggingface.co",
+  })
+
+  const [wandbConfig, setWandbConfig] = useState<WandbConfig>({
+    enabled: false,
+    apiKey: "",
+    projectName: "pdf-rag-chatbot",
+    entityName: "",
+    tags: ["pdf-rag", "chatbot", "ai"],
+  })
+
+  useEffect(() => {
+    // Initialize RAG Engine
+    const rag = new RAGEngine()
+    setRagEngine(rag)
+
+    // Load saved configurations from localStorage
+    loadSavedConfigurations()
+  }, [])
+
+  const loadSavedConfigurations = () => {
+    try {
+      const savedApiConfig = localStorage.getItem("apiConfig")
+      if (savedApiConfig) {
+        const parsed = JSON.parse(savedApiConfig)
+        // Don't save API keys in localStorage for security
+        setApiConfig({ ...parsed, apiKey: "" })
+      }
+
+      const savedWandbConfig = localStorage.getItem("wandbConfig")
+      if (savedWandbConfig) {
+        const parsed = JSON.parse(savedWandbConfig)
+        // Don't save API keys in localStorage for security
+        setWandbConfig({ ...parsed, apiKey: "" })
+      }
+    } catch (error) {
+      console.warn("Failed to load saved configurations:", error)
+    }
+  }
+
+  const saveConfiguration = (type: "api" | "wandb", config: any) => {
+    try {
+      const configToSave = { ...config }
+      // Remove API key for security
+      delete configToSave.apiKey
+      localStorage.setItem(`${type}Config`, JSON.stringify(configToSave))
+    } catch (error) {
+      console.warn("Failed to save configuration:", error)
+    }
+  }
+
+  const handleApiConfigChange = (newConfig: AIConfig) => {
+    setApiConfig(newConfig)
+    setModelStatus("config")
+    saveConfiguration("api", newConfig)
+  }
+
+  const handleWandbConfigChange = (newConfig: WandbConfig) => {
+    setWandbConfig(newConfig)
+    saveConfiguration("wandb", newConfig)
+  }
+
+  const handleTestApiConnection = async (config: AIConfig): Promise<boolean> => {
+    try {
+      if (!ragEngine) {
+        throw new Error("RAG engine not available")
+      }
+
+      setModelStatus("loading")
+      await ragEngine.initialize(config)
+      setModelStatus("ready")
+
+      // Auto-switch to chat tab after successful connection
+      if (documents.length > 0) {
+        setActiveTab("chat")
+      }
+
+      return true
+    } catch (error) {
+      console.error("API connection test failed:", error)
+      setModelStatus("error")
+
+      if (error instanceof Error) {
+        addApiError(config.provider, error.message)
+      } else {
+        addApiError(config.provider, "Unknown error occurred")
+      }
+
+      return false
+    }
+  }
+
+  const handleTestWandbConnection = async (config: WandbConfig): Promise<boolean> => {
+    try {
+      if (!config.enabled || !config.apiKey.trim()) {
+        throw new Error("Wandb is not properly configured")
+      }
+
+      // Initialize Wandb tracker with new config
+      const tracker = new WandbTracker()
+      await tracker.initialize(config)
+      setWandbTracker(tracker)
+
+      return true
+    } catch (error) {
+      console.error("Wandb connection test failed:", error)
+
+      if (error instanceof Error) {
+        addError({
+          type: "error",
+          title: "Wandb Connection Failed",
+          message: error.message,
+          dismissible: true,
+        })
+      }
+
+      return false
+    }
+  }
+
+  const handleDocumentProcessed = async (document: Document) => {
+    try {
+      if (!document || typeof document !== "object") {
+        throw new Error("Invalid document object")
+      }
+
+      setDocuments((prev) => [...prev, document])
+
+      if (ragEngine && modelStatus === "ready") {
+        await ragEngine.addDocument(document)
+      }
+
+      if (wandbTracker && wandbConfig.enabled) {
+        try {
+          await wandbTracker.logDocumentIngestion(document)
+        } catch (wandbError) {
+          console.warn("Failed to log to Wandb:", wandbError)
+        }
+      }
+
+      addSuccess(`Document "${document.name}" processed successfully`)
+
+      // Auto-switch to chat tab after first document
+      if (documents.length === 0 && modelStatus === "ready") {
+        setActiveTab("chat")
+      }
+    } catch (error) {
+      console.error("Error handling processed document:", error)
+
+      if (error instanceof Error) {
+        addError({
+          type: "error",
+          title: "Document Processing Error",
+          message: error.message,
+          dismissible: true,
+        })
+      }
+
+      // Still add to documents list even if other operations fail
+      setDocuments((prev) => [...prev, document])
+    }
+  }
+
+  const handleSendMessage = async (content: string) => {
+    if (!content || typeof content !== "string" || content.trim().length === 0) {
+      addValidationError("Message", "Please enter a valid message")
+      return
+    }
+
+    if (!ragEngine) {
+      addError({
+        type: "error",
+        title: "System Error",
+        message: "RAG engine is not available. Please refresh the page and try again.",
+        dismissible: true,
+      })
+      return
+    }
+
+    if (modelStatus !== "ready") {
+      addError({
+        type: "warning",
+        title: "Configuration Required",
+        message: "Please configure and test your AI provider connection first.",
+        dismissible: true,
+        action: {
+          label: "Go to Setup",
+          handler: () => setActiveTab("setup"),
+        },
+      })
+      return
+    }
+
+    if (documents.length === 0) {
+      addError({
+        type: "warning",
+        title: "No Documents",
+        message: "Please upload some documents before asking questions.",
+        dismissible: true,
+        action: {
+          label: "Upload Documents",
+          handler: () => setActiveTab("setup"),
+        },
+      })
+      return
+    }
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: content.trim(),
+      timestamp: new Date(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setIsProcessing(true)
+
+    let response = null
+    let startTime = 0
+    let endTime = 0
+
+    try {
+      if (!ragEngine.isHealthy()) {
+        throw new Error("RAG engine is not in a healthy state")
+      }
+
+      startTime = Date.now()
+      response = await ragEngine.query(content.trim())
+      endTime = Date.now()
+
+      if (!response) {
+        throw new Error("No response received from RAG engine")
+      }
+
+      const answer = response.answer || "I apologize, but I couldn't generate a proper response."
+      const sources = Array.isArray(response.sources) ? response.sources : []
+      const relevanceScore =
+        typeof response.relevanceScore === "number" && !isNaN(response.relevanceScore) ? response.relevanceScore : 0
+      const retrievedChunks =
+        response.retrievedChunks && Array.isArray(response.retrievedChunks) ? response.retrievedChunks : []
+
+      const responseTime = endTime - startTime
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: answer,
+        timestamp: new Date(),
+        sources: sources,
+        metadata: {
+          responseTime,
+          relevanceScore,
+          retrievedChunks: retrievedChunks.length,
+        },
+      }
+
+      setMessages((prev) => [...prev, assistantMessage])
+
+      // Log to Wandb if enabled
+      if (wandbTracker && wandbConfig.enabled) {
+        try {
+          await wandbTracker.logInteraction({
+            query: content.trim(),
+            response: answer,
+            sources: sources,
+            responseTime,
+            relevanceScore,
+            retrievedChunks: retrievedChunks.length,
+          })
+        } catch (wandbError) {
+          console.warn("Failed to log to Wandb:", wandbError)
+        }
+      }
+    } catch (error) {
+      console.error("Error processing message:", error)
+
+      let errorMessage = "I apologize, but I encountered an error processing your request."
+      let actionable = false
+
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase()
+
+        if (errorMsg.includes("not initialized") || errorMsg.includes("not in a healthy state")) {
+          errorMessage = "The system is not properly configured. Please check your API settings and try again."
+          actionable = true
+        } else if (errorMsg.includes("no documents") || errorMsg.includes("documents available")) {
+          errorMessage = "Please upload some documents first before asking questions."
+          actionable = true
+        } else if (errorMsg.includes("invalid question") || errorMsg.includes("question provided")) {
+          errorMessage = "Please provide a valid question."
+        } else if (errorMsg.includes("embedding") || errorMsg.includes("generate")) {
+          errorMessage =
+            "There was an issue processing your question. Please check your API configuration or try rephrasing."
+          actionable = true
+        } else if (errorMsg.includes("network") || errorMsg.includes("fetch")) {
+          addNetworkError("process your message")
+          return
+        }
+      }
+
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: errorMessage,
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorResponse])
+
+      if (actionable) {
+        addError({
+          type: "error",
+          title: "Message Processing Error",
+          message: errorMessage,
+          dismissible: true,
+          action: {
+            label: "Check Settings",
+            handler: () => setActiveTab("setup"),
+          },
+        })
+      }
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleRemoveDocument = (documentId: string) => {
+    try {
+      setDocuments((docs) => docs.filter((doc) => doc.id !== documentId))
+
+      if (ragEngine) {
+        ragEngine.removeDocument(documentId)
+      }
+
+      addSuccess("Document removed successfully")
+    } catch (error) {
+      console.error("Error removing document:", error)
+      addError({
+        type: "error",
+        title: "Remove Document Error",
+        message: "Failed to remove document. Please try again.",
+        dismissible: true,
+      })
+    }
+  }
+
+  const getStatusDisplay = () => {
+    switch (modelStatus) {
+      case "ready":
+        return { text: "READY", color: "text-green-600", icon: "●" }
+      case "loading":
+        return { text: "LOADING", color: "text-yellow-600", icon: "◐" }
+      case "error":
+        return { text: "ERROR", color: "text-red-600", icon: "●" }
+      case "config":
+        return { text: "CONFIG", color: "text-blue-600", icon: "○" }
+      default:
+        return { text: "UNKNOWN", color: "text-gray-600", icon: "○" }
+    }
+  }
+
+  const status = getStatusDisplay()
+
+  if (modelStatus === "loading") {
+    return (
+      <ErrorBoundary>
+        <div className="min-h-screen bg-white text-black font-mono flex items-center justify-center">
+          <LoadingIndicator message="Initializing AI provider..." />
         </div>
-      </header>
-      <main className="flex-1">
-        <section className="space-y-6 pb-12 pt-12 md:pb-16 md:pt-16 lg:py-32"> {/* Reduced lg:py-32 to lg:py-20 */}
-          <div className="container flex max-w-[64rem] flex-col items-center gap-6 text-center px-4 mx-auto">
-            <h1 className="text-3xl font-bold tracking-tighter sm:text-5xl md:text-6xl">
-              Chat with your PDF documents using AI
-            </h1>
-            <p className="max-w-[42rem] leading-normal text-muted-foreground sm:text-xl sm:leading-8">
-              Upload your PDFs, ask questions, and get instant answers. Our AI analyzes your documents and provides
-              relevant insights.
-            </p>
-            <div className="flex flex-col gap-4 sm:flex-row">
-              <Link href="/chat">
-                <Button size="lg" className="gap-2">
-                  <Upload size={16} />
-                  Upload PDFs
-                </Button>
-              </Link>
+      </ErrorBoundary>
+    )
+  }
+
+  return (
+    <ErrorBoundary>
+      <div className="min-h-screen bg-white text-black font-mono">
+        {/* Error Handler */}
+        <ErrorHandler errors={errors} onDismiss={dismissError} />
+
+        {/* Enhanced Header */}
+        <header className="border-b-2 border-black bg-white sticky top-0 z-40">
+          <div className="max-w-full mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              {/* Logo and Title */}
+              <div className="flex items-center space-x-4">
+                <div className="w-10 h-10 border-2 border-black bg-black text-white flex items-center justify-center">
+                  <Brain className="w-6 h-6" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight">PDF RAG CHATBOT</h1>
+                  <p className="text-xs text-gray-600 mt-1">Enhanced AI Document Analysis & Chat</p>
+                </div>
+              </div>
+
+              {/* Status Indicators */}
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2 px-3 py-2 border border-black">
+                  <span className={`${status.color} font-bold`}>{status.icon}</span>
+                  <span className="text-sm font-medium">{status.text}</span>
+                </div>
+                <Badge variant="outline" className="border-black text-black font-mono">
+                  <Database className="w-3 h-3 mr-1" />
+                  {documents.length} DOCS
+                </Badge>
+                <Badge variant="outline" className="border-black text-black font-mono">
+                  <Zap className="w-3 h-3 mr-1" />
+                  {apiConfig.provider.toUpperCase()}
+                </Badge>
+                {wandbConfig.enabled && (
+                  <Badge variant="outline" className="border-green-600 text-green-600 font-mono">
+                    <BarChart3 className="w-3 h-3 mr-1" />
+                    WANDB
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
-        </section>
-        <section className="w-full flex flex-col items-center space-y-6 py-8 md:py-12 lg:py-16">
-  <div className="mx-auto flex max-w-4xl flex-col items-center space-y-6 text-center w-full">
-    <h2 className="text-3xl font-bold leading-[1.1] sm:text-3xl md:text-5xl">Features</h2>
-    <p className="max-w-2xl leading-normal text-muted-foreground sm:text-lg sm:leading-7 mx-auto">
-      Our PDF chat application offers powerful features to help you extract insights from your documents.
-    </p>
-  </div>
-  <div className="mx-auto grid gap-8 sm:grid-cols-2 md:grid-cols-3 w-full max-w-6xl justify-center items-stretch">
-            <Card className="bg-card/50 p-6 min-h-[200px]">
-              <CardHeader className="text-left">
-                <CardTitle className="text-left">Multi-PDF Upload</CardTitle>
-                <CardDescription className="text-left">Upload and analyze multiple PDF documents at once.</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4 px-2 pb-2 text-left">
-                <p>Upload any number of PDFs and our system will process them for you to chat with.</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card/50"> {/* Added subtle background */}
-              <CardHeader className="text-left">
-                <CardTitle className="text-left">Smart Chunking</CardTitle>
-                <CardDescription className="text-left">Documents are intelligently divided for better analysis.</CardDescription>
-              </CardHeader>
-              <CardContent className="text-left">
-                <p>Our system breaks down documents into meaningful chunks for more accurate responses.</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card/50"> {/* Added subtle background */}
-              <CardHeader className="text-left">
-                <CardTitle className="text-left">AI-Powered Chat</CardTitle>
-                <CardDescription className="text-left">Ask questions and get answers based on your documents.</CardDescription>
-              </CardHeader>
-              <CardContent className="text-left">
-                <p>Our AI understands your questions and finds relevant information from your PDFs.</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card/50"> {/* Added subtle background */}
-              <CardHeader className="text-left">
-                <CardTitle className="text-left">Document Summaries</CardTitle>
-                <CardDescription className="text-left">Get quick summaries of your entire documents.</CardDescription>
-              </CardHeader>
-              <CardContent className="text-left">
-                <p>Generate executive summaries, bullet points, or TL;DR versions of your PDFs.</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card/50"> {/* Added subtle background */}
-              <CardHeader className="text-left">
-                <CardTitle className="text-left">Key Information Extraction</CardTitle>
-                <CardDescription className="text-left">Extract tables, entities, and important data.</CardDescription>
-              </CardHeader>
-              <CardContent className="text-left">
-                <p>Automatically identify and extract key information like tables, people, dates, and more.</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-card/50"> {/* Added subtle background */}
-              <CardHeader className="text-left">
-                <CardTitle className="text-left">Multi-Document Chat</CardTitle>
-                <CardDescription className="text-left">Chat with one or all of your documents at once.</CardDescription>
-              </CardHeader>
-              <CardContent className="text-left">
-                <p>Ask questions across multiple documents and get comprehensive answers with source references.</p>
-              </CardContent>
-            </Card>
+        </header>
+
+        {/* Main Application Layout */}
+        <div className="flex h-[calc(100vh-80px)]">
+          {/* Enhanced Sidebar */}
+          <div
+            className={`${sidebarCollapsed ? "w-16" : "w-80"} border-r-2 border-black bg-gray-50 transition-all duration-300 flex flex-col`}
+          >
+            {/* Sidebar Header */}
+            <div className="p-4 border-b border-black bg-white">
+              <div className="flex items-center justify-between">
+                {!sidebarCollapsed && <h2 className="font-bold text-lg">CONTROL PANEL</h2>}
+                <button
+                  onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  className="p-2 border border-black hover:bg-black hover:text-white transition-colors"
+                >
+                  {sidebarCollapsed ? "→" : "←"}
+                </button>
+              </div>
+            </div>
+
+            {/* Sidebar Content */}
+            <div className="flex-1 overflow-hidden">
+              {!sidebarCollapsed ? (
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+                  <TabsList className="grid w-full grid-cols-4 bg-white border-b border-black rounded-none">
+                    <TabsTrigger value="setup" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                      <Settings className="w-4 h-4 mr-2" />
+                      SETUP
+                    </TabsTrigger>
+                    <TabsTrigger value="docs" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                      <FileText className="w-4 h-4 mr-2" />
+                      DOCS
+                    </TabsTrigger>
+                    <TabsTrigger value="wandb" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                      <BarChart3 className="w-4 h-4 mr-2" />
+                      WANDB
+                    </TabsTrigger>
+                    <TabsTrigger value="status" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                      <Activity className="w-4 h-4 mr-2" />
+                      STATUS
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <div className="flex-1 overflow-hidden">
+                    <TabsContent value="setup" className="h-full m-0 p-4 space-y-4 overflow-y-auto">
+                      <EnhancedAPIConfiguration
+                        config={apiConfig}
+                        onConfigChange={handleApiConfigChange}
+                        onTestConnection={handleTestApiConnection}
+                        onError={(error, details) =>
+                          addError({
+                            type: "error",
+                            title: "API Configuration Error",
+                            message: error,
+                            details,
+                            dismissible: true,
+                          })
+                        }
+                        onSuccess={addSuccess}
+                      />
+
+                      <Card className="border-2 border-black shadow-none">
+                        <CardHeader className="border-b border-black">
+                          <CardTitle className="flex items-center space-x-2">
+                            <Upload className="w-5 h-5" />
+                            <span>UPLOAD DOCUMENTS</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                          <PDFProcessorFinal
+                            onDocumentProcessed={handleDocumentProcessed}
+                            isProcessing={isProcessing}
+                            setIsProcessing={setIsProcessing}
+                          />
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+
+                    <TabsContent value="docs" className="h-full m-0 p-4 overflow-y-auto">
+                      <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />
+                    </TabsContent>
+
+                    <TabsContent value="wandb" className="h-full m-0 p-4 overflow-y-auto">
+                      <WandbConfiguration
+                        config={wandbConfig}
+                        onConfigChange={handleWandbConfigChange}
+                        onTestConnection={handleTestWandbConnection}
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="status" className="h-full m-0 p-4 overflow-y-auto">
+                      <SystemStatus
+                        modelStatus={modelStatus}
+                        apiConfig={apiConfig}
+                        documents={documents}
+                        messages={messages}
+                        ragEngine={ragEngine}
+                      />
+                    </TabsContent>
+                  </div>
+                </Tabs>
+              ) : (
+                <div className="p-2 space-y-4">
+                  <button
+                    onClick={() => {
+                      setSidebarCollapsed(false)
+                      setActiveTab("setup")
+                    }}
+                    className="w-full p-3 border border-black hover:bg-black hover:text-white transition-colors"
+                    title="Setup"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSidebarCollapsed(false)
+                      setActiveTab("docs")
+                    }}
+                    className="w-full p-3 border border-black hover:bg-black hover:text-white transition-colors"
+                    title="Documents"
+                  >
+                    <FileText className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSidebarCollapsed(false)
+                      setActiveTab("wandb")
+                    }}
+                    className="w-full p-3 border border-black hover:bg-black hover:text-white transition-colors"
+                    title="Wandb"
+                  >
+                    <BarChart3 className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSidebarCollapsed(false)
+                      setActiveTab("status")
+                    }}
+                    className="w-full p-3 border border-black hover:bg-black hover:text-white transition-colors"
+                    title="Status"
+                  >
+                    <Activity className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </section>
-      </main>
-      <footer className="border-t py-6 md:py-0">
-        <div className="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
-          <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            &copy; {new Date().getFullYear()} PDFChat. All rights reserved.
-          </p>
+
+          {/* Main Chat Area */}
+          <div className="flex-1 flex flex-col">
+            {/* Chat Header */}
+            <div className="border-b border-black bg-white p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <MessageCircle className="w-6 h-6" />
+                  <div>
+                    <h2 className="text-xl font-bold">CHAT INTERFACE</h2>
+                    <p className="text-sm text-gray-600">
+                      {modelStatus === "ready"
+                        ? `Ready with ${apiConfig.model} • ${documents.length} documents loaded`
+                        : "Configure your AI provider to start chatting"}
+                    </p>
+                  </div>
+                </div>
+
+                {modelStatus === "ready" && (
+                  <QuickActions
+                    onClearChat={() => {
+                      setMessages([])
+                      addSuccess("Chat history cleared")
+                    }}
+                    onNewSession={() => {
+                      setMessages([])
+                      setDocuments([])
+                      if (ragEngine) {
+                        ragEngine.clearDocuments()
+                      }
+                      clearErrors()
+                      addSuccess("New session started")
+                    }}
+                    disabled={isProcessing}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Chat Content */}
+            <div className="flex-1 bg-gray-50">
+              <ChatInterface
+                messages={messages}
+                onSendMessage={handleSendMessage}
+                isProcessing={isProcessing}
+                disabled={modelStatus !== "ready" || documents.length === 0}
+              />
+            </div>
+          </div>
         </div>
-      </footer>
-    </div>
+
+        {/* Enhanced Footer */}
+        <footer className="border-t-2 border-black bg-white p-4">
+          <div className="max-w-full mx-auto">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center space-x-4">
+                <span className="font-bold">ENHANCED RAG-POWERED PDF CHATBOT</span>
+                <span className="text-gray-600">•</span>
+                <span className="text-gray-600">CONFIGURABLE AI PROVIDERS</span>
+                <span className="text-gray-600">•</span>
+                <span className="text-gray-600">WANDB INTEGRATION</span>
+                <span className="text-gray-600">•</span>
+                <span className="text-gray-600">COMPREHENSIVE ERROR HANDLING</span>
+              </div>
+              <div className="flex items-center space-x-2 text-gray-600">
+                <span>v2.1</span>
+                <span>•</span>
+                <span>{new Date().getFullYear()}</span>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </ErrorBoundary>
   )
 }
