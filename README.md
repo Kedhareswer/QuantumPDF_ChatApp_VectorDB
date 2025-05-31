@@ -17,15 +17,15 @@ A fully functional PDF chatbot using Retrieval-Augmented Generation (RAG) with m
 ## Installation
 
 1. **Clone the repository**:
-   \`\`\`bash
-   git clone <repository-url>
-   cd pdf-rag-chatbot
-   \`\`\`
+   ```bash
+   git clone https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
+   cd QuantumPDF_ChatApp
+   ```
 
 2. **Install Python dependencies**:
-   \`\`\`bash
+   ```bash
    pip install -r requirements.txt
-   \`\`\`
+   ```
 
 3. **Run the application**:
    \`\`\`bash
