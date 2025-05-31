@@ -11,8 +11,11 @@ importers:
       '@hookform/resolvers':
         specifier: ^3.9.1
         version: 3.9.1(react-hook-form@7.54.1(react@19.0.0))
+      '@huggingface/hub':
+        specifier: ^2.1.0
+        version: 2.1.0
       '@huggingface/inference':
-        specifier: latest
+        specifier: ^3.15.0
         version: 3.15.0
       '@radix-ui/react-accordion':
         specifier: 1.2.2
@@ -213,6 +216,11 @@ packages:
     resolution: {integrity: sha512-ud2HqmGBM0P0IABqoskKWI6PEf6ZDDBZkFqe2Vnl+mTHCEHzr3ISjjZyCwTjC/qpL25JC9aIDkloQejvMeq0ug==}
     peerDependencies:
       react-hook-form: ^7.0.0
+
+  '@huggingface/hub@2.1.0':
+    resolution: {integrity: sha512-L+125tAXwCOwVd8n4qQlT20ZJP7I5sEXOLNrIzpgkUG6eMIsGlxT+9hmmiCH/LGmjbXjlcRHoPB8GGT3zCws4A==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@huggingface/inference@3.15.0':
     resolution: {integrity: sha512-C+Adt4fu4ztlq0Al9EOgEdK5Hl8ebV1eoDEWegJPdAJ97U8A1aqBbl1Sp4S4+wIy3nLApTrtcLuoizGZmLtDMA==}
@@ -2012,6 +2020,10 @@ snapshots:
   '@hookform/resolvers@3.9.1(react-hook-form@7.54.1(react@19.0.0))':
     dependencies:
       react-hook-form: 7.54.1(react@19.0.0)
+
+  '@huggingface/hub@2.1.0':
+    dependencies:
+      '@huggingface/tasks': 0.19.11
 
   '@huggingface/inference@3.15.0':
     dependencies:

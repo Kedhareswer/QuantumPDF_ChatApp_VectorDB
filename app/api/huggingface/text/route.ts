@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { HfInference } from "@huggingface/inference"
+import { InferenceClient } from "@huggingface/inference"
 
 export async function POST(request: NextRequest) {
   let textModel: string = "HuggingFaceH4/zephyr-7b-beta"; // Default model
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid prompt input" }, { status: 400 })
     }
 
-    const hf = new HfInference(apiKey)
+    const client = new InferenceClient(apiKey)
     textModel = model || "HuggingFaceH4/zephyr-7b-beta" // Assign specific model
 
     const fullPrompt = context
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`Generating text with model: ${textModel}`)
 
-    const response = await hf.textGeneration({
+    const response = await client.textGeneration({
       model: textModel,
       inputs: fullPrompt,
       parameters: {
