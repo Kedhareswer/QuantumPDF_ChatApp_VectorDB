@@ -138,7 +138,7 @@ export class PDFParser {
               }
               return ""
             })
-            .filter((text) => text.trim().length > 0)
+            .filter((text: string) => text.trim().length > 0)
             .join(" ")
 
           if (pageText.trim()) {

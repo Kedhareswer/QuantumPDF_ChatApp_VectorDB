@@ -55,7 +55,13 @@ export function PDFProcessor({ onDocumentProcessed, isProcessing, setIsProcessin
       // Initialize RAG engine if not already done
       setProcessingStage("Initializing models...")
       setUploadProgress(10)
-      await ragEngine.current.initialize()
+      // TODO: AIConfig should be managed properly, e.g., via props or context
+      const defaultConfig = {
+        provider: "huggingface" as const, // Use "as const" for literal type
+        apiKey: "mock-api-key", // Placeholder
+        model: "mock-model", // Placeholder
+      };
+      await ragEngine.current.initialize(defaultConfig)
 
       // Process the PDF document
       setProcessingStage("Extracting text from PDF...")
