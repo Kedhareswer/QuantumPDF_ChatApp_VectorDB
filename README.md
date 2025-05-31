@@ -1,6 +1,16 @@
+```markdown
 # 🌌 QuantumPDF ChatApp
 
-**QuantumPDF ChatApp** is an intelligent web application that transforms how you interact with PDF documents. By leveraging advanced Large Language Models (LLMs), it enables you to “chat” with your PDFs—ask questions and receive insightful answers directly from your documents.
+[![GitHub Stars](https://img.shields.io/github/stars/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/fork)
+[![License](https://img.shields.io/github/license/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/commits/main)
+[![Issues](https://img.shields.io/github/issues/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
+[![Contributors](https://img.shields.io/github/contributors/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/graphs/contributors)
+
+---
+
+**QuantumPDF ChatApp** is an intelligent web application that transforms how you interact with PDF documents. Leveraging advanced Large Language Models (LLMs), it lets you “chat” with your PDFs—ask questions and get insightful, cited answers directly from your documents.
 
 Whether you’re handling dense research papers, technical manuals, or long reports, QuantumPDF ChatApp turns static documents into dynamic conversational partners.
 
@@ -206,3 +216,5 @@ npm run dev        # or: pnpm run dev
 
 - [GitHub Discussions](https://github.com/Kedhareswer/QuantumPDF_ChatApp/discussions)
 - [Issues](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
+
+---
