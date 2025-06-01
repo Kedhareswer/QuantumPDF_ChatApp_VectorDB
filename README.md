@@ -59,7 +59,7 @@ Whether you’re handling dense research papers, technical manuals, or long repo
 
 QuantumPDF ChatApp uses a **Retrieval Augmented Generation (`RAG`)** pipeline:
 
-\`\`\`mermaid
+```mermaid
 flowchart TD
     A[User (Next.js Frontend)] --> B[Flask API (Python Backend)]
     B --> C1[PDF Upload & Processing]
@@ -72,7 +72,7 @@ flowchart TD
     E2 -->|Retrieve Chunks & History| F1[LLM Answer Generation]
     F1 -->|Prompt LLM (Local/Cloud)| F2[Response Generation]
     F2 --> G[Display Results & Cited Sources (Frontend)]
-\`\`\`
+```
 
 **Step-by-step:**
 
@@ -95,7 +95,7 @@ flowchart TD
 
 ### **Setup**
 
-\`\`\`bash
+```bash
 # 1. Clone the repository
 git clone https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
 cd QuantumPDF_ChatApp
@@ -123,7 +123,7 @@ cd QuantumPDF_ChatApp
 `npm run dev`        # or: `pnpm run dev`
 
 # 6. Open `http://localhost:3000` in your browser.
-\`\`\`
+```
 
 ---
 
@@ -159,12 +159,12 @@ cd QuantumPDF_ChatApp
 
 - **Environment Variables:**  
   Set API keys for cloud `LLMs` and integrations in your `.env` file.
-  \`\`\`env
+  ```env
   OPENAI_API_KEY=your_openai_key
   GEMINI_API_KEY=your_gemini_key
   AIML_API_KEY=your_aiml_key
   WANDB_API_KEY=your_wandb_key
-  \`\`\`
+  ```
   🔑 *Remember to create and populate your `.env` file with necessary API keys if you haven't done so during installation.*
 
 - **Model Selection:**  
@@ -208,6 +208,7 @@ cd QuantumPDF_ChatApp
     - Be mindful of API rate limits for your chosen `LLM` provider.
 - **Logs:**
     - Always check the terminal output from both the Flask backend (`app.py`) and the Next.js frontend console for detailed error messages.
+  
 ⚠️ *Important: If you encounter persistent issues, consider opening an issue on the [GitHub repository](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues) with detailed logs and steps to reproduce the problem.*
 
 ---
