@@ -5,24 +5,23 @@ import { useState, useRef } from "react"
 import { Upload, FileText, Loader2, CheckCircle, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-
-interface Document {
-  id: string
-  name: string
-  content: string
-  chunks: string[]
-  embeddings: number[][]
-  uploadedAt: Date
-  metadata?: any
-}
+import { PDFParser } from "@/lib/pdf-parser" // Assuming path
+import type { RAGEngine } from "@/lib/rag-engine" // Assuming path
+import type { Document } from "@/lib/types" // Assuming path for Document type
 
 interface PDFProcessorProps {
   onDocumentProcessed: (document: Document) => void
   isProcessing: boolean
   setIsProcessing: (processing: boolean) => void
+  ragEngine: RAGEngine // Added ragEngine prop
 }
 
-export function PDFProcessor({ onDocumentProcessed, isProcessing, setIsProcessing }: PDFProcessorProps) {
+export function PDFProcessor({
+  onDocumentProcessed,
+  isProcessing,
+  setIsProcessing,
+  ragEngine,
+}: PDFProcessorProps) {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [processingStage, setProcessingStage] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -48,133 +47,122 @@ export function PDFProcessor({ onDocumentProcessed, isProcessing, setIsProcessin
     setIsProcessing(true)
     setUploadProgress(0)
     setError(null)
+    setProcessingStage("Starting processing...")
 
     try {
-      // Simulate initialization
-      setProcessingStage("Initializing models...")
-      setUploadProgress(10)
-      await simulateProcessingDelay(500)
+      // Attempt Client-Side Processing
+      try {
+        setProcessingStage("Starting client-side processing...")
+        setUploadProgress(10) // Initial progress
+        const processedDocument = await ragEngine.processDocument(file)
+        setUploadProgress(100)
+        setProcessingStage("Client-side processing complete!")
+        onDocumentProcessed(processedDocument)
+        if (fileInputRef.current) fileInputRef.current.value = ""
+        return // Successfully processed client-side
+      } catch (clientError) {
+        console.error("Client-side processing failed:", clientError)
+        setError("Client-side processing failed. Attempting server-side extraction...")
+        setProcessingStage("Client-side processing failed. Attempting server-side extraction...")
+        setUploadProgress(20) // Progress after client-side attempt
+        // Do not re-throw, proceed to server-side fallback
+      }
 
-      // Simulate text extraction
-      setProcessingStage("Extracting text from PDF...")
+      // Server-Side Processing Fallback
+      setProcessingStage("Starting server-side extraction...")
       setUploadProgress(30)
-      await simulateProcessingDelay(800)
+      const formData = new FormData()
+      formData.append("pdf", file) // Ensure key matches server: "pdf"
 
-      // Simulate chunking
-      setProcessingStage("Chunking text...")
+      const response = await fetch("/api/pdf/extract", {
+        method: "POST",
+        body: formData,
+      })
       setUploadProgress(50)
-      await simulateProcessingDelay(500)
 
-      // Simulate embedding generation
-      setProcessingStage("Generating embeddings...")
-      setUploadProgress(80)
-      await simulateProcessingDelay(700)
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(
+          `Server error: ${response.statusText} - ${errorData.error || "Failed to extract text from server."}`
+        )
+      }
 
-      // Create a mock document with realistic content based on the filename
-      const mockDocument = createMockDocument(file)
+      const jsonData = await response.json()
 
-      setProcessingStage("Finalizing...")
+      if (!jsonData.success) {
+        throw new Error(jsonData.error || "Server returned an error during PDF extraction.")
+      }
+
+      setProcessingStage("Server-side extraction complete. Processing text...")
+      setUploadProgress(60)
+
+      if (!jsonData.text || jsonData.text.trim() === "") {
+        throw new Error("No text content found after server-side extraction.")
+      }
+
+      const chunks = ragEngine.pdfParser.chunkText(jsonData.text)
+      if (!chunks || chunks.length === 0) {
+        throw new Error("Failed to chunk text from server-extracted content.")
+      }
+      setProcessingStage("Text chunked. Generating embeddings for server-extracted text...")
+      setUploadProgress(70)
+
+      const embeddings = await ragEngine.aiClient.generateEmbeddings(chunks)
+      if (!embeddings || embeddings.length !== chunks.length) {
+        throw new Error("Failed to generate embeddings for server-extracted content.")
+      }
+      setProcessingStage("Embeddings generated.")
+      setUploadProgress(90)
+
+      const documentFromServer: Document = {
+        id: Date.now().toString(), // Or generate a more robust ID
+        name: file.name,
+        content: jsonData.text,
+        chunks,
+        embeddings,
+        uploadedAt: new Date(),
+        metadata: {
+          ...(jsonData.metadata || {}), // Spread server metadata
+          originalFileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          processingMethod: "server-fallback",
+          // Add other relevant client-known metadata if jsonData.metadata is sparse
+        },
+      }
+
+      setProcessingStage("Server-side processing complete!")
       setUploadProgress(100)
-      await simulateProcessingDelay(300)
+      onDocumentProcessed(documentFromServer)
 
-      onDocumentProcessed(mockDocument)
-
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
-
-      setProcessingStage("Complete!")
     } catch (error) {
       console.error("Error processing PDF:", error)
-      setError(error instanceof Error ? error.message : "Error processing PDF. Please try again.")
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during PDF processing."
+      setError(`Processing failed: ${errorMessage}`)
+      setProcessingStage("Failed to process document.")
     } finally {
-      setTimeout(() => {
-        setIsProcessing(false)
-        setUploadProgress(0)
-        setProcessingStage("")
-        setError(null)
-      }, 1000)
+      // Keep the final state for a bit before resetting, or reset immediately
+      // For now, let's rely on the parent component to manage isProcessing state for UI feedback
+      // but we should reset internal states like progress and stage if not successful
+      if (error) { // If there was an error, ensure UI reflects it and stops.
+         // setIsProcessing(false); // Let parent handle this based on onDocumentProcessed or error
+      } else { // Success
+        // Reset after a short delay to show "Complete!" message
+        setTimeout(() => {
+            setIsProcessing(false)
+            setUploadProgress(0)
+            setProcessingStage("")
+            setError(null)
+        }, 1500);
+      }
+      // If an error occurred, the finally block in the calling component or page
+      // should handle setIsProcessing(false). Here we ensure that if an error
+      // was caught and set, the processing stage reflects failure.
+      // If onDocumentProcessed was called, the parent component should handle setIsProcessing(false).
     }
-  }
-
-  // Helper function to create a realistic mock document
-  const createMockDocument = (file: File): Document => {
-    const fileName = file.name.replace(".pdf", "")
-    const fileSize = file.size
-    const id = Date.now().toString()
-
-    // Generate mock content based on filename
-    const topics = [
-      "artificial intelligence",
-      "machine learning",
-      "natural language processing",
-      "computer vision",
-      "neural networks",
-      "deep learning",
-      "data science",
-      "robotics",
-    ]
-
-    // Select a topic based on the file name
-    const selectedTopic = topics[Math.floor(Math.random() * topics.length)]
-
-    // Create mock content
-    const content = `
-      ${fileName} - Document Analysis
-      
-      This document discusses various aspects of ${selectedTopic} and its applications in modern technology.
-      The field of ${selectedTopic} has seen significant advancements in recent years, with applications
-      ranging from automated decision-making to pattern recognition and predictive analytics.
-      
-      Key concepts covered in this document include:
-      - Fundamental principles of ${selectedTopic}
-      - Historical development and major milestones
-      - Current state-of-the-art techniques
-      - Future directions and challenges
-      - Ethical considerations and societal impact
-      
-      The document also explores how ${selectedTopic} intersects with other fields such as
-      mathematics, computer science, cognitive psychology, and philosophy.
-    `.trim()
-
-    // Create chunks
-    const chunks = [
-      `${fileName} - Introduction to ${selectedTopic}: This section covers the basic concepts and definitions related to ${selectedTopic}.`,
-      `${fileName} - Historical Development: This section traces the evolution of ${selectedTopic} from its early beginnings to current state.`,
-      `${fileName} - Technical Foundations: This section explains the mathematical and computational foundations of ${selectedTopic}.`,
-      `${fileName} - Applications: This section explores various real-world applications of ${selectedTopic} in different domains.`,
-      `${fileName} - Future Directions: This section discusses emerging trends and future research directions in ${selectedTopic}.`,
-      `${fileName} - Ethical Considerations: This section addresses ethical challenges and considerations in the development and deployment of ${selectedTopic}.`,
-    ]
-
-    // Create mock embeddings (5-dimensional vectors for simplicity)
-    const embeddings = chunks.map(() => {
-      return Array.from({ length: 5 }, () => Math.random())
-    })
-
-    return {
-      id,
-      name: file.name,
-      content,
-      chunks,
-      embeddings,
-      uploadedAt: new Date(),
-      metadata: {
-        fileSize,
-        fileType: file.type,
-        pageCount: Math.floor(fileSize / 30000) + 1, // Rough estimate of page count
-        processingMethod: "mock",
-        extractionQuality: "high",
-        language: "English",
-        topics: [selectedTopic],
-      },
-    }
-  }
-
-  // Helper function to simulate processing delay
-  const simulateProcessingDelay = (ms: number) => {
-    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   return (

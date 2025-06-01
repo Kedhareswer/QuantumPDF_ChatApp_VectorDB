@@ -267,92 +267,92 @@ export class AIClient {
     }
   }
 
-  // OpenAI implementations
+  // OpenAI implementations (now using server-side Next.js API routes)
   private async generateOpenAIEmbedding(text: string): Promise<number[]> {
-    const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
-
-    console.log(`Making OpenAI API request to: ${baseUrl}/embeddings`)
-
+    console.log("AIClient: generateOpenAIEmbedding - Attempting to POST to /api/openai/embedding");
     try {
-      const response = await fetch(`${baseUrl}/embeddings`, {
+      const response = await fetch("/api/openai/embedding", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "text-embedding-3-small",
-          input: text,
+          text: text,
+          model: "text-embedding-3-small", // Or this.config.model if it's for embeddings
         }),
-      })
+      });
 
-      console.log(`OpenAI API response status: ${response.status} ${response.statusText}`)
+      const result = await response.json();
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error(`OpenAI API error response: ${errorText}`)
-
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-        try {
-          const errorData = JSON.parse(errorText)
-          if (errorData.error && errorData.error.message) {
-            errorMessage = errorData.error.message
-          }
-        } catch (parseError) {
-          console.warn("Could not parse OpenAI error response as JSON")
-        }
-
-        throw new Error(`OpenAI API error: ${errorMessage}`)
+      if (!response.ok || !result.success) {
+        console.error("Error from /api/openai/embedding:", result);
+        throw new Error(result.error || `Server error: ${response.statusText}`);
       }
 
-      const result = await response.json()
-
-      if (!result.data || !Array.isArray(result.data) || result.data.length === 0) {
-        throw new Error("Invalid response structure from OpenAI API")
+      if (!result.embedding || !Array.isArray(result.embedding)) {
+        throw new Error("Invalid embedding response from server");
       }
 
-      if (!result.data[0].embedding || !Array.isArray(result.data[0].embedding)) {
-        throw new Error("Invalid embedding data from OpenAI API")
-      }
-
-      console.log(`Generated OpenAI embedding with dimension: ${result.data[0].embedding.length}`)
-      return result.data[0].embedding
+      console.log(`Generated OpenAI embedding via server with dimension: ${result.embedding.length}`);
+      return result.embedding;
     } catch (error) {
+      console.error("Failed to fetch OpenAI embedding via server:", error);
       if (error instanceof Error) {
-        throw error
+        throw error;
       }
-      throw new Error(`OpenAI API request failed: ${String(error)}`)
+      throw new Error(`OpenAI embedding request via server failed: ${String(error)}`);
     }
   }
 
   private async generateOpenAIText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
+    console.log("AIClient: generateOpenAIText - Attempting to POST to /api/openai/chat");
+    try {
+      const response = await fetch("/api/openai/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: messages,
+          model: this.config.model, // Pass the model from config
+          // Potentially pass other parameters like temperature, max_tokens if needed
+          // temperature: 0.7,
+          // max_tokens: 500,
+        }),
+      });
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.config.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.config.model,
-        messages: messages,
-        max_tokens: 500,
-        temperature: 0.7,
-      }),
-    })
+      // Note: The server-side /api/openai/chat route currently handles non-streaming responses
+      // by returning the first choice's message content directly.
+      // If streaming is implemented and used here, client-side handling of SSE would be needed.
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`)
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error("Error from /api/openai/chat:", result);
+        throw new Error(result.error || `Server error: ${response.statusText}`);
+      }
+
+      if (!result.message || typeof result.message.content !== 'string') {
+        console.error("Unexpected response structure from /api/openai/chat:", result);
+        throw new Error("Unexpected response structure from chat API server route.");
+      }
+
+      return result.message.content;
+    } catch (error) {
+      console.error("Failed to fetch OpenAI chat completion via server:", error);
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`OpenAI chat completion request via server failed: ${String(error)}`);
     }
-
-    const result = await response.json()
-    return result.choices[0].message.content
   }
 
   private async testOpenAIConnection(): Promise<boolean> {
+    // Updated to use the new server-side route for chat completions
     try {
-      await this.generateOpenAIText([{ role: "user", content: "test" }])
+      // This will now implicitly test the /api/openai/chat route
+      const responseText = await this.generateOpenAIText([{ role: "user", content: "Hello, this is a test." }]);
+      return responseText.length > 0;
       return true
     } catch {
       return false
