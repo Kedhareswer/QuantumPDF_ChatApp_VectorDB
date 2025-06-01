@@ -69,6 +69,18 @@ Whether you’re handling dense research papers, technical manuals, or long repo
 </details>
 
 <details>
+<summary>🏗️ <b>Codebase Structure Overview</b></summary>
+
+- **Frontend (Next.js/React):** Located primarily in `app/` (pages and Next.js API routes), `components/` (React components), and `lib/` (frontend utilities). The UI allows users to upload PDFs and interact with the chat interface.
+- **Backend (Python/Flask):** The core RAG pipeline and application logic reside in `app.py`. This includes PDF text extraction (using PyMuPDF), chunking, embedding generation (with Sentence Transformers), FAISS indexing, and LLM interaction. It serves API endpoints consumed by the frontend.
+- **PDF Processing Flow:**
+    - The Next.js frontend captures PDF uploads and sends them to the Flask backend (`/upload` endpoint in `app.py`).
+    - All significant PDF processing (extraction, chunking, embedding, indexing) occurs on this Python backend.
+- **Embedding Service (`ragoon_service/`):** This directory contains a separate FastAPI application designed as a general-purpose embedding service. *Note: This service is not currently integrated into the main QuantumPDF ChatApp's RAG pipeline, which handles its embeddings directly within `app.py`.*
+- **Configuration:** Key configurations for API keys are in `.env`. Model choices for LLMs are managed within `app.py` and accessible via the `/models` API.
+</details>
+
+<details>
 <summary>📊 <b>Experimentation & Observability</b></summary>
 
 - **Weights & Biases:** Track experiments and model performance (WandB).
