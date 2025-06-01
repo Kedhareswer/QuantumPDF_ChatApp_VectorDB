@@ -17,7 +17,7 @@
 
 ---
 
-> **QuantumPDF ChatApp** is an intelligent, open-source web application that transforms how you interact with PDF documents. Leveraging cutting-edge Large Language Models (LLMs), you can “chat” with your PDFs — ask questions, get summaries, extract information, and reference sources, all in real-time.
+> **QuantumPDF ChatApp** is an intelligent, open-source web application that transforms how you interact with PDF documents. Leveraging cutting-edge Large Language Models (LLMs), you can “chat” with your PDFs, ask complex questions, extract key information, and summarize content—all in a conversational interface.
 
 Whether you’re handling dense research papers, technical manuals, or long reports, **QuantumPDF ChatApp** turns static documents into dynamic conversational partners.
 
@@ -84,7 +84,7 @@ QuantumPDF ChatApp uses a **Retrieval Augmented Generation (RAG)** pipeline, com
 ```mermaid
 flowchart TD
     A1[User (Next.js Frontend)] --> A2[Flask API (Python Backend)]
-    A2 --> B[App Logic]
+    A2 --> B[App Logic & Orchestration]
 
     B --> C1[PDF Upload & Processing]
     C1 -->|Text Extraction (PyMuPDF)| C2[Text Chunking]
@@ -110,6 +110,16 @@ flowchart TD
 5. **Answer Generation:** Retrieved chunks + conversation history = context for selected LLM (local/cloud).
 6. **Display:** Frontend shows the answer, highlighting the cited PDF chunks.
 </details>
+
+---
+
+## 🚀 Key Benefits
+
+- **Ask complex questions directly to your PDFs.**
+- **Get answers with cited evidence from your documents.**
+- **Support for both local (privacy-first) and cloud-based models.**
+- **Effortlessly manage and search across multiple PDFs in one session.**
+- **Easy to extend for your own research or business use-cases.**
 
 ---
 
