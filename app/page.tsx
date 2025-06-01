@@ -15,6 +15,7 @@ import { SystemStatus } from "@/components/system-status"
 import { QuickActions } from "@/components/quick-actions"
 import { PDFProcessor } from "@/components/pdf-processor"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { RAGEngine } from "@/lib/rag-engine"
 
 interface Message {
   id: string
@@ -53,19 +54,28 @@ export default function QuantumPDFChatbot() {
   const [activeTab, setActiveTab] = useState("chat")
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [ragEngine] = useState(() => new RAGEngine())
 
   // Check if chat is ready
   const isChatReady = modelStatus === "ready" && documents.length > 0
 
   useEffect(() => {
-    // Simulate model loading
+    // Initialize RAG engine when API config changes
     if (apiConfig.apiKey) {
       setModelStatus("loading")
-      setTimeout(() => setModelStatus("ready"), 2000)
+      ragEngine
+        .initialize(apiConfig)
+        .then(() => {
+          setModelStatus("ready")
+        })
+        .catch((error) => {
+          console.error("Failed to initialize RAG engine:", error)
+          setModelStatus("error")
+        })
     } else {
       setModelStatus("config")
     }
-  }, [apiConfig.apiKey])
+  }, [apiConfig.apiKey, apiConfig.provider, apiConfig.model, ragEngine])
 
   const handleSendMessage = async (content: string) => {
     if (!documents.length) {
@@ -145,16 +155,23 @@ export default function QuantumPDFChatbot() {
     }
   }
 
-  const handleDocumentUpload = (document: Document) => {
-    setDocuments((prev) => [...prev, document])
+  const handleDocumentUpload = async (document: Document) => {
+    try {
+      await ragEngine.addDocument(document)
+      setDocuments((prev) => [...prev, document])
 
-    // If this is the first document and API is configured, switch to chat
-    if (documents.length === 0 && modelStatus === "ready") {
-      setTimeout(() => setActiveTab("chat"), 1000)
+      // If this is the first document and API is configured, switch to chat
+      if (documents.length === 0 && modelStatus === "ready") {
+        setTimeout(() => setActiveTab("chat"), 1000)
+      }
+    } catch (error) {
+      console.error("Error adding document to RAG engine:", error)
+      alert("Failed to add document to the system. Please try again.")
     }
   }
 
   const handleRemoveDocument = (id: string) => {
+    ragEngine.removeDocument(id)
     setDocuments((prev) => prev.filter((doc) => doc.id !== id))
   }
 
@@ -168,6 +185,7 @@ export default function QuantumPDFChatbot() {
     if (window.confirm("Start a new session? This will clear the current chat and documents.")) {
       setMessages([])
       setDocuments([])
+      ragEngine.clearDocuments()
       setActiveTab("documents")
     }
   }

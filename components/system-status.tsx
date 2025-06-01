@@ -11,7 +11,7 @@ interface SystemStatusProps {
   apiConfig: any
   documents: any[]
   messages: any[]
-  ragEngine: any
+  ragEngine: { isHealthy?: () => boolean } | any
 }
 
 export function SystemStatus({ modelStatus, apiConfig, documents, messages, ragEngine }: SystemStatusProps) {
@@ -64,7 +64,7 @@ export function SystemStatus({ modelStatus, apiConfig, documents, messages, ragE
     if (modelStatus === "ready") score += 40
     if (documents.length > 0) score += 30
     if (apiConfig.apiKey) score += 20
-    if (ragEngine?.isHealthy()) score += 10
+    if (ragEngine && typeof ragEngine.isHealthy === "function" && ragEngine.isHealthy()) score += 10
     return score
   }
 
@@ -189,8 +189,14 @@ export function SystemStatus({ modelStatus, apiConfig, documents, messages, ragE
             <div className="flex items-center justify-between">
               <span className="text-gray-600">RAG Engine:</span>
               <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 rounded-full ${ragEngine?.isHealthy() ? "bg-green-500" : "bg-red-500"}`} />
-                <span className="font-bold">{ragEngine?.isHealthy() ? "HEALTHY" : "ERROR"}</span>
+                <div
+                  className={`w-2 h-2 rounded-full ${ragEngine && typeof ragEngine.isHealthy === "function" && ragEngine.isHealthy() ? "bg-green-500" : "bg-red-500"}`}
+                />
+                <span className="font-bold">
+                  {ragEngine && typeof ragEngine.isHealthy === "function" && ragEngine.isHealthy()
+                    ? "HEALTHY"
+                    : "ERROR"}
+                </span>
               </div>
             </div>
 
