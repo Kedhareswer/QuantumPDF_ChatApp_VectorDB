@@ -81,10 +81,14 @@ export function PDFProcessor({
       setUploadProgress(50)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(
-          `Server error: ${response.statusText} - ${errorData.error || "Failed to extract text from server."}`
-        )
+        const errorData = await response.json().catch(() => ({})) // Attempt to parse JSON error response
+        let detailedError = "Failed to process PDF on server."; // Default message
+        if (errorData.error) {
+          detailedError = errorData.error; // Use specific error from server if available
+        } else if (response.statusText) {
+          detailedError = `Server responded with status: ${response.statusText}`;
+        }
+        throw new Error(detailedError);
       }
 
       const jsonData = await response.json()

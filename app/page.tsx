@@ -347,6 +347,7 @@ export default function QuantumPDFChatbot() {
                         onDocumentProcessed={handleDocumentUpload}
                         isProcessing={isProcessing}
                         setIsProcessing={setIsProcessing}
+                        ragEngine={ragEngine}
                       />
                       <Separator className="bg-black" />
                       <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />

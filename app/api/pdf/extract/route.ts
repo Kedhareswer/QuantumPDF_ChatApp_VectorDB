@@ -13,9 +13,9 @@ async function ensureTempDirExists() {
   try {
     await fs.mkdir(TEMP_IMAGE_DIR, { recursive: true });
   } catch (error) {
-    console.error(`Failed to create temporary directory ${TEMP_IMAGE_DIR}:`, error);
-    // Depending on policy, you might want to throw this error
-    // if the directory is critical for operation.
+    console.error(`Critical Error: Failed to create or access temporary directory ${TEMP_IMAGE_DIR}:`, error);
+    // This error is critical for OCR, so we throw it to be caught by the main try-catch
+    throw new Error(`Failed to create or access temporary directory: ${TEMP_IMAGE_DIR}. OCR processing will fail.`);
   }
 }
 // Call it once at startup, or ensure it's checked/created per request if stateless.
@@ -103,7 +103,8 @@ export async function POST(request: NextRequest) {
         // convertBulk output: [{ page: 1, name: 'xx.1.png', path: '/path/to/xx.1.png', size: '123kb', height: YY, width: XX }, ...]
 
         if (!conversionOutput || conversionOutput.length === 0) {
-          throw new Error("PDF to image conversion yielded no images.");
+          // This error will be caught by the catch (ocrError) block below
+          throw new Error("PDF to image conversion yielded no images, and OCR was required.");
         }
 
         conversionOutput.forEach(img => imagePaths.push(img.path));
@@ -139,11 +140,22 @@ export async function POST(request: NextRequest) {
         }
       } catch (ocrError) {
         console.error("Error during OCR processing:", ocrError);
-        finalMetadata.ocrError = ocrError instanceof Error ? ocrError.message : "Unknown OCR error";
+        finalMetadata.ocrError = ocrError instanceof Error ? ocrError.message : String(ocrError);
         if (worker) {
           await worker.terminate(); // Ensure worker is terminated on error
         }
-        // Fallback to pdf-parse text if OCR fails critically
+
+        // Critical check: if pdf-parse text was also bad, and OCR failed, then the whole process for this PDF might be a failure.
+        if (!finalExtractedText || finalExtractedText.trim().length < MIN_TEXT_LENGTH_FOR_OCR_FALLBACK) {
+          // Propagate the error to be caught by the main try-catch, ensuring a success:false response.
+          // This makes the API report a failure if both primary extraction and OCR fallback fail to get minimal text.
+          throw new Error(`OCR processing failed and initial text extraction was insufficient. OCR Error: ${finalMetadata.ocrError}`);
+        } else {
+          // OCR failed, but pdf-parse text was already somewhat viable or OCR was not strictly critical.
+          // Log that we are falling back to the potentially poor pdf-parse text.
+          console.warn("OCR processing failed, but falling back to initially extracted text from pdf-parse as it met or exceeded minimum length or OCR was not the only option.");
+          // The process will continue and return the pdf-parse text.
+        }
       } finally {
         // Cleanup temporary image files
         console.log("Cleaning up temporary image files...");
