@@ -84,11 +84,15 @@ QuantumPDF ChatApp uses a **Retrieval Augmented Generation (RAG)** pipeline, com
 ```mermaid
 flowchart TD
     A1[User (Next.js Frontend)] --> A2[Flask API (Python Backend)]
+    A2 --> B[App Logic]
+
     B --> C1[PDF Upload & Processing]
-    C1 -->|Text Extraction (PyMuPDF)| C2
-    C2[Text Chunking] --> C3[Store in SQLite]
+    C1 -->|Text Extraction (PyMuPDF)| C2[Text Chunking]
+    C2 --> C3[Store in SQLite]
+
     B --> D1[Embedding & Indexing]
     D1 -->|Sentence Transformers| D2[FAISS Indexes]
+
     B --> E1[User Query]
     E1 -->|Embed Query| E2[FAISS Similarity Search]
     E2 -->|Retrieve Chunks & History| F1[LLM Answer Generation]
