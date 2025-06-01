@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { HfInference } from "@huggingface/inference"
+import { InferenceClient } from "@huggingface/inference"
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,10 +9,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "HUGGINGFACE_API_KEY not configured" }, { status: 500 })
     }
 
-    const hf = new HfInference(apiKey)
+    const client = new InferenceClient(apiKey)
 
     // Test with a simple embedding request
-    const response = await hf.featureExtraction({
+    const response = await client.featureExtraction({
       model: "sentence-transformers/all-MiniLM-L6-v2",
       inputs: "test connection",
     })

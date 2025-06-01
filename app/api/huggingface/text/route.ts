@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { HfInference } from "@huggingface/inference"
+import { InferenceClient } from "@huggingface/inference"
 
 export async function POST(request: NextRequest) {
+  let textModel: string = "HuggingFaceH4/zephyr-7b-beta"; // Default model
   try {
     const apiKey = process.env.HUGGINGFACE_API_KEY
+    console.log("Hugging Face API Key found:", apiKey ? "Yes" : "No");
 
     if (!apiKey) {
       return NextResponse.json({ error: "HUGGINGFACE_API_KEY not configured on server" }, { status: 500 })
@@ -16,8 +18,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid prompt input" }, { status: 400 })
     }
 
-    const hf = new HfInference(apiKey)
-    const textModel = model || "HuggingFaceH4/zephyr-7b-beta"
+    const client = new InferenceClient(apiKey)
+    textModel = model || "HuggingFaceH4/zephyr-7b-beta" // Assign specific model
 
     const fullPrompt = context
       ? `Context: ${context}\n\nQuestion: ${prompt}\n\nAnswer:`
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`Generating text with model: ${textModel}`)
 
-    const response = await hf.textGeneration({
+    const response = await client.textGeneration({
       model: textModel,
       inputs: fullPrompt,
       parameters: {
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
       model: textModel,
     })
   } catch (error) {
-    console.error("Hugging Face text generation API error:", error)
+    console.error(`Hugging Face text generation API error for model ${textModel || 'Unknown Model'}:`, error)
 
     let errorMessage = "Failed to generate text"
     if (error instanceof Error) {

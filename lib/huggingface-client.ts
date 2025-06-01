@@ -40,6 +40,7 @@ export class HuggingFaceClient {
 
       return result.embedding
     } catch (error) {
+      console.warn(`Hugging Face embedding API failed: ${error instanceof Error ? error.message : String(error)}. Falling back to local embedding generation for text: "${text.substring(0, 50)}..."`);
       console.error("Error generating embedding:", error)
       // Fallback to local embedding generation
       return this.generateLocalEmbedding(text)
@@ -70,6 +71,7 @@ export class HuggingFaceClient {
             await new Promise((resolve) => setTimeout(resolve, 100))
           }
         } catch (error) {
+          console.warn(`Error generating embedding for text at index ${i}: ${error instanceof Error ? error.message : String(error)}. Using local fallback.`);
           console.error(`Error generating embedding for text ${i}:`, error)
           // Generate fallback embedding
           const fallbackEmbedding = this.generateLocalEmbedding(texts[i] || "")
@@ -124,6 +126,7 @@ export class HuggingFaceClient {
 
       return result.text
     } catch (error) {
+      console.warn(`Hugging Face text generation API failed: ${error instanceof Error ? error.message : String(error)}. Falling back to local response generation for prompt: "${prompt.substring(0, 50)}..."`);
       console.error("Error generating text:", error)
       return this.generateLocalResponse(prompt, context)
     }

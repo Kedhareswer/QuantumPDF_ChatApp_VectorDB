@@ -53,6 +53,7 @@ export class RAGEngine {
       this.currentConfig = config
 
       // Test the connection
+      console.log("RAGEngine: Attempting to test AI provider connection via AIClient...");
       const connectionTest = await this.aiClient.testConnection()
       if (!connectionTest) {
         throw new Error("Failed to connect to AI provider")

@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { HfInference } from "@huggingface/inference"
+import { InferenceClient } from "@huggingface/inference"
 
 export async function POST(request: NextRequest) {
+  let embeddingModel: string = "sentence-transformers/all-MiniLM-L6-v2"; // Default model
   try {
     const apiKey = process.env.HUGGINGFACE_API_KEY
+    console.log("Hugging Face API Key found:", apiKey ? "Yes" : "No");
 
     if (!apiKey) {
       return NextResponse.json({ error: "HUGGINGFACE_API_KEY not configured on server" }, { status: 500 })
@@ -16,12 +18,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid text input" }, { status: 400 })
     }
 
-    const hf = new HfInference(apiKey)
-    const embeddingModel = model || "sentence-transformers/all-MiniLM-L6-v2"
+    const client = new InferenceClient(apiKey)
+    embeddingModel = model || "sentence-transformers/all-MiniLM-L6-v2" // Assign specific model
 
     console.log(`Generating embedding with model: ${embeddingModel}`)
 
-    const response = await hf.featureExtraction({
+    const response = await client.featureExtraction({
       model: embeddingModel,
       inputs: text.trim(),
     })
@@ -30,13 +32,23 @@ export async function POST(request: NextRequest) {
     let embedding: number[] = []
 
     if (Array.isArray(response)) {
-      if (Array.isArray(response[0])) {
-        embedding = response[0] as number[]
-      } else {
+      // Check if response is like [0.1, 0.2, ...]
+      if (typeof response[0] === 'number') {
         embedding = response as number[]
       }
-    } else {
-      throw new Error("Unexpected embedding response format")
+      // Check if response is like [[0.1, 0.2, ...]]
+      else if (Array.isArray(response[0]) && typeof response[0][0] === 'number') {
+        embedding = response[0] as number[]
+      } else {
+        // Unexpected structure within the array
+        throw new Error("Unexpected embedding response format: array contains non-numeric elements or invalid structure")
+      }
+    } else if (typeof response === 'object' && response !== null && 'embedding' in response && Array.isArray((response as any).embedding)) {
+      // Response is like { embedding: [0.1, 0.2, ...] } - a hypothetical case for some APIs
+      embedding = (response as any).embedding as number[]
+    }
+    else {
+      throw new Error("Unexpected embedding response format: not an array or a known object structure")
     }
 
     // Validate embedding
@@ -58,7 +70,7 @@ export async function POST(request: NextRequest) {
       dimension: embedding.length,
     })
   } catch (error) {
-    console.error("Hugging Face embedding API error:", error)
+    console.error(`Hugging Face embedding API error for model ${embeddingModel || 'Unknown Model'}:`, error)
 
     let errorMessage = "Failed to generate embedding"
     if (error instanceof Error) {

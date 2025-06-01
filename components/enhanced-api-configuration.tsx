@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Zap, Eye, EyeOff, Check, X, AlertTriangle, Info, ExternalLink } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,25 +12,11 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 
-interface AIConfig {
-  provider: "huggingface" | "openai" | "anthropic" | "aiml" | "groq"
-  apiKey: string
-  model: string
-  baseUrl?: string
-}
-
-interface EnhancedAPIConfigurationProps {
-  config: AIConfig
-  onConfigChange: (config: AIConfig) => void
-  onTestConnection: (config: AIConfig) => Promise<boolean>
-  onError: (error: string, details?: string) => void
-  onSuccess: (message: string) => void
-}
-
+// Replace the PROVIDER_INFO constant with this updated version that includes all providers
 const PROVIDER_INFO = {
   huggingface: {
     name: "Hugging Face",
-    description: "Free inference API with rate limits",
+    description: "Free inference API with rate limits (DISABLED)",
     models: ["HuggingFaceH4/zephyr-7b-beta", "microsoft/DialoGPT-medium", "facebook/blenderbot-400M-distill"],
     defaultModel: "HuggingFaceH4/zephyr-7b-beta",
     baseUrl: "https://api-inference.huggingface.co",
@@ -36,6 +24,7 @@ const PROVIDER_INFO = {
     limitations: ["Rate Limited", "Cold Start Delays", "Model Loading Time"],
     signupUrl: "https://huggingface.co/settings/tokens",
     embeddingSupport: true,
+    disabled: true,
   },
   openai: {
     name: "OpenAI",
@@ -81,6 +70,203 @@ const PROVIDER_INFO = {
     signupUrl: "https://console.groq.com/keys",
     embeddingSupport: false,
   },
+  openrouter: {
+    name: "OpenRouter",
+    description: "Universal gateway to multiple AI models",
+    models: ["openai/gpt-4o", "anthropic/claude-3-opus", "meta-llama/llama-3-70b-instruct"],
+    defaultModel: "openai/gpt-4o",
+    baseUrl: "https://openrouter.ai/api/v1",
+    features: ["Model Variety", "Unified API", "Fallback Options"],
+    limitations: ["Third Party", "No Embeddings", "Added Latency"],
+    signupUrl: "https://openrouter.ai/keys",
+    embeddingSupport: false,
+  },
+  cohere: {
+    name: "Cohere",
+    description: "Enterprise-grade models with embeddings",
+    models: ["command", "command-light", "command-nightly", "command-r"],
+    defaultModel: "command",
+    baseUrl: "https://api.cohere.ai/v1",
+    features: ["Enterprise Grade", "Embeddings", "Multilingual"],
+    limitations: ["Paid Service", "Limited Models", "API Costs"],
+    signupUrl: "https://dashboard.cohere.com/api-keys",
+    embeddingSupport: true,
+  },
+  deepinfra: {
+    name: "DeepInfra",
+    description: "Serverless open-source models",
+    models: ["meta-llama/Llama-3.1-70B-Instruct", "mistralai/Mistral-7B-Instruct-v0.2"],
+    defaultModel: "meta-llama/Llama-3.1-70B-Instruct",
+    baseUrl: "https://api.deepinfra.com/v1/openai",
+    features: ["Serverless", "Open Source Models", "Low Cost"],
+    limitations: ["No Embeddings", "Limited Features", "API Reliability"],
+    signupUrl: "https://deepinfra.com/",
+    embeddingSupport: false,
+  },
+  deepseek: {
+    name: "DeepSeek",
+    description: "Advanced reasoning models",
+    models: ["deepseek-chat", "deepseek-coder", "deepseek-math"],
+    defaultModel: "deepseek-chat",
+    baseUrl: "https://api.deepseek.com/v1",
+    features: ["Advanced Reasoning", "Code Generation", "Math Capabilities"],
+    limitations: ["No Embeddings", "Limited Availability", "API Costs"],
+    signupUrl: "https://platform.deepseek.com/",
+    embeddingSupport: false,
+  },
+  googleai: {
+    name: "Google AI Studio",
+    description: "Gemini models with multimodal capabilities",
+    models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"],
+    defaultModel: "gemini-1.5-pro",
+    baseUrl: "https://generativelanguage.googleapis.com/v1",
+    features: ["Multimodal", "Google Knowledge", "Fast Response"],
+    limitations: ["No Embeddings", "API Costs", "Limited Models"],
+    signupUrl: "https://aistudio.google.com/",
+    embeddingSupport: false,
+  },
+  vertex: {
+    name: "Google Vertex AI",
+    description: "Enterprise AI platform with embeddings",
+    models: ["gemini-1.5-pro", "gemini-1.5-flash", "text-embedding-gecko"],
+    defaultModel: "gemini-1.5-pro",
+    baseUrl: "https://us-central1-aiplatform.googleapis.com/v1",
+    features: ["Enterprise Grade", "Embeddings", "Google Cloud Integration"],
+    limitations: ["Complex Setup", "API Costs", "GCP Required"],
+    signupUrl: "https://console.cloud.google.com/",
+    embeddingSupport: true,
+  },
+  mistral: {
+    name: "Mistral AI",
+    description: "European AI models with strong capabilities",
+    models: ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
+    defaultModel: "mistral-large-latest",
+    baseUrl: "https://api.mistral.ai/v1",
+    features: ["European Hosting", "Strong Performance", "Privacy Focus"],
+    limitations: ["No Embeddings", "Limited Models", "API Costs"],
+    signupUrl: "https://console.mistral.ai/",
+    embeddingSupport: false,
+  },
+  perplexity: {
+    name: "Perplexity",
+    description: "Search-augmented models with real-time knowledge",
+    models: ["pplx-7b-online", "pplx-70b-online", "sonar-small-online"],
+    defaultModel: "pplx-7b-online",
+    baseUrl: "https://api.perplexity.ai",
+    features: ["Real-time Knowledge", "Search Augmented", "Online Access"],
+    limitations: ["No Embeddings", "Limited Features", "API Costs"],
+    signupUrl: "https://www.perplexity.ai/settings/api",
+    embeddingSupport: false,
+  },
+  together: {
+    name: "Together AI",
+    description: "Fast open-source model inference",
+    models: ["togethercomputer/llama-3-70b-instruct", "togethercomputer/falcon-40b-instruct"],
+    defaultModel: "togethercomputer/llama-3-70b-instruct",
+    baseUrl: "https://api.together.xyz/v1",
+    features: ["Fast Inference", "Open Source Models", "Model Variety"],
+    limitations: ["No Embeddings", "Limited Features", "API Costs"],
+    signupUrl: "https://api.together.xyz/settings/api-keys",
+    embeddingSupport: false,
+  },
+  xai: {
+    name: "xAI (Grok)",
+    description: "Real-time knowledge models",
+    models: ["grok-1", "grok-1-mini", "grok-2"],
+    defaultModel: "grok-1",
+    baseUrl: "https://api.xai.com/v1",
+    features: ["Real-time Knowledge", "Strong Reasoning", "Fast Response"],
+    limitations: ["No Embeddings", "Limited Availability", "API Costs"],
+    signupUrl: "https://grok.x.ai/",
+    embeddingSupport: false,
+  },
+  alibaba: {
+    name: "Alibaba Cloud",
+    description: "Qwen models with multilingual capabilities",
+    models: ["qwen-max", "qwen-plus", "qwen-turbo"],
+    defaultModel: "qwen-turbo",
+    baseUrl: "https://dashscope.aliyuncs.com/api/v1",
+    features: ["Multilingual", "Chinese Excellence", "Cloud Integration"],
+    limitations: ["No Embeddings", "Limited Global Availability", "API Costs"],
+    signupUrl: "https://www.alibabacloud.com/",
+    embeddingSupport: false,
+  },
+  minimax: {
+    name: "MiniMax",
+    description: "Chinese conversational AI models",
+    models: ["abab5.5-chat", "abab5-chat", "abab4-chat"],
+    defaultModel: "abab5.5-chat",
+    baseUrl: "https://api.minimax.chat/v1",
+    features: ["Chinese Excellence", "Conversational Focus", "Cultural Context"],
+    limitations: ["No Embeddings", "Limited Global Availability", "API Costs"],
+    signupUrl: "https://api.minimax.chat/",
+    embeddingSupport: false,
+  },
+}
+
+// Update the AIConfig interface to include all the new providers
+interface AIConfig {
+  provider:
+    | "huggingface"
+    | "openai"
+    | "anthropic"
+    | "aiml"
+    | "groq"
+    | "openrouter"
+    | "cohere"
+    | "deepinfra"
+    | "deepseek"
+    | "googleai"
+    | "vertex"
+    | "mistral"
+    | "perplexity"
+    | "together"
+    | "xai"
+    | "alibaba"
+    | "minimax"
+  apiKey: string
+  model: string
+  baseUrl?: string
+}
+
+interface EnhancedAPIConfigurationProps {
+  config: AIConfig
+  onConfigChange: (config: AIConfig) => void
+  onTestConnection: (config: AIConfig) => Promise<boolean>
+  onError: (error: string, details?: string) => void
+  onSuccess: (message: string) => void
+}
+
+// Update the handleProviderChange function to check for disabled providers
+const handleProviderChange = ({
+  provider,
+  onConfigChange,
+  onError,
+  config,
+  setConnectionStatus,
+}: {
+  provider: AIConfig["provider"]
+  onConfigChange: EnhancedAPIConfigurationProps["onConfigChange"]
+  onError: EnhancedAPIConfigurationProps["onError"]
+  config: AIConfig
+  setConnectionStatus: React.Dispatch<React.SetStateAction<"idle" | "success" | "error">>
+}) => {
+  const providerInfo = PROVIDER_INFO[provider]
+
+  // Check if the provider is disabled
+  if (providerInfo.disabled) {
+    onError("Provider Disabled", `${providerInfo.name} is currently disabled. Please select another provider.`)
+    return
+  }
+
+  onConfigChange({
+    ...config,
+    provider,
+    model: providerInfo.defaultModel,
+    baseUrl: providerInfo.baseUrl,
+    apiKey: "", // Clear API key when switching providers
+  })
+  setConnectionStatus("idle")
 }
 
 export function EnhancedAPIConfiguration({
@@ -96,17 +282,6 @@ export function EnhancedAPIConfiguration({
   const [testProgress, setTestProgress] = useState(0)
 
   const currentProvider = PROVIDER_INFO[config.provider]
-
-  const handleProviderChange = (provider: AIConfig["provider"]) => {
-    const providerInfo = PROVIDER_INFO[provider]
-    onConfigChange({
-      ...config,
-      provider,
-      model: providerInfo.defaultModel,
-      baseUrl: providerInfo.baseUrl,
-    })
-    setConnectionStatus("idle")
-  }
 
   const handleModelChange = (model: string) => {
     onConfigChange({
@@ -222,15 +397,37 @@ export function EnhancedAPIConfiguration({
         {/* Provider Selection */}
         <div className="space-y-2">
           <label className="text-sm font-medium">Provider</label>
-          <Select value={config.provider} onValueChange={handleProviderChange}>
+          {/* Update the Select component to show disabled state for providers */}
+          <Select
+            value={config.provider}
+            onValueChange={(value) =>
+              handleProviderChange({
+                provider: value as AIConfig["provider"],
+                onConfigChange,
+                onError,
+                config,
+                setConnectionStatus,
+              })
+            }
+          >
             <SelectTrigger className="border-2 border-black focus:ring-0 focus:border-black">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {Object.entries(PROVIDER_INFO).map(([key, info]) => (
-                <SelectItem key={key} value={key}>
+                <SelectItem
+                  key={key}
+                  value={key}
+                  disabled={info.disabled}
+                  className={info.disabled ? "opacity-50 cursor-not-allowed" : ""}
+                >
                   <div className="flex items-center space-x-2">
                     <span>{info.name}</span>
+                    {info.disabled && (
+                      <Badge variant="outline" className="text-xs bg-red-100 border-red-300">
+                        Disabled
+                      </Badge>
+                    )}
                     <Badge variant="outline" className="text-xs">
                       {info.embeddingSupport ? "Embeddings" : "Text Only"}
                     </Badge>
