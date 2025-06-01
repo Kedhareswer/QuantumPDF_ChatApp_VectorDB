@@ -82,22 +82,23 @@ Whether you’re handling dense research papers, technical manuals, or long repo
 QuantumPDF ChatApp uses a **Retrieval Augmented Generation (RAG)** pipeline, combining semantic search and LLMs to answer your queries:
 
 ```mermaid
-flowchart TD
-    A1[User (Next.js Frontend)] --> A2[Flask API (Python Backend)]
+graph TD
+    A1[User Next.js Frontend] --> A2[Flask API Backend]
     A2 --> B[App Logic & Orchestration]
-
+    
     B --> C1[PDF Upload & Processing]
-    C1 -->|Text Extraction (PyMuPDF)| C2[Text Chunking]
+    C1 -->|Text Extraction PyMuPDF| C2[Text Chunking]
     C2 --> C3[Store in SQLite]
-
+    
     B --> D1[Embedding & Indexing]
     D1 -->|Sentence Transformers| D2[FAISS Indexes]
-
+    
     B --> E1[User Query]
     E1 -->|Embed Query| E2[FAISS Similarity Search]
     E2 -->|Retrieve Chunks & History| F1[LLM Answer Generation]
-    F1 -->|Prompt LLM (Local/Cloud)| F2[Response Generation]
-    F2 --> G[Display Results & Cited Sources (Frontend)]
+    F1 -->|Prompt LLM Local/Cloud| F2[Response Generation]
+    F2 --> G[Display Results & Citations]
+
 ```
 
 <details>
