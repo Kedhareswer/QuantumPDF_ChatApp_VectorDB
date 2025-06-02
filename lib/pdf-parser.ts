@@ -28,28 +28,20 @@ export class PDFParser {
     try {
       console.log("Initializing PDF.js...")
 
-      // Dynamic import of PDF.js with proper handling
-      const pdfjs = await import("pdfjs-dist")
-
-      // Handle both default and named exports
-      this.pdfjsLib = pdfjs.default || pdfjs
+      // Use webpack-compatible import
+      const pdfjs = await import("pdfjs-dist/webpack")
+      this.pdfjsLib = pdfjs
 
       console.log("PDF.js loaded, version:", this.pdfjsLib.version)
-      console.log("Available methods:", Object.keys(this.pdfjsLib))
 
-      // Only set worker if we're in the browser
-      if (typeof window !== "undefined") {
-        // Check if GlobalWorkerOptions exists and is configurable
-        if (this.pdfjsLib.GlobalWorkerOptions && typeof this.pdfjsLib.GlobalWorkerOptions === "object") {
-          try {
-            // Use a reliable worker URL
-            const workerUrl = `https://unpkg.com/pdfjs-dist@${this.pdfjsLib.version}/build/pdf.worker.min.js`
-            this.pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
-            console.log("PDF.js worker configured:", workerUrl)
-          } catch (workerError) {
-            console.warn("Could not configure PDF.js worker:", workerError)
-            // Continue without worker - PDF.js can work without it
-          }
+      // Configure worker using CDN
+      if (typeof window !== "undefined" && this.pdfjsLib.GlobalWorkerOptions) {
+        try {
+          // Use CDN-hosted worker
+          this.pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${this.pdfjsLib.version}/pdf.worker.min.js`
+          console.log("PDF.js worker configured from CDN")
+        } catch (workerError) {
+          console.warn("Could not configure PDF.js worker:", workerError)
         }
       }
 
@@ -86,6 +78,8 @@ export class PDFParser {
         isEvalSupported: false,
         useSystemFonts: true,
         stopAtErrors: false,
+        cMapUrl: "https://unpkg.com/pdfjs-dist/cmaps/",
+        cMapPacked: true,
       })
 
       console.log("Loading PDF document...")

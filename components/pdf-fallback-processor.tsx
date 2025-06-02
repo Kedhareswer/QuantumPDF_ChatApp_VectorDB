@@ -85,25 +85,11 @@ export function PDFFallbackProcessor({
     setUploadProgress(10)
 
     // Dynamic import to handle potential loading issues
-    const pdfjsLib = await import("pdfjs-dist")
+    const pdfjsLib = await import("pdfjs-dist/webpack")
 
-    // Set worker with fallback URLs
+    // Set worker with CDN URL
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
-      const workerUrls = [
-        `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`,
-        `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`,
-        `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`,
-      ]
-
-      // Try each worker URL until one works
-      for (const workerUrl of workerUrls) {
-        try {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
-          break
-        } catch (e) {
-          console.warn(`Failed to load worker from ${workerUrl}:`, e)
-        }
-      }
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
     }
 
     setProcessingStage("Extracting text from PDF...")
@@ -112,7 +98,7 @@ export function PDFFallbackProcessor({
     const arrayBuffer = await file.arrayBuffer()
     const loadingTask = pdfjsLib.getDocument({
       data: arrayBuffer,
-      cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+      cMapUrl: `https://unpkg.com/pdfjs-dist/cmaps/`,
       cMapPacked: true,
     })
 

@@ -92,8 +92,8 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
 
     try {
       // Dynamic import with better error handling
-      const pdfjs = await import("pdfjs-dist")
-      const pdfjsLib = pdfjs.default || pdfjs
+      const pdfjs = await import("pdfjs-dist/webpack")
+      const pdfjsLib = pdfjs
 
       console.log("PDF.js loaded:", !!pdfjsLib.getDocument)
 
@@ -104,7 +104,7 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
       // Configure worker if possible
       if (typeof window !== "undefined" && pdfjsLib.GlobalWorkerOptions) {
         try {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
         } catch (workerError) {
           console.warn("Worker configuration failed:", workerError)
         }
@@ -124,6 +124,8 @@ export function PDFProcessorFinal({ onDocumentProcessed, isProcessing, setIsProc
         isEvalSupported: false,
         useSystemFonts: true,
         stopAtErrors: false,
+        cMapUrl: "https://unpkg.com/pdfjs-dist/cmaps/",
+        cMapPacked: true,
       })
 
       const pdf = await loadingTask.promise
