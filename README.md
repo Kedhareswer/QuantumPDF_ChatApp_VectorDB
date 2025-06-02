@@ -1,10 +1,10 @@
+<div align="center">
+
 # 🌌 QuantumPDF ChatApp
 
 <p align="center">
   <img src="public/placeholder-logo.svg" width="160" alt="QuantumPDF ChatApp Logo">
 </p>
-
-<div align="center">
 
 [![GitHub Stars](https://img.shields.io/github/stars/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/fork)
@@ -13,345 +13,210 @@
 [![Open Issues](https://img.shields.io/github/issues/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
 [![Contributors](https://img.shields.io/github/contributors/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/graphs/contributors)
 
+*Transform your PDFs into interactive knowledge bases with AI-powered conversations*
+
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Documentation](#-documentation) • [Contributing](#-contributing)
+
 </div>
 
----
+## 📑 Table of Contents
 
-> **QuantumPDF ChatApp** is an intelligent, open-source web application that transforms how you interact with PDF documents. Leveraging cutting-edge Large Language Models (LLMs), you can “chat” with your PDFs, ask complex questions, extract key information, and summarize content—all in a conversational interface.
+- [Overview](#-overview)
+- [Features](#-features)
+- [System Architecture](#-system-architecture)
+- [Technology Stack](#-technology-stack)
+- [Installation](#-installation)
+- [Usage Guide](#-usage-guide)
+- [Configuration](#%EF%B8%8F-configuration)
+- [Performance Optimization](#-performance-optimization)
+- [Troubleshooting](#-troubleshooting)
+- [API Reference](#-api-reference)
+- [Contributing](#-contributing)
+- [License](#-license)
+- [Support](#-support)
 
-Whether you’re handling dense research papers, technical manuals, or long reports, **QuantumPDF ChatApp** turns static documents into dynamic conversational partners.
+## 🎯 Overview
 
-<p align="center"><b>⭐️ If you find this project useful, <a href="https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers">star it on GitHub!</a></b></p>
+QuantumPDF ChatApp is an intelligent, open-source web application that revolutionizes PDF document interaction through advanced Large Language Models (LLMs). It transforms static PDF documents into dynamic, conversational knowledge bases that you can query naturally.
 
----
+### Key Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| 🤖 AI-Powered Analysis | Interactive conversations with your PDFs using state-of-the-art LLMs |
+| 🔍 Smart Search | Advanced semantic search capabilities across multiple documents |
+| 🔐 Privacy-First | Option for local model deployment, keeping your documents secure |
+| 📊 Citation Support | Automated source tracking and citation for all responses |
+| ⚡ Real-time Processing | Quick document processing and response generation |
 
 ## ✨ Features
 
-<details>
-<summary>🧠 <b>Intelligent PDF Processing</b></summary>
+### Core Capabilities
 
-- 📝 **Advanced Text Extraction:** High-fidelity extraction using PyMuPDF (Fitz).
-- 🪓 **Smart Chunking:** Splits text into context-optimized, overlapping chunks for best LLM results.
-- 🔍 **OCR Support:** Extract text from scanned documents and images within PDFs.
-- 🏷️ **Metadata Extraction:** Automatically extracts document metadata and structure.
-</details>
+| Feature Category | Components | Description |
+|-----------------|------------|-------------|
+| **Document Processing** | • Text Extraction<br>• Smart Chunking<br>• OCR Support<br>• Metadata Extraction | Advanced PDF processing using PyMuPDF with intelligent text chunking and OCR capabilities |
+| **Search & Retrieval** | • Semantic Search<br>• Vector Similarity<br>• Multi-document Support | FAISS-powered vector search with Sentence Transformers for accurate content retrieval |
+| **LLM Integration** | • Local Models<br>• Cloud APIs<br>• Custom Models | Flexible integration with various LLM providers and local model support |
+| **User Experience** | • Interactive Chat<br>• Source Citations<br>• Dark/Light Mode | Modern Next.js frontend with responsive design and customizable themes |
 
-<details>
-<summary>🔍 <b>Powerful Search & Retrieval</b></summary>
-
-- **Semantic Search:** FAISS vector similarity search using Sentence Transformers.
-- **Multi-Document Querying:** Upload and chat with multiple PDFs in a session.
-</details>
-
-<details>
-<summary>🤖 <b>Flexible LLM Integration</b></summary>
-
-- **Local Models:** Run Hugging Face models (e.g., DialoGPT, Zephyr, Mistral) on your hardware.
-- **Cloud APIs:** Integrate with OpenAI, Google Gemini, or AIML APIs.
-</details>
-
-<details>
-<summary>💬 <b>Engaging User Experience</b></summary>
-
-- **Interactive Chat:** Next.js + React frontend for seamless conversations.
-- **Source Citations:** Answers reference specific PDF chunks.
-- **Document Management:** Upload, view, or remove PDFs per session.
-- **Conversation History:** Context-aware responses by remembering previous turns.
-- **Dark/Light Modes:** Choose your favorite theme.
-</details>
-
-<details>
-<summary>🛠️ <b>Robust & Developer-Friendly</b></summary>
-
-- **Persistent Storage:** SQLite for document metadata and text.
-- **Session Management:** Organized uploads and chats by session.
-- **Configurable & Extensible:** Easily add models, adjust embedding models, or swap vector DBs.
-- **Health Check Endpoint:** `/health` API for monitoring.
-- **Responsive Design:** Optimized for desktop and tablet.
-</details>
-
-<details>
-<summary>🏗️ <b>Codebase Structure Overview</b></summary>
-
-- **Frontend (Next.js/React):** Located primarily in `app/` (pages and Next.js API routes), `components/` (React components), and `lib/` (frontend utilities). The UI allows users to upload PDFs and interact with the chat interface.
-- **Backend (Python/Flask):** The core RAG pipeline and application logic reside in `app.py`. This includes PDF text extraction (using PyMuPDF), chunking, embedding generation (with Sentence Transformers), FAISS indexing, and LLM interaction. It serves API endpoints consumed by the frontend.
-- **PDF Processing Flow:**
-    - The Next.js frontend captures PDF uploads and sends them to the Flask backend (`/upload` endpoint in `app.py`).
-    - All significant PDF processing (extraction, chunking, embedding, indexing) occurs on this Python backend.
-- **Embedding Service (`ragoon_service/`):** This directory contains a separate FastAPI application designed as a general-purpose embedding service. *Note: This service is not currently integrated into the main QuantumPDF ChatApp's RAG pipeline, which handles its embeddings directly within `app.py`.*
-- **Configuration:** Key configurations for API keys are in `.env`. Model choices for LLMs are managed within `app.py` and accessible via the `/models` API.
-</details>
-
-<details>
-<summary>📊 <b>Experimentation & Observability</b></summary>
-
-- **Weights & Biases:** Track experiments and model performance (WandB).
-- **Comprehensive Logging:** For debugging and monitoring.
-</details>
-
----
-
-## ⚙️ How QuantumPDF ChatApp Works
-
-QuantumPDF ChatApp uses a **Retrieval Augmented Generation (RAG)** pipeline, combining semantic search and LLMs to answer your queries:
-
-- 📝 **Advanced Text Extraction:** High-fidelity extraction using PyMuPDF (Fitz).
-- 🪓 **Smart Chunking:** Splits text into context-optimized, overlapping chunks for best LLM results.
-</details>
-
-<details>
-<summary>🔍 <b>Powerful Search & Retrieval</b></summary>
-
-- **Semantic Search:** FAISS vector similarity search using Sentence Transformers.
-- **Multi-Document Querying:** Upload and chat with multiple PDFs in a session.
-</details>
-
-<details>
-<summary>🤖 <b>Flexible LLM Integration</b></summary>
-
-- **Local Models:** Run Hugging Face models (e.g., DialoGPT, Zephyr, Mistral) on your hardware.
-- **Cloud APIs:** Integrate with OpenAI, Google Gemini, or AIML APIs.
-</details>
-
-<details>
-<summary>💬 <b>Engaging User Experience</b></summary>
-
-- **Interactive Chat:** Next.js + React frontend for seamless conversations.
-- **Source Citations:** Answers reference specific PDF chunks.
-- **Document Management:** Upload, view, or remove PDFs per session.
-- **Conversation History:** Context-aware responses by remembering previous turns.
-- **Dark/Light Modes:** Choose your favorite theme.
-</details>
-
-<details>
-<summary>🛠️ <b>Robust & Developer-Friendly</b></summary>
-
-- **Persistent Storage:** SQLite for document metadata and text.
-- **Session Management:** Organized uploads and chats by session.
-- **Configurable & Extensible:** Easily add models, adjust embedding models, or swap vector DBs.
-- **Health Check Endpoint:** `/health` API for monitoring.
-- **Responsive Design:** Optimized for desktop and tablet.
-</details>
-
-<details>
-<summary>🏗️ <b>Codebase Structure Overview</b></summary>
-
-- **Frontend (Next.js/React):** Located primarily in `app/` (pages and Next.js API routes), `components/` (React components), and `lib/` (frontend utilities). The UI allows users to upload PDFs and interact with the chat interface.
-- **Backend (Python/Flask):** The core RAG pipeline and application logic reside in `app.py`. This includes PDF text extraction (using PyMuPDF), chunking, embedding generation (with Sentence Transformers), FAISS indexing, and LLM interaction. It serves API endpoints consumed by the frontend.
-- **PDF Processing Flow:**
-    - The Next.js frontend captures PDF uploads and sends them to the Flask backend (`/upload` endpoint in `app.py`).
-    - All significant PDF processing (extraction, chunking, embedding, indexing) occurs on this Python backend.
-- **Embedding Service (`ragoon_service/`):** This directory contains a separate FastAPI application designed as a general-purpose embedding service. *Note: This service is not currently integrated into the main QuantumPDF ChatApp's RAG pipeline, which handles its embeddings directly within `app.py`.*
-- **Configuration:** Key configurations for API keys are in `.env`. Model choices for LLMs are managed within `app.py` and accessible via the `/models` API.
-</details>
-
-<details>
-<summary>📊 <b>Experimentation & Observability</b></summary>
-
-- **Weights & Biases:** Track experiments and model performance (WandB).
-- **Comprehensive Logging:** For debugging and monitoring.
-</details>
-
----
-
-## ⚙️ How QuantumPDF ChatApp Works
-
-QuantumPDF ChatApp uses a **Retrieval Augmented Generation (RAG)** pipeline, combining semantic search and LLMs to answer your queries:
+## 🏗 System Architecture
 
 ```mermaid
 graph TD
-    A1[User Next.js Frontend] --> A2[Flask API Backend]
-    A2 --> B[App Logic & Orchestration]
+    A1[User Interface Layer] --> A2[API Gateway]
+    A2 --> B[Application Layer]
     
-    B --> C1[PDF Upload & Processing]
-    C1 -->|Text Extraction PyMuPDF| C2[Text Chunking]
-    C2 --> C3[Store in SQLite]
+    B --> C1[Document Processing]
+    C1 -->|PyMuPDF| C2[Text Processing]
+    C2 --> C3[Database Layer]
     
-    B --> D1[Embedding & Indexing]
-    D1 -->|Sentence Transformers| D2[FAISS Indexes]
+    B --> D1[AI Processing]
+    D1 -->|Transformers| D2[Vector Store]
     
-    B --> E1[User Query]
-    E1 -->|Embed Query| E2[FAISS Similarity Search]
-    E2 -->|Retrieve Chunks & History| F1[LLM Answer Generation]
-    F1 -->|Prompt LLM Local/Cloud| F2[Response Generation]
-    F2 --> G[Display Results & Citations]
-
+    B --> E1[Query Processing]
+    E1 --> E2[Context Retrieval]
+    E2 --> F1[Response Generation]
+    F1 --> G[Result Presentation]
 ```
 
-<details>
-<summary><b>Step-by-Step Pipeline</b></summary>
+## 🛠 Technology Stack
 
-
-
-<details>
-<summary><b>Step-by-Step Pipeline</b></summary>
-
-1. **Session Start:** User accesses the web UI, starting a new session.
-2. **Document Upload:** Upload PDFs. Backend extracts text (PyMuPDF), chunks and stores it in SQLite.
-3. **Embedding & Indexing:** Text chunks → embeddings (Sentence Transformers) → FAISS index for similarity search.
-4. **Query & Retrieval:** User query is embedded & searched against FAISS index for the most relevant text.
-5. **Answer Generation:** Retrieved chunks + conversation history = context for selected LLM (local/cloud).
-6. **Display:** Frontend shows the answer, highlighting the cited PDF chunks.
-</details>
-
----
-
-## 🚀 Key Benefits
-
-- **Ask complex questions directly to your PDFs.**
-- **Get answers with cited evidence from your documents.**
-- **Support for both local (privacy-first) and cloud-based models.**
-- **Effortlessly manage and search across multiple PDFs in one session.**
-- **Easy to extend for your own research or business use-cases.**
-
----
+| Layer | Technologies | Purpose |
+|-------|-------------|----------|
+| **Frontend** | ![TypeScript](https://img.shields.io/badge/-TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white) ![Next.js](https://img.shields.io/badge/-Next.js-000000?style=flat-square&logo=next.js&logoColor=white) ![React](https://img.shields.io/badge/-React-61DAFB?style=flat-square&logo=react&logoColor=black) | User interface and client-side logic |
+| **Backend** | ![Python](https://img.shields.io/badge/-Python-3776AB?style=flat-square&logo=python&logoColor=white) ![Flask](https://img.shields.io/badge/-Flask-000000?style=flat-square&logo=flask&logoColor=white) | Server-side processing and API endpoints |
+| **Database** | ![SQLite](https://img.shields.io/badge/-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white) | Document metadata and text storage |
+| **AI/ML** | ![PyTorch](https://img.shields.io/badge/-PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white) ![Transformers](https://img.shields.io/badge/-Transformers-FFD700?style=flat-square) | Machine learning and NLP processing |
 
 ## 📦 Installation
 
 ### Prerequisites
 
-- Python ≥ 3.8
-- Node.js ≥ 16 (for Next.js frontend)
-- `pip`, `git`
+| Requirement | Version | Description |
+|------------|---------|-------------|
+| Python | ≥ 3.8 | For backend services |
+| Node.js | ≥ 16 | For Next.js frontend |
+| RAM | ≥ 8GB | 16GB+ recommended for local LLMs |
+| GPU (Optional) | CUDA-compatible | For accelerated processing |
 
-### Quickstart
+### Quick Start Guide
 
 ```bash
-# 1. Clone the repository
+# Clone repository
 git clone https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
 cd QuantumPDF_ChatApp
 
-# 2. Setup Environment Variables
+# Setup environment
 cp .env.example .env
-# Edit your .env file with your API keys:
-# OPENAI_API_KEY=...
-# GEMINI_API_KEY=...
-# AIML_API_KEY=...
-
-# 3. Backend Setup (Python)
 python -m venv venv
-source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+source venv/bin/activate  # Windows: .\venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
+npm install
 
-# 4. Frontend Setup (Next.js)
-npm install        # or: pnpm install
-
-# 5. Run the App
-# In one terminal (backend):
-python app.py
-# In another terminal (frontend):
-npm run dev        # or: pnpm run dev
-
-# 6. Open http://localhost:3000 in your browser.
+# Start services
+python app.py  # Terminal 1
+npm run dev    # Terminal 2
 ```
 
----
+## 🎮 Usage Guide
 
-## ▶️ Usage
+### Basic Operations
 
-1. **Open the Web Interface:**  
-   Go to [http://localhost:3000](http://localhost:3000).
+| Operation | Command/Action | Description |
+|-----------|---------------|-------------|
+| Start Application | `http://localhost:3000` | Access the web interface |
+| Upload Documents | Drag & Drop / Click Upload | Support for single/multiple PDFs |
+| Query Documents | Type in chat interface | Natural language questions |
+| View Sources | Click on citations | See source context |
 
-2. **Upload PDFs:**  
-   Use the "Upload PDF" button or drag-and-drop.
+### Advanced Features
 
-3. **Select LLM Model:**  
-   - Choose a local or cloud-based LLM (OpenAI, Gemini, etc.).
-   - Ensure API keys are set in your `.env` or the UI.
+| Feature | Configuration | Use Case |
+|---------|--------------|-----------|
+| Custom Models | Edit `app.py` | Integration of specialized LLMs |
+| Batch Processing | Upload multiple PDFs | Compare across documents |
+| Export Results | Download button | Save conversations and citations |
 
-4. **Ask Questions:**  
-   Type questions about your PDFs in chat.
+## ⚙️ Configuration
 
-5. **Review Answers & Sources:**  
-   Answers include PDF citations.
+### Environment Variables
 
-6. **Manage Documents:**  
-   Add/remove PDFs, clear chat as needed.
+```env
+# API Keys
+OPENAI_API_KEY=your_openai_key
+GEMINI_API_KEY=your_gemini_key
+AIML_API_KEY=your_aiml_key
 
-**Sample Questions:**
-- “What is the main finding of [paper.pdf]?”
-- “Summarize section 2 of [manual.pdf].”
-- “Compare methodologies in [A.pdf] and [B.pdf].”
+# Optional Configuration
+WANDB_API_KEY=your_wandb_key
+MAX_TOKENS=500
+CHUNK_OVERLAP=50
+```
 
----
+### Model Configuration
 
-## 🛠️ Configuration
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| Chunk Size | 500 tokens | Text segment size for processing |
+| Overlap | 50 tokens | Overlap between chunks |
+| Memory Size | 10 turns | Conversation history length |
+| Embedding Model | all-MiniLM-L6-v2 | Default embedding model |
 
-- **Environment Variables:**  
-  Set API keys in `.env`:
-  ```env
-  OPENAI_API_KEY=your_openai_key
-  GEMINI_API_KEY=your_gemini_key
-  AIML_API_KEY=your_aiml_key
-  WANDB_API_KEY=your_wandb_key
-  ```
+## ⚡ Performance Optimization
 
-- **Model Selection:**  
-  - Add/change models in `app.py` (see `/models` endpoint and `MultiDocumentRAG`).
+### Hardware Recommendations
 
-- **Text Chunking:**  
-  - Defaults: `chunk_size ≈ 500 tokens`, `overlap ≈ 50 tokens` in `chunk_text` (backend).
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| RAM | 8GB | 16GB+ |
+| CPU | 4 cores | 8+ cores |
+| GPU | Optional | CUDA-enabled |
+| Storage | 10GB | 20GB+ SSD |
 
-- **Conversation Memory:**  
-  - `ConversationMemory` in `app.py` keeps the last 10 chat turns.
+### Optimization Tips
 
-- **Storage:**
-  - **FAISS:** In-memory, rebuilt on restart/session change.
-  - **SQLite:** Persistent document/text storage in `documents.db`.
-
-- **Switching Vector DBs:**  
-  Want Pinecone, Weaviate, etc.? Update storage/retrieval logic to replace FAISS.
-
----
-
-## ⚡ Performance Tips
-
-- **RAM:** Minimum 8GB, 16GB+ recommended for local LLMs.
-- **GPU:** CUDA-enabled GPU + PyTorch = much faster local LLM processing.
-- **Accuracy:** Larger embedding models boost results (at cost of RAM/CPU). Enable caching for repeated queries.
-
----
+- Enable GPU acceleration for local models
+- Implement caching for frequent queries
+- Optimize chunk sizes based on document type
+- Use batch processing for multiple documents
 
 ## 🆘 Troubleshooting
 
-- **PDF Errors:**  
-    - Avoid very large or image-only (scanned) PDFs.
-- **Model Issues:**  
-    - Watch RAM if using local LLMs.
-    - Ensure stable internet for cloud LLMs.
-- **API Issues:**  
-    - Double-check API keys, permissions, and rate limits.
-- **Logs:**  
-    - Check both Flask (backend) and Next.js (frontend) terminals for error details.
+| Issue | Possible Cause | Solution |
+|-------|---------------|----------|
+| PDF Upload Fails | File size/format | Check size limits, file format |
+| Slow Processing | Resource constraints | Adjust chunk size, enable GPU |
+| API Errors | Invalid keys/limits | Verify API keys, check quotas |
+| Memory Issues | Large documents | Adjust batch size, clear cache |
 
-> Persistent issues? [Open an Issue!](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues) Please include logs and steps to reproduce.
+## 🤝 Contributing
 
----
+We welcome contributions! Please check our [Contributing Guidelines](CONTRIBUTING.md) for details on:
 
-## ➕ Extending
+- Code of Conduct
+- Pull Request Process
+- Development Setup
+- Coding Standards
 
-- **Add New Models:**  
-  Update `app.py` (`/models` endpoint and `MultiDocumentRAG`), plus frontend model select UI.
-- **Custom Embeddings:**  
-  Swap the default embedding model (`sentence-transformers/all-MiniLM-L6-v2`) in backend code.
-- **Persistent Vector DB:**  
-  Swap FAISS for Pinecone, Weaviate, ChromaDB, etc. by updating storage logic.
+## 📄 License
 
----
+This project is licensed under the [GNU GPL v3.0](LICENSE).
 
-## 📜 License
-
-[GNU GPL v3.0](LICENSE)
-
----
-
-## 🤝 Community & Support
+## 💬 Support
 
 - [GitHub Discussions](https://github.com/Kedhareswer/QuantumPDF_ChatApp/discussions)
-- [Issues](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
+- [Issue Tracker](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
+- [Documentation](https://github.com/Kedhareswer/QuantumPDF_ChatApp/wiki)
 
 ---
 
-<p align="center">
-  <img src="https://img.shields.io/badge/QuantumPDF%20ChatApp-Made_with_%E2%9D%A4%EF%B8%8F-blueviolet?style=for-the-badge" alt="Kedhareswer Badge">
-</p>
+<div align="center">
+
+Made with ❤️ by Kedhareswer
+
+[![Star History](https://img.shields.io/badge/dynamic/json?color=blue&label=Stars&query=stargazers_count&url=https://api.github.com/repos/Kedhareswer/QuantumPDF_ChatApp)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
+
+</div>
