@@ -1,192 +1,311 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { MessageSquare, FileText, Settings, Activity, Brain, Menu, X, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+  MessageSquare,
+  FileText,
+  Settings,
+  Activity,
+  Brain,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+} from "lucide-react"
 
 import { ChatInterface } from "@/components/chat-interface"
 import { DocumentLibrary } from "@/components/document-library"
-import { EnhancedAPIConfiguration } from "@/components/enhanced-api-configuration"
+import { UnifiedConfiguration } from "@/components/unified-configuration"
 import { SystemStatus } from "@/components/system-status"
 import { QuickActions } from "@/components/quick-actions"
-import { PDFProcessor } from "@/components/pdf-processor"
+import { UnifiedPDFProcessor } from "@/components/unified-pdf-processor"
+import { EnhancedSearch } from "@/components/enhanced-search"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { ErrorHandler } from "@/components/error-handler"
+import { useAppStore } from "@/lib/store"
 import { RAGEngine } from "@/lib/rag-engine"
-
-interface Message {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  timestamp: Date
-  sources?: string[]
-  metadata?: {
-    responseTime?: number
-    relevanceScore?: number
-    retrievedChunks?: number
-  }
-}
-
-interface Document {
-  id: string
-  name: string
-  content: string
-  chunks: string[]
-  embeddings: number[][]
-  uploadedAt: Date
-  metadata?: any
-}
+import { createVectorDatabase } from "@/lib/vector-database"
 
 export default function QuantumPDFChatbot() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [documents, setDocuments] = useState<Document[]>([])
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [modelStatus, setModelStatus] = useState<"loading" | "ready" | "error" | "config">("config")
-  const [apiConfig, setApiConfig] = useState({
-    provider: "openai" as const,
-    model: "gpt-4o-mini",
-    apiKey: "",
-    baseUrl: "https://api.openai.com/v1",
-  })
-  const [activeTab, setActiveTab] = useState("chat")
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const {
+    // State
+    messages,
+    documents,
+    aiConfig,
+    vectorDBConfig,
+    wandbConfig,
+    isProcessing,
+    modelStatus,
+    activeTab,
+    sidebarOpen,
+    sidebarCollapsed,
+    errors,
+
+    // Actions
+    addMessage,
+    clearMessages,
+    addDocument,
+    removeDocument,
+    clearDocuments,
+    setIsProcessing,
+    setModelStatus,
+    setActiveTab,
+    setSidebarOpen,
+    setSidebarCollapsed,
+    addError,
+    removeError,
+  } = useAppStore()
+
   const [ragEngine] = useState(() => new RAGEngine())
+  const [vectorDB, setVectorDB] = useState(() => createVectorDatabase(vectorDBConfig))
 
   // Check if chat is ready
   const isChatReady = modelStatus === "ready" && documents.length > 0
 
   useEffect(() => {
-    // Initialize RAG engine when API config changes
-    if (apiConfig.apiKey) {
+    // Initialize RAG engine when AI config changes
+    if (aiConfig.apiKey) {
       setModelStatus("loading")
       ragEngine
-        .initialize(apiConfig)
+        .initialize(aiConfig)
         .then(() => {
           setModelStatus("ready")
+          addError({
+            type: "success",
+            title: "AI Provider Ready",
+            message: `Connected to ${aiConfig.provider}`,
+          })
         })
         .catch((error) => {
           console.error("Failed to initialize RAG engine:", error)
           setModelStatus("error")
+          addError({
+            type: "error",
+            title: "AI Initialization Failed",
+            message: error.message,
+          })
         })
     } else {
       setModelStatus("config")
     }
-  }, [apiConfig.apiKey, apiConfig.provider, apiConfig.model, ragEngine])
+  }, [aiConfig, ragEngine, setModelStatus, addError])
+
+  useEffect(() => {
+    // Initialize vector database when config changes
+    const newVectorDB = createVectorDatabase(vectorDBConfig)
+    setVectorDB(newVectorDB)
+
+    newVectorDB.initialize().catch((error) => {
+      console.error("Failed to initialize vector database:", error)
+      addError({
+        type: "warning",
+        title: "Vector DB Warning",
+        message: `Using local storage: ${error.message}`,
+      })
+    })
+  }, [vectorDBConfig, addError])
 
   const handleSendMessage = async (content: string) => {
     if (!documents.length) {
-      alert("Please upload at least one document before chatting.")
+      addError({
+        type: "warning",
+        title: "No Documents",
+        message: "Please upload at least one document before chatting.",
+      })
       setActiveTab("documents")
       return
     }
 
-    const userMessage: Message = {
+    const userMessage = {
       id: Date.now().toString(),
-      role: "user",
+      role: "user" as const,
       content,
       timestamp: new Date(),
     }
 
-    setMessages((prev) => [...prev, userMessage])
+    addMessage(userMessage)
     setIsProcessing(true)
 
     try {
-      // Simulate AI response with document-aware responses
-      await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000))
+      const response = await ragEngine.query(content)
 
-      // Get random document chunks to simulate retrieval
-      const randomDocuments = documents.slice(0, Math.min(documents.length, 2))
-      const randomSources = randomDocuments.map((doc) => doc.name)
-
-      // Generate a response that references the document content
-      let responseContent = ""
-
-      if (content.toLowerCase().includes("what") || content.toLowerCase().includes("how")) {
-        // For questions, provide informative responses
-        const randomDoc = randomDocuments[0]
-        const randomChunk = randomDoc.chunks[Math.floor(Math.random() * randomDoc.chunks.length)]
-        responseContent = `Based on the document "${randomDoc.name}", I can tell you that ${randomChunk.split(":")[1] || randomChunk}. This information comes from the section on ${randomChunk.split(":")[0].split("-")[1] || "the main content"}.`
-      } else if (content.toLowerCase().includes("summarize") || content.toLowerCase().includes("summary")) {
-        // For summary requests
-        const doc = randomDocuments[0]
-        responseContent = `Here's a summary of "${doc.name}":\n\n${doc.chunks
-          .slice(0, 3)
-          .map((chunk) => `- ${chunk.split(":")[1] || chunk}`)
-          .join(
-            "\n",
-          )}\n\nThe document covers topics related to ${doc.metadata?.topics?.[0] || "various technical subjects"}.`
-      } else {
-        // Generic response
-        responseContent = `Based on the documents you've uploaded, I can see that they discuss topics like ${documents.map((d) => d.metadata?.topics?.[0] || "technical subjects").join(", ")}. Your query about "${content}" relates to concepts covered in ${randomSources.join(" and ")}. Would you like me to provide more specific information from these documents?`
-      }
-
-      const assistantMessage: Message = {
+      const assistantMessage = {
         id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: responseContent,
+        role: "assistant" as const,
+        content: response.answer,
         timestamp: new Date(),
-        sources: randomSources,
+        sources: response.sources,
         metadata: {
-          responseTime: 1500 + Math.random() * 1000,
-          relevanceScore: 0.7 + Math.random() * 0.3,
-          retrievedChunks: Math.floor(Math.random() * 4) + 1,
+          responseTime: 1500,
+          relevanceScore: response.relevanceScore,
+          retrievedChunks: response.retrievedChunks.length,
         },
       }
 
-      setMessages((prev) => [...prev, assistantMessage])
+      addMessage(assistantMessage)
     } catch (error) {
       console.error("Error sending message:", error)
 
-      // Add error message
-      const errorMessage: Message = {
+      const errorMessage = {
         id: (Date.now() + 1).toString(),
-        role: "assistant",
+        role: "assistant" as const,
         content: "I'm sorry, I encountered an error while processing your request. Please try again.",
         timestamp: new Date(),
       }
 
-      setMessages((prev) => [...prev, errorMessage])
+      addMessage(errorMessage)
+      addError({
+        type: "error",
+        title: "Chat Error",
+        message: error instanceof Error ? error.message : "Unknown error",
+      })
     } finally {
       setIsProcessing(false)
     }
   }
 
-  const handleDocumentUpload = async (document: Document) => {
+  const handleDocumentUpload = async (document: any) => {
     try {
       await ragEngine.addDocument(document)
-      setDocuments((prev) => [...prev, document])
+      addDocument(document)
 
-      // If this is the first document and API is configured, switch to chat
+      // Add to vector database
+      const vectorDocuments = document.chunks.map((chunk: string, index: number) => ({
+        id: `${document.id}_${index}`,
+        content: chunk,
+        embedding: document.embeddings[index] || [],
+        metadata: {
+          source: document.name,
+          chunkIndex: index,
+          documentId: document.id,
+          timestamp: document.uploadedAt,
+        },
+      }))
+
+      await vectorDB.addDocuments(vectorDocuments)
+
+      // If this is the first document and AI is configured, switch to chat
       if (documents.length === 0 && modelStatus === "ready") {
         setTimeout(() => setActiveTab("chat"), 1000)
       }
+
+      addError({
+        type: "success",
+        title: "Document Added",
+        message: `Successfully processed ${document.name}`,
+      })
     } catch (error) {
-      console.error("Error adding document to RAG engine:", error)
-      alert("Failed to add document to the system. Please try again.")
+      console.error("Error adding document:", error)
+      addError({
+        type: "error",
+        title: "Document Processing Failed",
+        message: error instanceof Error ? error.message : "Unknown error",
+      })
     }
   }
 
-  const handleRemoveDocument = (id: string) => {
-    ragEngine.removeDocument(id)
-    setDocuments((prev) => prev.filter((doc) => doc.id !== id))
+  const handleRemoveDocument = async (id: string) => {
+    try {
+      ragEngine.removeDocument(id)
+      await vectorDB.deleteDocument(id)
+      removeDocument(id)
+
+      addError({
+        type: "info",
+        title: "Document Removed",
+        message: "Document has been removed from the system",
+      })
+    } catch (error) {
+      console.error("Error removing document:", error)
+      addError({
+        type: "error",
+        title: "Removal Failed",
+        message: error instanceof Error ? error.message : "Unknown error",
+      })
+    }
   }
 
   const handleClearChat = () => {
     if (messages.length > 0 && window.confirm("Are you sure you want to clear the chat history?")) {
-      setMessages([])
+      clearMessages()
     }
   }
 
   const handleNewSession = () => {
     if (window.confirm("Start a new session? This will clear the current chat and documents.")) {
-      setMessages([])
-      setDocuments([])
+      clearMessages()
+      clearDocuments()
       ragEngine.clearDocuments()
+      vectorDB.clear()
       setActiveTab("documents")
+    }
+  }
+
+  const handleSearch = async (query: string, filters: any) => {
+    try {
+      // Generate embedding for the query
+      const embedding = (await ragEngine.aiClient?.generateEmbedding(query)) || []
+
+      // Search using vector database
+      const results = await vectorDB.search(query, embedding, {
+        mode: filters.searchMode,
+        filters: filters.documentTypes ? { documentId: { $in: filters.documentTypes } } : undefined,
+        limit: filters.maxResults,
+        threshold: filters.relevanceThreshold,
+      })
+
+      return results
+    } catch (error) {
+      console.error("Search failed:", error)
+      addError({
+        type: "error",
+        title: "Search Failed",
+        message: error instanceof Error ? error.message : "Unknown error",
+      })
+      return []
+    }
+  }
+
+  const handleTestAI = async (config: any): Promise<boolean> => {
+    try {
+      setModelStatus("loading")
+      await ragEngine.updateConfig(config)
+      setModelStatus("ready")
+      return true
+    } catch (error) {
+      console.error("AI test failed:", error)
+      setModelStatus("error")
+      return false
+    }
+  }
+
+  const handleTestVectorDB = async (config: any): Promise<boolean> => {
+    try {
+      const testDB = createVectorDatabase(config)
+      await testDB.initialize()
+      return await testDB.testConnection()
+    } catch (error) {
+      console.error("Vector DB test failed:", error)
+      return false
+    }
+  }
+
+  const handleTestWandb = async (config: any): Promise<boolean> => {
+    try {
+      // Simulate Wandb connection test
+      if (config.apiKey && config.projectName) {
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error("Wandb test failed:", error)
+      return false
     }
   }
 
@@ -201,29 +320,12 @@ export default function QuantumPDFChatbot() {
     }
   }
 
-  const handleTestConnection = async (config: any): Promise<boolean> => {
-    try {
-      setModelStatus("loading")
-      // Here you would normally test the actual API connection
-      // For now, we'll simulate a successful connection if API key is provided
-      if (config.apiKey && config.apiKey.trim()) {
-        await new Promise((resolve) => setTimeout(resolve, 1000)) // Simulate API call
-        setModelStatus("ready")
-        return true
-      } else {
-        setModelStatus("config")
-        return false
-      }
-    } catch (error) {
-      console.error("Connection test failed:", error)
-      setModelStatus("error")
-      return false
-    }
-  }
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex">
+        {/* Error Handler */}
+        <ErrorHandler errors={errors} onDismiss={removeError} />
+
         {/* Mobile menu button */}
         <Button
           variant="outline"
@@ -270,13 +372,13 @@ export default function QuantumPDFChatbot() {
           <div className="flex-1 overflow-hidden">
             {!sidebarCollapsed ? (
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-                <TabsList className="grid w-full grid-cols-4 m-4 border-2 border-black bg-white">
+                <TabsList className="grid w-full grid-cols-5 m-4 border-2 border-black bg-white">
                   <TabsTrigger
                     value="chat"
-                    className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center space-x-2"
+                    className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center space-x-1"
                   >
                     <MessageSquare className="w-4 h-4" />
-                    {getTabBadgeCount("chat") !== null && getTabBadgeCount("chat") > 0 && (
+                    {getTabBadgeCount("chat") !== null && getTabBadgeCount("chat")! > 0 && (
                       <Badge variant="secondary" className="ml-1 text-xs">
                         {getTabBadgeCount("chat")}
                       </Badge>
@@ -284,14 +386,17 @@ export default function QuantumPDFChatbot() {
                   </TabsTrigger>
                   <TabsTrigger
                     value="documents"
-                    className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center space-x-2"
+                    className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center space-x-1"
                   >
                     <FileText className="w-4 h-4" />
-                    {getTabBadgeCount("documents") !== null && getTabBadgeCount("documents") > 0 && (
+                    {getTabBadgeCount("documents") !== null && getTabBadgeCount("documents")! > 0 && (
                       <Badge variant="secondary" className="ml-1 text-xs">
                         {getTabBadgeCount("documents")}
                       </Badge>
                     )}
+                  </TabsTrigger>
+                  <TabsTrigger value="search" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                    <Search className="w-4 h-4" />
                   </TabsTrigger>
                   <TabsTrigger value="settings" className="data-[state=active]:bg-black data-[state=active]:text-white">
                     <Settings className="w-4 h-4" />
@@ -335,6 +440,12 @@ export default function QuantumPDFChatbot() {
                             <span>Messages:</span>
                             <span className="font-bold">{messages.length}</span>
                           </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Vector DB:</span>
+                            <Badge variant="outline" className="text-xs">
+                              {vectorDBConfig.provider.toUpperCase()}
+                            </Badge>
+                          </div>
                         </CardContent>
                       </Card>
                     </div>
@@ -343,32 +454,25 @@ export default function QuantumPDFChatbot() {
                   <TabsContent value="documents" className="h-full m-0 p-4 overflow-auto">
                     <div className="space-y-4">
                       <h2 className="font-bold text-lg">Document Management</h2>
-                      <PDFProcessor
-                        onDocumentProcessed={handleDocumentUpload}
-                        isProcessing={isProcessing}
-                        setIsProcessing={setIsProcessing}
-                      />
+                      <UnifiedPDFProcessor onDocumentProcessed={handleDocumentUpload} />
                       <Separator className="bg-black" />
                       <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="settings" className="h-full m-0 p-4 overflow-auto">
+                  <TabsContent value="search" className="h-full m-0 p-4 overflow-auto">
                     <div className="space-y-4">
-                      <h2 className="font-bold text-lg">Configuration</h2>
-                      <EnhancedAPIConfiguration
-                        config={apiConfig}
-                        onConfigChange={setApiConfig}
-                        onTestConnection={handleTestConnection}
-                        onError={(error, details) => {
-                          console.error("API Configuration Error:", error, details)
-                          setModelStatus("error")
-                        }}
-                        onSuccess={(message) => {
-                          console.log("API Configuration Success:", message)
-                        }}
-                      />
+                      <h2 className="font-bold text-lg">Document Search</h2>
+                      <EnhancedSearch onSearch={handleSearch} documents={documents} />
                     </div>
+                  </TabsContent>
+
+                  <TabsContent value="settings" className="h-full m-0 p-4 overflow-auto">
+                    <UnifiedConfiguration
+                      onTestAI={handleTestAI}
+                      onTestVectorDB={handleTestVectorDB}
+                      onTestWandb={handleTestWandb}
+                    />
                   </TabsContent>
 
                   <TabsContent value="status" className="h-full m-0 p-4 overflow-auto">
@@ -376,10 +480,10 @@ export default function QuantumPDFChatbot() {
                       <h2 className="font-bold text-lg">System Monitor</h2>
                       <SystemStatus
                         modelStatus={modelStatus}
-                        apiConfig={apiConfig}
+                        aiConfig={aiConfig}
                         documents={documents}
                         messages={messages}
-                        ragEngine={{}}
+                        ragEngine={ragEngine ? ragEngine.getStatus() : {}}
                       />
                     </div>
                   </TabsContent>
@@ -405,6 +509,15 @@ export default function QuantumPDFChatbot() {
                   aria-label="Documents"
                 >
                   <FileText className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={activeTab === "search" ? "default" : "outline"}
+                  size="sm"
+                  className="w-full justify-center p-3"
+                  onClick={() => setActiveTab("search")}
+                  aria-label="Search"
+                >
+                  <Search className="w-4 h-4" />
                 </Button>
                 <Button
                   variant={activeTab === "settings" ? "default" : "outline"}
@@ -461,6 +574,9 @@ export default function QuantumPDFChatbot() {
               <div className="flex items-center space-x-3">
                 <Badge variant={isChatReady ? "default" : "secondary"} className="hidden sm:inline-flex">
                   {isChatReady ? "READY" : "SETUP REQUIRED"}
+                </Badge>
+                <Badge variant="outline" className="hidden sm:inline-flex text-xs">
+                  {vectorDBConfig.provider.toUpperCase()}
                 </Badge>
               </div>
             </div>
