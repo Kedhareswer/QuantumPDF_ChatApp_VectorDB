@@ -95,9 +95,6 @@ Whether you’re handling dense research papers, technical manuals, or long repo
 
 QuantumPDF ChatApp uses a **Retrieval Augmented Generation (RAG)** pipeline, combining semantic search and LLMs to answer your queries:
 
-```mermaid
-=======
-
 - 📝 **Advanced Text Extraction:** High-fidelity extraction using PyMuPDF (Fitz).
 - 🪓 **Smart Chunking:** Splits text into context-optimized, overlapping chunks for best LLM results.
 </details>
