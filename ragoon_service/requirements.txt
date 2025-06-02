@@ -1,8 +1,0 @@
-fastapi
-uvicorn[standard]
-pydantic
-ragoon
-python-dotenv
-PyYAML
-sentence-transformers
-# Potentially others like 'transformers' if not pulled by sentence-transformers/ragoon for specific models
