@@ -353,5 +353,5 @@ npm run dev        # or: pnpm run dev
 ---
 
 <p align="center">
-  <img src="https://img.shields.io/badge/QuantumPDF%20ChatApp-Made_with_%E2%9D%A4%EF%B8%8F-blueviolet?style=for-the-badge" alt="QuantumPDF ChatApp Badge">
+  <img src="https://img.shields.io/badge/QuantumPDF%20ChatApp-Made_with_%E2%9D%A4%EF%B8%8F-blueviolet?style=for-the-badge" alt="Kedhareswer Badge">
 </p>
