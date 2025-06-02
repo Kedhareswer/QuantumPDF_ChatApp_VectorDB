@@ -32,6 +32,74 @@ Whether you’re handling dense research papers, technical manuals, or long repo
 
 - 📝 **Advanced Text Extraction:** High-fidelity extraction using PyMuPDF (Fitz).
 - 🪓 **Smart Chunking:** Splits text into context-optimized, overlapping chunks for best LLM results.
+- 🔍 **OCR Support:** Extract text from scanned documents and images within PDFs.
+- 🏷️ **Metadata Extraction:** Automatically extracts document metadata and structure.
+</details>
+
+<details>
+<summary>🔍 <b>Powerful Search & Retrieval</b></summary>
+
+- **Semantic Search:** FAISS vector similarity search using Sentence Transformers.
+- **Multi-Document Querying:** Upload and chat with multiple PDFs in a session.
+</details>
+
+<details>
+<summary>🤖 <b>Flexible LLM Integration</b></summary>
+
+- **Local Models:** Run Hugging Face models (e.g., DialoGPT, Zephyr, Mistral) on your hardware.
+- **Cloud APIs:** Integrate with OpenAI, Google Gemini, or AIML APIs.
+</details>
+
+<details>
+<summary>💬 <b>Engaging User Experience</b></summary>
+
+- **Interactive Chat:** Next.js + React frontend for seamless conversations.
+- **Source Citations:** Answers reference specific PDF chunks.
+- **Document Management:** Upload, view, or remove PDFs per session.
+- **Conversation History:** Context-aware responses by remembering previous turns.
+- **Dark/Light Modes:** Choose your favorite theme.
+</details>
+
+<details>
+<summary>🛠️ <b>Robust & Developer-Friendly</b></summary>
+
+- **Persistent Storage:** SQLite for document metadata and text.
+- **Session Management:** Organized uploads and chats by session.
+- **Configurable & Extensible:** Easily add models, adjust embedding models, or swap vector DBs.
+- **Health Check Endpoint:** `/health` API for monitoring.
+- **Responsive Design:** Optimized for desktop and tablet.
+</details>
+
+<details>
+<summary>🏗️ <b>Codebase Structure Overview</b></summary>
+
+- **Frontend (Next.js/React):** Located primarily in `app/` (pages and Next.js API routes), `components/` (React components), and `lib/` (frontend utilities). The UI allows users to upload PDFs and interact with the chat interface.
+- **Backend (Python/Flask):** The core RAG pipeline and application logic reside in `app.py`. This includes PDF text extraction (using PyMuPDF), chunking, embedding generation (with Sentence Transformers), FAISS indexing, and LLM interaction. It serves API endpoints consumed by the frontend.
+- **PDF Processing Flow:**
+    - The Next.js frontend captures PDF uploads and sends them to the Flask backend (`/upload` endpoint in `app.py`).
+    - All significant PDF processing (extraction, chunking, embedding, indexing) occurs on this Python backend.
+- **Embedding Service (`ragoon_service/`):** This directory contains a separate FastAPI application designed as a general-purpose embedding service. *Note: This service is not currently integrated into the main QuantumPDF ChatApp's RAG pipeline, which handles its embeddings directly within `app.py`.*
+- **Configuration:** Key configurations for API keys are in `.env`. Model choices for LLMs are managed within `app.py` and accessible via the `/models` API.
+</details>
+
+<details>
+<summary>📊 <b>Experimentation & Observability</b></summary>
+
+- **Weights & Biases:** Track experiments and model performance (WandB).
+- **Comprehensive Logging:** For debugging and monitoring.
+</details>
+
+---
+
+## ⚙️ How QuantumPDF ChatApp Works
+
+QuantumPDF ChatApp uses a **Retrieval Augmented Generation (RAG)** pipeline, combining semantic search and LLMs to answer your queries:
+
+```mermaid
+=======
+
+- 📝 **Advanced Text Extraction:** High-fidelity extraction using PyMuPDF (Fitz).
+- 🪓 **Smart Chunking:** Splits text into context-optimized, overlapping chunks for best LLM results.
 </details>
 
 <details>
@@ -112,6 +180,11 @@ graph TD
     F2 --> G[Display Results & Citations]
 
 ```
+
+<details>
+<summary><b>Step-by-Step Pipeline</b></summary>
+
+
 
 <details>
 <summary><b>Step-by-Step Pipeline</b></summary>

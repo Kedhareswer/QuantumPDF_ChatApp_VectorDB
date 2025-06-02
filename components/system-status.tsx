@@ -14,13 +14,33 @@ interface SystemStatusProps {
   ragEngine: { isHealthy?: () => boolean } | any
 }
 
-export function SystemStatus({ modelStatus, apiConfig, documents, messages, ragEngine }: SystemStatusProps) {
+export function SystemStatus({
+  modelStatus = "config",
+  apiConfig = {},
+  documents = [],
+  messages = [],
+  ragEngine = {},
+}: SystemStatusProps) {
   const [systemMetrics, setSystemMetrics] = useState({
     uptime: 0,
     totalQueries: 0,
     avgResponseTime: 0,
     memoryUsage: 0,
   })
+
+  // Ensure apiConfig has default values
+  const safeApiConfig = {
+    provider: "not configured",
+    model: "not selected",
+    ...apiConfig,
+  }
+
+  // Ensure ragEngine has a safe isHealthy method
+  const isRagEngineHealthy = () => {
+    if (!ragEngine) return false
+    if (typeof ragEngine.isHealthy === "function") return ragEngine.isHealthy()
+    return false
+  }
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -63,8 +83,8 @@ export function SystemStatus({ modelStatus, apiConfig, documents, messages, ragE
     let score = 0
     if (modelStatus === "ready") score += 40
     if (documents.length > 0) score += 30
-    if (apiConfig.apiKey) score += 20
-    if (ragEngine && typeof ragEngine.isHealthy === "function" && ragEngine.isHealthy()) score += 10
+    if (safeApiConfig.apiKey) score += 20
+    if (isRagEngineHealthy()) score += 10
     return score
   }
 
@@ -110,11 +130,11 @@ export function SystemStatus({ modelStatus, apiConfig, documents, messages, ragE
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Provider:</span>
-                <span className="font-bold">{apiConfig.provider.toUpperCase()}</span>
+                <span className="font-bold">{safeApiConfig.provider?.toUpperCase() || "NOT SET"}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Model:</span>
-                <span className="font-bold text-xs truncate">{apiConfig.model.split("/").pop()}</span>
+                <span className="font-bold text-xs truncate">{safeApiConfig.model?.split("/").pop() || "NOT SET"}</span>
               </div>
             </div>
           </div>
@@ -182,21 +202,15 @@ export function SystemStatus({ modelStatus, apiConfig, documents, messages, ragE
                 <div
                   className={`w-2 h-2 rounded-full ${modelStatus === "ready" ? "bg-green-500" : modelStatus === "error" ? "bg-red-500" : "bg-yellow-500"}`}
                 />
-                <span className="font-bold">{apiConfig.provider}</span>
+                <span className="font-bold">{safeApiConfig.provider || "Not Configured"}</span>
               </div>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-gray-600">RAG Engine:</span>
               <div className="flex items-center space-x-2">
-                <div
-                  className={`w-2 h-2 rounded-full ${ragEngine && typeof ragEngine.isHealthy === "function" && ragEngine.isHealthy() ? "bg-green-500" : "bg-red-500"}`}
-                />
-                <span className="font-bold">
-                  {ragEngine && typeof ragEngine.isHealthy === "function" && ragEngine.isHealthy()
-                    ? "HEALTHY"
-                    : "ERROR"}
-                </span>
+                <div className={`w-2 h-2 rounded-full ${isRagEngineHealthy() ? "bg-green-500" : "bg-red-500"}`} />
+                <span className="font-bold">{isRagEngineHealthy() ? "HEALTHY" : "ERROR"}</span>
               </div>
             </div>
 
