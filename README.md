@@ -62,7 +62,7 @@ QuantumPDF ChatApp is an intelligent, open-source web application that revolutio
 
 ## 🏗 System Architecture
 
-\`\`\`mermaid
+```mermaid
 graph TD
     A1[User Interface Layer] --> A2[API Gateway]
     A2 --> B[Application Layer]
@@ -78,7 +78,7 @@ graph TD
     E1 --> E2[Context Retrieval]
     E2 --> F1[Response Generation]
     F1 --> G[Result Presentation]
-\`\`\`
+```
 
 ## 🛠 Technology Stack
 
