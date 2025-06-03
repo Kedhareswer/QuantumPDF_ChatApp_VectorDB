@@ -47,6 +47,7 @@
     "cohere-ai": "^7.7.5",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
+    "graphql": "^16.8.1",
     "immer": "^10.0.3",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
