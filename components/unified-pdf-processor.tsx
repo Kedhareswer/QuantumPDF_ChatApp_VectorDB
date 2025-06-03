@@ -1,16 +1,16 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useCallback } from "react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, FileText, Upload, X, CheckCircle, AlertTriangle, RefreshCw, Info } from "lucide-react"
+import { AlertCircle, FileText, Upload, X, CheckCircle, AlertTriangle, RefreshCw, Info, Loader2 } from "lucide-react"
 import { useAppStore } from "@/lib/store"
-import { AdvancedPDFProcessor, type ProcessingProgress } from "@/lib/pdf-processor-advanced"
+import { EnhancedPDFProcessor, type ProcessingProgress } from "@/lib/enhanced-pdf-processor"
+import { PDFProcessorSkeleton } from "@/components/skeleton-loaders"
 
 interface UnifiedPDFProcessorProps {
   onDocumentProcessed: (document: any) => void
@@ -25,9 +25,10 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const [processingMethod, setProcessingMethod] = useState<string | null>(null)
   const [processingStats, setProcessingStats] = useState<any>(null)
   const [retryCount, setRetryCount] = useState(0)
+  const [isInitializing, setIsInitializing] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const pdfProcessor = useRef<AdvancedPDFProcessor>(new AdvancedPDFProcessor())
+  const pdfProcessor = useRef<EnhancedPDFProcessor>(new EnhancedPDFProcessor())
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -58,13 +59,24 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
       return
     }
 
-    if (selectedFile.size > 50 * 1024 * 1024) {
-      setError("File size exceeds 50MB limit")
+    if (selectedFile.size > 100 * 1024 * 1024) {
+      setError("File size exceeds 100MB limit")
       setFile(null)
       addError({
         type: "error",
         title: "File Too Large",
-        message: "Please select a file smaller than 50MB",
+        message: "Please select a file smaller than 100MB",
+      })
+      return
+    }
+
+    if (selectedFile.size === 0) {
+      setError("Selected file is empty")
+      setFile(null)
+      addError({
+        type: "error",
+        title: "Empty File",
+        message: "The selected file appears to be empty",
       })
       return
     }
@@ -104,10 +116,15 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
     }
 
     setIsProcessing(true)
+    setIsInitializing(true)
     setError(null)
-    setProgress({ stage: "Starting PDF processing...", progress: 0 })
+    setProgress({ stage: "Initializing enhanced PDF processor...", progress: 0 })
 
     try {
+      // Add initialization delay for better UX
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      setIsInitializing(false)
+
       const result = await pdfProcessor.current.processFile(file, (progressUpdate) => {
         setProgress(progressUpdate)
         if (progressUpdate.method) {
@@ -124,7 +141,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         throw new Error("No text chunks could be created from the PDF")
       }
 
-      // Create document object
+      // Create enhanced document object
       const document = {
         id: Date.now().toString(),
         name: file.name,
@@ -138,6 +155,8 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
           processingTime: result.metadata.processingTime,
           extractionQuality: result.metadata.extractionQuality,
           processingMethod: result.metadata.processingMethod,
+          confidence: result.metadata.confidence,
+          warnings: result.metadata.warnings,
         },
       }
 
@@ -149,14 +168,21 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         extractionQuality: result.metadata.extractionQuality,
         chunks: result.chunks.length,
         method: result.metadata.processingMethod,
+        confidence: result.metadata.confidence,
+        warnings: result.metadata.warnings || [],
       })
 
       onDocumentProcessed(document)
 
+      const successMessage =
+        result.metadata.warnings && result.metadata.warnings.length > 0
+          ? `Processed ${file.name} with ${result.metadata.warnings.length} warnings`
+          : `Successfully processed ${file.name}`
+
       addError({
-        type: "success",
+        type: result.metadata.warnings && result.metadata.warnings.length > 0 ? "warning" : "success",
         title: "Document Processed",
-        message: `Successfully processed ${file.name} with ${result.chunks.length} chunks`,
+        message: `${successMessage} - ${result.chunks.length} chunks created`,
       })
 
       // Clear file after successful processing
@@ -173,6 +199,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
       })
     } finally {
       setIsProcessing(false)
+      setIsInitializing(false)
       setProgress({ stage: "Processing complete", progress: 100 })
     }
   }
@@ -185,6 +212,14 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
     }
   }
 
+  const handleAbortProcessing = () => {
+    pdfProcessor.current.abort()
+    setIsProcessing(false)
+    setIsInitializing(false)
+    setProgress(null)
+    setError("Processing was cancelled by user")
+  }
+
   const getProgressColor = useCallback(() => {
     if (!progress) return "bg-gray-200"
     if (progress.progress < 30) return "bg-yellow-500"
@@ -195,14 +230,19 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const getQualityBadgeColor = (quality: string) => {
     switch (quality) {
       case "high":
-        return "border-green-600 text-green-600"
+        return "border-green-600 text-green-600 bg-green-50"
       case "medium":
-        return "border-yellow-600 text-yellow-600"
+        return "border-yellow-600 text-yellow-600 bg-yellow-50"
       case "low":
-        return "border-red-600 text-red-600"
+        return "border-red-600 text-red-600 bg-red-50"
       default:
-        return "border-gray-600 text-gray-600"
+        return "border-gray-600 text-gray-600 bg-gray-50"
     }
+  }
+
+  // Show skeleton during initialization
+  if (isInitializing) {
+    return <PDFProcessorSkeleton />
   }
 
   return (
@@ -211,7 +251,8 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         <CardHeader className="border-b border-black">
           <CardTitle className="text-sm flex items-center space-x-2">
             <FileText className="w-4 h-4" />
-            <span>PDF DOCUMENT PROCESSOR</span>
+            <span>ENHANCED PDF PROCESSOR</span>
+            {isProcessing && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
           </CardTitle>
         </CardHeader>
 
@@ -219,8 +260,10 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
           {/* File Upload Area */}
           <div
             className={`border-2 ${
-              error ? "border-red-500" : "border-gray-300"
-            } border-dashed rounded-md p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors`}
+              error ? "border-red-500" : file ? "border-green-500" : "border-gray-300"
+            } border-dashed rounded-md p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors ${
+              isProcessing ? "pointer-events-none opacity-50" : ""
+            }`}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onClick={() => !isProcessing && fileInputRef.current?.click()}
@@ -236,7 +279,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
 
             {file ? (
               <div className="flex flex-col items-center space-y-3">
-                <FileText className="w-8 h-8 text-black" />
+                <FileText className="w-8 h-8 text-green-600" />
                 <div className="text-center">
                   <p className="text-sm font-medium">{file.name}</p>
                   <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
@@ -260,7 +303,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                 <Upload className="w-8 h-8 text-gray-400" />
                 <div className="text-center">
                   <p className="text-sm font-medium">Click or drag & drop to upload PDF</p>
-                  <p className="text-xs text-gray-500 mt-1">PDF files up to 50MB</p>
+                  <p className="text-xs text-gray-500 mt-1">PDF files up to 100MB • Enhanced processing</p>
                 </div>
               </div>
             )}
@@ -272,7 +315,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="flex items-center justify-between">
                 <span>{error}</span>
-                {file && retryCount < 3 && (
+                {file && retryCount < 3 && !isProcessing && (
                   <Button size="sm" variant="outline" onClick={handleRetry}>
                     <RefreshCw className="w-3 h-3 mr-1" />
                     Retry ({retryCount + 1}/3)
@@ -286,25 +329,41 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
           {progress && isProcessing && (
             <div className="mt-4 space-y-3">
               <div className="flex justify-between text-xs">
-                <span>{progress.stage}</span>
-                <span>{Math.round(progress.progress)}%</span>
+                <span className="font-medium">{progress.stage}</span>
+                <span className="font-bold">{Math.round(progress.progress)}%</span>
               </div>
-              <Progress value={progress.progress} className={getProgressColor()} />
+              <Progress value={progress.progress} className={`h-2 ${getProgressColor()}`} />
 
-              <div className="flex items-center justify-between">
-                {processingMethod && (
-                  <Badge variant="outline" className="text-xs">
-                    Method: {processingMethod}
-                  </Badge>
-                )}
-                {retryCount > 0 && (
-                  <Badge variant="outline" className="text-xs border-yellow-600 text-yellow-600">
-                    Attempt {retryCount + 1}
-                  </Badge>
-                )}
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center space-x-2">
+                  {processingMethod && (
+                    <Badge variant="outline" className="text-xs">
+                      {processingMethod}
+                    </Badge>
+                  )}
+                  {retryCount > 0 && (
+                    <Badge variant="outline" className="text-xs border-yellow-600 text-yellow-600">
+                      Attempt {retryCount + 1}
+                    </Badge>
+                  )}
+                  {progress.currentPage && progress.totalPages && (
+                    <Badge variant="outline" className="text-xs">
+                      Page {progress.currentPage}/{progress.totalPages}
+                    </Badge>
+                  )}
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAbortProcessing}
+                  className="text-xs border-red-500 text-red-500 hover:bg-red-500 hover:text-white"
+                >
+                  Cancel
+                </Button>
               </div>
 
-              {progress.details && <p className="text-xs text-gray-500">{progress.details}</p>}
+              {progress.details && <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded">{progress.details}</p>}
             </div>
           )}
 
@@ -313,9 +372,9 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
             <div className="mt-4 border border-gray-200 rounded-md p-4 bg-gray-50">
               <h4 className="font-medium mb-3 flex items-center">
                 <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                Processing Results
+                Enhanced Processing Results
               </h4>
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 text-xs mb-4">
                 <div className="flex justify-between">
                   <span>Pages:</span>
                   <span className="font-medium">{processingStats.pages}</span>
@@ -338,18 +397,43 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                     variant="outline"
                     className={`text-xs ${getQualityBadgeColor(processingStats.extractionQuality)}`}
                   >
-                    {processingStats.extractionQuality}
+                    {processingStats.extractionQuality.toUpperCase()}
                   </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>Confidence:</span>
+                  <span className="font-medium">{processingStats.confidence?.toFixed(1)}%</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Time:</span>
                   <span className="font-medium">{(processingStats.processingTime / 1000).toFixed(2)}s</span>
                 </div>
-                <div className="flex justify-between col-span-2">
+                <div className="flex justify-between">
                   <span>Method:</span>
-                  <span className="font-medium">{processingStats.method}</span>
+                  <span className="font-medium text-xs">{processingStats.method}</span>
                 </div>
               </div>
+
+              {processingStats.warnings && processingStats.warnings.length > 0 && (
+                <div className="border-t border-gray-300 pt-3">
+                  <h5 className="text-xs font-medium text-yellow-700 mb-2 flex items-center">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    Processing Warnings ({processingStats.warnings.length})
+                  </h5>
+                  <div className="space-y-1">
+                    {processingStats.warnings.slice(0, 3).map((warning: string, index: number) => (
+                      <p key={index} className="text-xs text-yellow-600 bg-yellow-50 p-1 rounded">
+                        {warning}
+                      </p>
+                    ))}
+                    {processingStats.warnings.length > 3 && (
+                      <p className="text-xs text-gray-500">
+                        ... and {processingStats.warnings.length - 3} more warnings
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -358,26 +442,42 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
           <Button
             onClick={handleProcessFile}
             disabled={!file || isProcessing}
-            className="w-full bg-black hover:bg-gray-800 text-white disabled:bg-gray-300"
+            className="w-full bg-black hover:bg-gray-800 text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
-            {isProcessing ? "Processing..." : "Process PDF"}
+            {isProcessing ? (
+              <div className="flex items-center space-x-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Processing PDF...</span>
+              </div>
+            ) : (
+              "Process PDF with Enhanced Engine"
+            )}
           </Button>
         </CardFooter>
       </Card>
 
-      {/* Processing Tips */}
-      <div className="text-xs text-gray-500 space-y-1">
+      {/* Enhanced Processing Tips */}
+      <div className="text-xs text-gray-500 space-y-2 bg-gray-50 p-4 rounded-md">
+        <h4 className="font-medium text-gray-700 mb-2">Enhanced Processing Features:</h4>
         <p className="flex items-center">
           <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
-          Multiple processing methods ensure reliable text extraction
+          Advanced text extraction with structure preservation
+        </p>
+        <p className="flex items-center">
+          <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
+          Intelligent chunking with semantic splitting
+        </p>
+        <p className="flex items-center">
+          <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
+          Quality assessment and confidence scoring
         </p>
         <p className="flex items-center">
           <Info className="w-3 h-3 mr-1 text-blue-500" />
-          Text-based PDFs work better than scanned documents
+          Real-time progress tracking with detailed feedback
         </p>
         <p className="flex items-center">
           <AlertTriangle className="w-3 h-3 mr-1 text-yellow-500" />
-          Large files may take longer to process
+          Comprehensive error handling and recovery
         </p>
       </div>
     </div>

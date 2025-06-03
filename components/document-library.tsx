@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { DocumentLibrarySkeleton } from "@/components/skeleton-loaders"
 
 interface Document {
   id: string
@@ -21,11 +22,17 @@ interface Document {
 interface DocumentLibraryProps {
   documents: Document[]
   onRemoveDocument: (id: string) => void
+  isLoading?: boolean
 }
 
-export function DocumentLibrary({ documents, onRemoveDocument }: DocumentLibraryProps) {
+export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false }: DocumentLibraryProps) {
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null)
   const [expandedStats, setExpandedStats] = useState(true)
+
+  // Show skeleton during loading
+  if (isLoading) {
+    return <DocumentLibrarySkeleton />
+  }
 
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 Bytes"
@@ -40,7 +47,24 @@ export function DocumentLibrary({ documents, onRemoveDocument }: DocumentLibrary
   }
 
   const getProcessingMethod = (doc: Document) => {
-    return doc.metadata?.processingMethod || doc.metadata?.aiProvider || "Unknown"
+    return doc.metadata?.processingMethod || doc.metadata?.aiProvider || "Standard"
+  }
+
+  const getConfidenceScore = (doc: Document) => {
+    return doc.metadata?.confidence || 0
+  }
+
+  const getQualityBadgeColor = (quality: string) => {
+    switch (quality) {
+      case "high":
+        return "border-green-600 text-green-600 bg-green-50"
+      case "medium":
+        return "border-yellow-600 text-yellow-600 bg-yellow-50"
+      case "low":
+        return "border-red-600 text-red-600 bg-red-50"
+      default:
+        return "border-gray-600 text-gray-600 bg-gray-50"
+    }
   }
 
   const handlePreview = (doc: Document) => {
@@ -81,7 +105,7 @@ export function DocumentLibrary({ documents, onRemoveDocument }: DocumentLibrary
 
   return (
     <div className="space-y-6">
-      {/* Library Stats */}
+      {/* Enhanced Library Stats */}
       <Collapsible open={expandedStats} onOpenChange={setExpandedStats}>
         <Card className="card-enhanced">
           <CollapsibleTrigger asChild>
@@ -89,7 +113,7 @@ export function DocumentLibrary({ documents, onRemoveDocument }: DocumentLibrary
               <CardTitle className="flex items-center justify-between text-hierarchy-4">
                 <div className="flex items-center space-x-3">
                   <Hash className="w-5 h-5" />
-                  <span>LIBRARY STATISTICS</span>
+                  <span>ENHANCED LIBRARY STATISTICS</span>
                 </div>
                 {expandedStats ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
               </CardTitle>
@@ -97,7 +121,7 @@ export function DocumentLibrary({ documents, onRemoveDocument }: DocumentLibrary
           </CollapsibleTrigger>
           <CollapsibleContent>
             <CardContent className="p-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                 <div className="text-center space-y-2">
                   <div className="text-2xl font-bold">{documents.length}</div>
                   <div className="text-sm text-gray-600">Documents</div>
@@ -118,13 +142,24 @@ export function DocumentLibrary({ documents, onRemoveDocument }: DocumentLibrary
                   </div>
                   <div className="text-sm text-gray-600">Embeddings</div>
                 </div>
+                <div className="text-center space-y-2">
+                  <div className="text-2xl font-bold">
+                    {documents.length > 0
+                      ? (
+                          documents.reduce((total, doc) => total + (getConfidenceScore(doc) || 0), 0) / documents.length
+                        ).toFixed(1)
+                      : "0"}
+                    %
+                  </div>
+                  <div className="text-sm text-gray-600">Avg Confidence</div>
+                </div>
               </div>
             </CardContent>
           </CollapsibleContent>
         </Card>
       </Collapsible>
 
-      {/* Document List */}
+      {/* Enhanced Document List */}
       <div className="space-y-4">
         <h2 className="text-hierarchy-3">Documents ({documents.length})</h2>
         <div className="space-y-4">
@@ -139,6 +174,7 @@ export function DocumentLibrary({ documents, onRemoveDocument }: DocumentLibrary
                         {doc.name}
                       </span>
                     </CardTitle>
+
                     <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                       <div className="flex items-center space-x-2">
                         <Calendar className="w-4 h-4" />
@@ -154,6 +190,22 @@ export function DocumentLibrary({ documents, onRemoveDocument }: DocumentLibrary
                         <Zap className="w-4 h-4" />
                         <span>{getProcessingMethod(doc)}</span>
                       </div>
+                      {doc.metadata?.quality && (
+                        <div className="flex items-center space-x-2">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getQualityBadgeColor(
+                              doc.metadata.quality,
+                            )}`}
+                          >
+                            {doc.metadata.quality} quality
+                          </span>
+                        </div>
+                      )}
+                      {doc.metadata?.confidence && (
+                        <div className="flex items-center space-x-2">
+                          <span>{doc.metadata.confidence}% confidence</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
