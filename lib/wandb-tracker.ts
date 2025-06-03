@@ -1,3 +1,51 @@
+// Browser-compatible W&B tracker without Node.js dependencies
+
+export interface WandbConfig {
+  project: string
+  entity?: string
+  name?: string
+  config?: Record<string, any>
+}
+
+export interface WandbMetrics {
+  [key: string]: number | string | boolean
+}
+
+export class BrowserWandbTracker {
+  private config: WandbConfig | null = null
+  private isInitialized = false
+
+  async init(config: WandbConfig): Promise<void> {
+    this.config = config
+    this.isInitialized = true
+    console.log("W&B tracker initialized (browser mode)", config)
+  }
+
+  async log(metrics: WandbMetrics): Promise<void> {
+    if (!this.isInitialized) {
+      console.warn("W&B tracker not initialized")
+      return
+    }
+
+    console.log("W&B metrics (browser mode):", metrics)
+
+    // In a real implementation, this would send data to W&B API
+    // For now, we just log to console
+  }
+
+  async finish(): Promise<void> {
+    if (!this.isInitialized) return
+
+    console.log("W&B run finished (browser mode)")
+    this.isInitialized = false
+    this.config = null
+  }
+
+  isActive(): boolean {
+    return this.isInitialized
+  }
+}
+
 interface InteractionLog {
   query: string
   response: string

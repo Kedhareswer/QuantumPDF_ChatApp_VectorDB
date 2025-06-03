@@ -1,71 +1,31 @@
-// Simplified OCR Processor without Tesseract.js dependency
+// Browser-compatible OCR processor without Node.js dependencies
 
 export interface OCRResult {
   text: string
   confidence: number
-  blocks: Array<{
-    text: string
-    confidence: number
-    bbox: { x: number; y: number; width: number; height: number }
-  }>
+  language?: string
 }
 
-export interface OCRProgress {
-  stage: string
-  progress: number
-  details?: string
-}
-
-export class OCRProcessor {
-  private isInitialized = false
-
-  constructor() {
-    this.isInitialized = true // Always available as fallback
-  }
-
-  async processImageToText(
-    imageData: ImageData | HTMLCanvasElement | string,
-    onProgress?: (progress: OCRProgress) => void,
-  ): Promise<OCRResult> {
-    onProgress?.({
-      stage: "OCR processing not available...",
-      progress: 100,
-    })
+export class BrowserOCRProcessor {
+  async processImage(imageData: ImageData | Blob): Promise<OCRResult> {
+    // Placeholder for OCR functionality
+    // In a real implementation, this would use a browser-compatible OCR library
+    console.log("OCR processing not implemented in browser version")
 
     return {
-      text: "[OCR processing is not available in this environment. Please use text-based PDFs or manual text entry.]",
+      text: "OCR processing is not available in the browser version. Please use a text-based PDF.",
       confidence: 0,
-      blocks: [],
+      language: "unknown",
     }
   }
 
-  async processCanvasToText(
-    canvas: HTMLCanvasElement,
-    onProgress?: (progress: OCRProgress) => void,
-  ): Promise<OCRResult> {
-    return this.processImageToText(canvas, onProgress)
-  }
-
-  async processImageUrlToText(imageUrl: string, onProgress?: (progress: OCRProgress) => void): Promise<OCRResult> {
-    return this.processImageToText(imageUrl, onProgress)
-  }
-
-  async processWithPreprocessing(
-    imageData: ImageData | HTMLCanvasElement,
-    onProgress?: (progress: OCRProgress) => void,
-  ): Promise<OCRResult> {
-    return this.processImageToText(imageData, onProgress)
-  }
-
-  isAvailable(): boolean {
-    return false // OCR not available to prevent usage
-  }
-
-  async fallbackOCR(canvas: HTMLCanvasElement): Promise<OCRResult> {
-    return {
-      text: "[OCR functionality disabled. Please use text-based PDFs or manual text entry.]",
-      confidence: 0,
-      blocks: [],
+  async processCanvas(canvas: HTMLCanvasElement): Promise<OCRResult> {
+    const ctx = canvas.getContext("2d")
+    if (!ctx) {
+      throw new Error("Cannot get canvas context")
     }
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    return this.processImage(imageData)
   }
 }

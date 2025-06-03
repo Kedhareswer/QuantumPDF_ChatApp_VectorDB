@@ -1,3 +1,61 @@
+// Browser-compatible PDF parser without Node.js dependencies
+
+export interface PDFParseResult {
+  text: string
+  metadata: {
+    title?: string
+    author?: string
+    pages: number
+    size: number
+  }
+}
+
+export class BrowserPDFParser {
+  async parseFile(file: File): Promise<PDFParseResult> {
+    try {
+      // Use FileReader API for browser compatibility
+      const arrayBuffer = await this.readFileAsArrayBuffer(file)
+
+      // Simple text extraction fallback
+      const text = await this.extractTextFromBuffer(arrayBuffer)
+
+      return {
+        text,
+        metadata: {
+          title: file.name,
+          pages: 1,
+          size: file.size,
+        },
+      }
+    } catch (error) {
+      console.error("PDF parsing failed:", error)
+      throw new Error("Failed to parse PDF file")
+    }
+  }
+
+  private readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as ArrayBuffer)
+      reader.onerror = () => reject(new Error("Failed to read file"))
+      reader.readAsArrayBuffer(file)
+    })
+  }
+
+  private async extractTextFromBuffer(buffer: ArrayBuffer): Promise<string> {
+    // Simple text extraction - in a real implementation,
+    // this would use a PDF parsing library
+    const uint8Array = new Uint8Array(buffer)
+    const decoder = new TextDecoder("utf-8", { fatal: false })
+
+    try {
+      return decoder.decode(uint8Array)
+    } catch {
+      return "Unable to extract text from PDF"
+    }
+  }
+}
+
 export interface PDFContent {
   text: string
   metadata: {

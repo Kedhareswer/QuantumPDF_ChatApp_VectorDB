@@ -62,7 +62,7 @@ QuantumPDF ChatApp is an intelligent, open-source web application that revolutio
 
 ## 🏗 System Architecture
 
-```mermaid
+\`\`\`mermaid
 graph TD
     A1[User Interface Layer] --> A2[API Gateway]
     A2 --> B[Application Layer]
@@ -78,7 +78,7 @@ graph TD
     E1 --> E2[Context Retrieval]
     E2 --> F1[Response Generation]
     F1 --> G[Result Presentation]
-```
+\`\`\`
 
 ## 🛠 Technology Stack
 
@@ -102,7 +102,7 @@ graph TD
 
 ### Quick Start Guide
 
-```bash
+\`\`\`bash
 # Clone repository
 git clone https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
 cd QuantumPDF_ChatApp
@@ -119,7 +119,7 @@ npm install
 # Start services
 python app.py  # Terminal 1
 npm run dev    # Terminal 2
-```
+\`\`\`
 
 ## 🎮 Usage Guide
 
@@ -144,7 +144,7 @@ npm run dev    # Terminal 2
 
 ### Environment Variables
 
-```env
+\`\`\`env
 # API Keys
 OPENAI_API_KEY=your_openai_key
 GEMINI_API_KEY=your_gemini_key
@@ -154,7 +154,7 @@ AIML_API_KEY=your_aiml_key
 WANDB_API_KEY=your_wandb_key
 MAX_TOKENS=500
 CHUNK_OVERLAP=50
-```
+\`\`\`
 
 ### Model Configuration
 

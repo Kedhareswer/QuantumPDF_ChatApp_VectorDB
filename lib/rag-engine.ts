@@ -1,3 +1,19 @@
+export interface RAGQuery {
+  question: string
+  context?: string
+  maxResults?: number
+}
+
+export interface RAGResponse {
+  answer: string
+  sources: Array<{
+    text: string
+    similarity: number
+    metadata: Record<string, any>
+  }>
+  confidence: number
+}
+
 import { AIClient } from "./ai-client"
 import { PDFParser } from "./pdf-parser"
 

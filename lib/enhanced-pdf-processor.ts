@@ -39,7 +39,6 @@ export class EnhancedPDFProcessor {
   private isInitialized = false
   private chunker: AdvancedChunker
   private processingAborted = false
-  private workerConfigured = false
 
   constructor() {
     this.chunker = new AdvancedChunker({
@@ -57,8 +56,9 @@ export class EnhancedPDFProcessor {
     try {
       console.log("Initializing Enhanced PDF.js library...")
 
-      const pdfjs = await import("pdfjs-dist")
-      this.pdfjsLib = pdfjs.default || pdfjs
+      // Import specific version to match worker
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf")
+      this.pdfjsLib = pdfjs
 
       if (!this.pdfjsLib?.getDocument) {
         throw new Error("PDF.js getDocument method not available")
@@ -66,7 +66,7 @@ export class EnhancedPDFProcessor {
 
       console.log(`PDF.js version: ${this.pdfjsLib.version || "unknown"}`)
 
-      // Configure worker with version matching
+      // Configure worker to match API version
       await this.configureWorker()
 
       this.isInitialized = true
@@ -80,67 +80,17 @@ export class EnhancedPDFProcessor {
   }
 
   private async configureWorker(): Promise<void> {
-    if (typeof window === "undefined" || !this.pdfjsLib.GlobalWorkerOptions) {
-      console.log("Worker configuration not available (server-side or no GlobalWorkerOptions)")
+    if (typeof window === "undefined" || !this.pdfjsLib?.GlobalWorkerOptions) {
+      console.log("Worker configuration not available")
       return
     }
 
     try {
-      const version = this.pdfjsLib.version
-      console.log(`Configuring worker for PDF.js version: ${version}`)
-
-      // Try version-specific worker sources first
-      const versionSpecificSources = version
-        ? [
-            `https://cdn.jsdelivr.net/npm/pdfjs-dist@${version}/build/pdf.worker.min.js`,
-            `https://unpkg.com/pdfjs-dist@${version}/build/pdf.worker.min.js`,
-          ]
-        : []
-
-      // Fallback to generic sources
-      const genericSources = [
-        "https://cdn.jsdelivr.net/npm/pdfjs-dist/build/pdf.worker.min.js",
-        "https://unpkg.com/pdfjs-dist/build/pdf.worker.min.js",
-      ]
-
-      const allSources = [...versionSpecificSources, ...genericSources]
-
-      for (const workerSrc of allSources) {
-        try {
-          console.log(`Testing worker source: ${workerSrc}`)
-
-          // Test worker availability with timeout
-          const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-          const testResponse = await fetch(workerSrc, {
-            method: "HEAD",
-            mode: "cors",
-            signal: controller.signal,
-          }).catch(() => null)
-
-          clearTimeout(timeoutId)
-
-          if (testResponse && testResponse.ok) {
-            this.pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
-            this.workerConfigured = true
-            console.log(`Worker configured successfully: ${workerSrc}`)
-            return
-          }
-        } catch (error) {
-          console.warn(`Worker source failed: ${workerSrc}`, error)
-          continue
-        }
-      }
-
-      console.warn("All worker sources failed, disabling worker")
-      // Disable worker entirely to avoid version conflicts
-      this.pdfjsLib.GlobalWorkerOptions.workerSrc = null
-      this.workerConfigured = false
+      // Set worker source to empty string to disable worker
+      this.pdfjsLib.GlobalWorkerOptions.workerSrc = ""
+      console.log("Worker source set to empty string (disabled)")
     } catch (error) {
-      console.error("Worker configuration failed:", error)
-      this.pdfjsLib.GlobalWorkerOptions.workerSrc = null
-      this.workerConfigured = false
+      console.warn("Worker configuration failed:", error)
     }
   }
 
@@ -228,22 +178,16 @@ export class EnhancedPDFProcessor {
     if (file.size === 0) {
       throw new Error("File is empty")
     }
-
-    // Check for common file corruption indicators
-    if (file.name.includes("..") || file.name.includes("/") || file.name.includes("\\")) {
-      throw new Error("Invalid file name")
-    }
   }
 
-  private async safeReadFile(file: File): Promise<Uint8Array> {
+  private async safeReadFile(file: File): Promise<ArrayBuffer> {
     try {
-      // Use FileReader for more reliable file reading
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
 
         reader.onload = (event) => {
           if (event.target?.result instanceof ArrayBuffer) {
-            resolve(new Uint8Array(event.target.result))
+            resolve(event.target.result)
           } else {
             reject(new Error("Failed to read file as ArrayBuffer"))
           }
@@ -273,8 +217,7 @@ export class EnhancedPDFProcessor {
       method: "Enhanced PDF.js",
     })
 
-    // Use safer file reading method
-    const fileData = await this.safeReadFile(file)
+    const fileBuffer = await this.safeReadFile(file)
 
     onProgress?.({
       stage: "Parsing PDF structure...",
@@ -282,74 +225,46 @@ export class EnhancedPDFProcessor {
       method: "Enhanced PDF.js",
     })
 
-    // Try multiple loading strategies to handle version conflicts
+    // Create a fresh copy of the buffer to avoid detachment issues
+    const bufferCopy = fileBuffer.slice(0)
+
     let pdf
-    const loadingStrategies = [
-      // Strategy 1: No worker (most compatible)
-      {
-        name: "No Worker",
-        options: {
-          data: fileData.slice(), // Clone the data
-          useWorkerFetch: false,
-          disableWorker: true,
-          isEvalSupported: false,
-          useSystemFonts: true,
-          stopAtErrors: false,
-          maxImageSize: 1024 * 1024,
-          cMapPacked: true,
-          disableAutoFetch: true,
-          disableStream: true,
-          verbosity: 0,
-        },
-      },
-      // Strategy 2: Basic options
-      {
-        name: "Basic",
-        options: {
-          data: fileData.slice(),
-          useWorkerFetch: false,
-          stopAtErrors: false,
-          verbosity: 0,
-        },
-      },
-      // Strategy 3: Minimal options
-      {
-        name: "Minimal",
-        options: {
-          data: fileData.slice(),
-        },
-      },
-    ]
+    try {
+      console.log("Configuring PDF.js for no-worker mode...")
 
-    let lastError: Error | null = null
-
-    for (const strategy of loadingStrategies) {
-      try {
-        console.log(`Trying loading strategy: ${strategy.name}`)
-
-        const loadingTask = this.pdfjsLib.getDocument(strategy.options)
-
-        // Add timeout handling
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("PDF loading timeout")), 30000)
-        })
-
-        pdf = await Promise.race([loadingTask.promise, timeoutPromise])
-
-        console.log(`Successfully loaded PDF with strategy: ${strategy.name}`)
-        if (strategy.name !== "No Worker") {
-          warnings.push(`Used ${strategy.name} loading strategy`)
-        }
-        break
-      } catch (error) {
-        console.warn(`Loading strategy ${strategy.name} failed:`, error)
-        lastError = error instanceof Error ? error : new Error(String(error))
-        continue
+      // Ensure worker is properly disabled
+      if (this.pdfjsLib.GlobalWorkerOptions) {
+        this.pdfjsLib.GlobalWorkerOptions.workerSrc = ""
       }
-    }
 
-    if (!pdf) {
-      throw lastError || new Error("All PDF loading strategies failed")
+      console.log("Loading PDF with no-worker configuration...")
+
+      // Force disable worker mode with comprehensive options
+      const loadingTask = this.pdfjsLib.getDocument({
+        data: new Uint8Array(bufferCopy),
+        useWorkerFetch: false,
+        disableWorker: true,
+        isEvalSupported: false,
+        useSystemFonts: true,
+        stopAtErrors: false,
+        verbosity: 0,
+        disableAutoFetch: true,
+        disableStream: true,
+        cMapPacked: true,
+        standardFontDataUrl: undefined,
+        cMapUrl: undefined,
+      })
+
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("PDF loading timeout after 30 seconds")), 30000)
+      })
+
+      pdf = await Promise.race([loadingTask.promise, timeoutPromise])
+      console.log("PDF loaded successfully without worker")
+    } catch (error) {
+      console.error("PDF loading failed:", error)
+      throw new Error(`Failed to load PDF: ${error instanceof Error ? error.message : "Unknown error"}`)
     }
 
     onProgress?.({
@@ -386,7 +301,6 @@ export class EnhancedPDFProcessor {
       throw new Error("No readable text content found in PDF")
     }
 
-    // Enhanced chunking with better structure preservation
     const advancedChunks = this.chunker.chunkText(textExtractionResult.fullText.trim())
     const chunks = advancedChunks.map((chunk) => chunk.content)
 
@@ -411,7 +325,7 @@ export class EnhancedPDFProcessor {
         creationDate: metadata.CreationDate ? new Date(metadata.CreationDate) : undefined,
         modificationDate: metadata.ModDate ? new Date(metadata.ModDate) : undefined,
         pages: pdf.numPages,
-        processingMethod: "Enhanced PDF.js",
+        processingMethod: "Enhanced PDF.js (No Worker)",
         extractionQuality: this.determineExtractionQuality(
           textExtractionResult.successfulPages,
           pdf.numPages,
@@ -472,9 +386,9 @@ export class EnhancedPDFProcessor {
           fullText += `\n\n=== Page ${pageNum} (No Content) ===\n[This page appears to contain no extractable text content]`
         }
 
-        // Add small delay to prevent browser freezing
-        if (pageNum % 5 === 0) {
-          await new Promise((resolve) => setTimeout(resolve, 10))
+        // Add delay every few pages to prevent browser freezing
+        if (pageNum % 3 === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 50))
         }
       } catch (pageError) {
         failedPages++
@@ -503,21 +417,16 @@ export class EnhancedPDFProcessor {
     confidence: number
   }> {
     try {
-      // Enhanced text extraction with better formatting
       const textContent = await page.getTextContent({
         normalizeWhitespace: true,
         disableCombineTextItems: false,
-        includeMarkedContent: true,
       })
 
       if (!textContent?.items || textContent.items.length === 0) {
         return { text: "", confidence: 0 }
       }
 
-      // Enhanced text formatting with structure preservation
       const formattedText = this.formatTextContentEnhanced(textContent)
-
-      // Calculate confidence based on text quality indicators
       const confidence = this.calculateTextConfidence(formattedText, textContent.items.length)
 
       return {
@@ -535,97 +444,64 @@ export class EnhancedPDFProcessor {
 
     let text = ""
     let lastY = null
-    let lastX = null
-    let lastFontSize = null
-    const lines: Array<{ y: number; text: string; fontSize: number }> = []
+    const lines: Array<{ y: number; text: string }> = []
 
-    // First pass: group text items by line
     for (const item of textContent.items) {
       if (!item.str || item.str.trim() === "") continue
 
       const currentY = Math.round(item.transform[5])
-      const currentX = item.transform[4]
-      const fontSize = item.transform[0] || 12
 
-      // Check if this is a new line
       if (lastY === null || Math.abs(currentY - lastY) > 3) {
-        lines.push({ y: currentY, text: item.str, fontSize })
+        lines.push({ y: currentY, text: item.str })
       } else {
-        // Same line - add to existing line with appropriate spacing
         const lastLine = lines[lines.length - 1]
-        const spacing = lastX !== null && currentX - lastX > fontSize ? " " : ""
-        lastLine.text += spacing + item.str
+        lastLine.text += " " + item.str
       }
 
       lastY = currentY
-      lastX = currentX + (item.width || 0)
-      lastFontSize = fontSize
     }
 
-    // Second pass: format lines with structure preservation
-    lines.sort((a, b) => b.y - a.y) // Sort by Y position (top to bottom)
+    lines.sort((a, b) => b.y - a.y)
 
     let previousY = null
-    let previousFontSize = null
-
     for (const line of lines) {
       const lineText = line.text.trim()
       if (!lineText) continue
 
-      // Add extra spacing for significant Y gaps (new paragraphs)
       if (previousY !== null && previousY - line.y > 20) {
         text += "\n\n"
       } else if (text && !text.endsWith("\n")) {
         text += "\n"
       }
 
-      // Handle different font sizes (headings, etc.)
-      if (previousFontSize !== null && Math.abs(line.fontSize - previousFontSize) > 2) {
-        if (line.fontSize > previousFontSize) {
-          text += "\n" // Extra space before larger text (headings)
-        }
-      }
-
       text += lineText
       previousY = line.y
-      previousFontSize = line.fontSize
     }
 
-    // Clean up the text
     return text
-      .replace(/\s+/g, " ") // Normalize whitespace
-      .replace(/\n\s*\n\s*\n/g, "\n\n") // Normalize paragraph breaks
-      .replace(/([.!?])\s*\n\s*([A-Z])/g, "$1\n\n$2") // Ensure paragraph breaks after sentences
+      .replace(/\s+/g, " ")
+      .replace(/\n\s*\n\s*\n/g, "\n\n")
       .trim()
   }
 
   private calculateTextConfidence(text: string, itemCount: number): number {
     if (!text || text.length === 0) return 0
 
-    let confidence = 50 // Base confidence
+    let confidence = 50
 
-    // Text length indicator
     if (text.length > 100) confidence += 20
     if (text.length > 500) confidence += 10
 
-    // Word count indicator
     const wordCount = text.split(/\s+/).length
     if (wordCount > 20) confidence += 10
     if (wordCount > 100) confidence += 5
 
-    // Structure indicators
-    if (text.includes("\n\n")) confidence += 5 // Paragraphs
-    if (/[.!?]/.test(text)) confidence += 5 // Sentences
-    if (/[A-Z][a-z]/.test(text)) confidence += 5 // Proper capitalization
+    if (text.includes("\n\n")) confidence += 5
+    if (/[.!?]/.test(text)) confidence += 5
+    if (/[A-Z][a-z]/.test(text)) confidence += 5
 
-    // Item density (more items usually means better extraction)
-    const density = itemCount / Math.max(text.length / 100, 1)
-    if (density > 5) confidence += 5
-
-    // Penalize for extraction issues
-    if (text.includes("�")) confidence -= 10 // Encoding issues
-    if (text.length < 50) confidence -= 20 // Too short
-    if (!/[a-zA-Z]/.test(text)) confidence -= 30 // No letters
+    if (text.length < 50) confidence -= 20
+    if (!/[a-zA-Z]/.test(text)) confidence -= 30
 
     return Math.max(0, Math.min(100, confidence))
   }
@@ -649,61 +525,10 @@ export class EnhancedPDFProcessor {
     const sample = text.slice(0, 2000).toLowerCase()
 
     const languages = {
-      english: [
-        "the",
-        "and",
-        "or",
-        "but",
-        "in",
-        "on",
-        "at",
-        "to",
-        "for",
-        "of",
-        "with",
-        "by",
-        "is",
-        "are",
-        "was",
-        "were",
-      ],
-      spanish: ["el", "la", "de", "que", "y", "en", "un", "es", "se", "no", "te", "lo", "le", "da", "su", "por"],
-      french: [
-        "le",
-        "de",
-        "et",
-        "à",
-        "un",
-        "il",
-        "être",
-        "et",
-        "en",
-        "avoir",
-        "que",
-        "pour",
-        "dans",
-        "ce",
-        "son",
-        "une",
-      ],
-      german: [
-        "der",
-        "die",
-        "und",
-        "in",
-        "den",
-        "von",
-        "zu",
-        "das",
-        "mit",
-        "sich",
-        "des",
-        "auf",
-        "für",
-        "ist",
-        "im",
-        "dem",
-      ],
+      english: ["the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "is", "are"],
+      spanish: ["el", "la", "de", "que", "y", "en", "un", "es", "se", "no"],
+      french: ["le", "de", "et", "à", "un", "il", "être", "en", "avoir", "que"],
+      german: ["der", "die", "und", "in", "den", "von", "zu", "das", "mit", "sich"],
     }
 
     let bestMatch = "Unknown"
@@ -738,49 +563,32 @@ export class EnhancedPDFProcessor {
 **Date**: ${new Date().toLocaleString()}
 
 ## What Happened?
-The enhanced PDF processor encountered an issue while trying to extract text from your document. This can happen for several reasons:
+The enhanced PDF processor encountered an issue while trying to extract text from your document.
 
 ### Common Causes:
-1. **Version Conflicts**: PDF.js library version mismatches
-2. **Scanned Documents**: The PDF contains images of text rather than actual text
-3. **Complex Formatting**: Advanced layouts, tables, or graphics that are difficult to parse
-4. **Encrypted Content**: Password-protected or secured documents
-5. **File Corruption**: The PDF file may be damaged or incomplete
-6. **Browser Compatibility**: Some browsers have limitations with PDF processing
+1. **Scanned Documents**: The PDF contains images of text rather than actual text
+2. **Complex Formatting**: Advanced layouts, tables, or graphics that are difficult to parse
+3. **Encrypted Content**: Password-protected or secured documents
+4. **File Corruption**: The PDF file may be damaged or incomplete
+5. **Browser Compatibility**: Some browsers have limitations with PDF processing
 
 ### Recommended Solutions:
-
-#### Immediate Actions:
 1. **Try a Different PDF**: Test with a simpler, text-based PDF document
-2. **Refresh the Page**: Clear browser cache and reload the application
-3. **Different Browser**: Try using Chrome, Firefox, or Safari
-4. **Check File Integrity**: Ensure the PDF opens correctly in standard PDF viewers
-
-#### Alternative Processing Methods:
-1. **Manual Text Entry**: Copy and paste text directly from a PDF viewer
-2. **OCR Tools**: Use dedicated OCR software like Adobe Acrobat or online OCR services
-3. **Document Conversion**: Convert to Word (.docx) or plain text (.txt) format
-4. **Professional Tools**: Consider specialized PDF processing software
-
-#### Technical Troubleshooting:
-1. **Browser Compatibility**: Try using a different web browser
-2. **File Size**: Ensure the file is under the size limit
-3. **Network Connection**: Check for stable internet connectivity
-4. **Clear Cache**: Clear browser cache and try again
+2. **Different Browser**: Try using Chrome, Firefox, or Safari
+3. **Manual Text Entry**: Copy and paste text directly from a PDF viewer
+4. **OCR Tools**: Use dedicated OCR software for scanned documents
 
 ## System Information:
-- **Processor**: Enhanced PDF.js Engine
-- **Browser**: ${navigator.userAgent.split(" ")[0] || "Unknown"}
+- **Processor**: Enhanced PDF.js Engine (No Worker)
 - **Processing Method**: Client-side text extraction
 - **Fallback Status**: Active
 
 ## Next Steps:
-This fallback document allows you to continue using the system while you resolve the PDF processing issue. You can:
+This fallback document allows you to continue using the system. You can:
 
 1. Upload a different PDF file
 2. Use the manual text input feature
 3. Try the suggestions above
-4. Contact support if issues persist
 
 The system remains fully functional for other operations and document types.
 

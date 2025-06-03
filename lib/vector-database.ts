@@ -613,3 +613,67 @@ export function createVectorDatabase(config: VectorDBConfig): VectorDatabase {
       return new LocalVectorDatabase(config)
   }
 }
+
+// Browser-compatible vector database without Node.js dependencies
+
+export interface VectorEntry {
+  id: string
+  vector: number[]
+  metadata: Record<string, any>
+  text: string
+}
+
+export interface SearchResult {
+  entry: VectorEntry
+  similarity: number
+}
+
+export class BrowserVectorDatabase {
+  private entries: VectorEntry[] = []
+
+  async addEntry(entry: VectorEntry): Promise<void> {
+    this.entries.push(entry)
+  }
+
+  async addEntries(entries: VectorEntry[]): Promise<void> {
+    this.entries.push(...entries)
+  }
+
+  async search(queryVector: number[], limit = 5): Promise<SearchResult[]> {
+    const results = this.entries
+      .map((entry) => ({
+        entry,
+        similarity: this.cosineSimilarity(queryVector, entry.vector),
+      }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit)
+
+    return results
+  }
+
+  async clear(): Promise<void> {
+    this.entries = []
+  }
+
+  async getCount(): Promise<number> {
+    return this.entries.length
+  }
+
+  private cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0
+
+    let dotProduct = 0
+    let normA = 0
+    let normB = 0
+
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i]
+      normA += a[i] * a[i]
+      normB += b[i] * b[i]
+    }
+
+    if (normA === 0 || normB === 0) return 0
+
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB))
+  }
+}
