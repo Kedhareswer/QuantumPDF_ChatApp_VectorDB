@@ -62,64 +62,159 @@ QuantumPDF ChatApp is an intelligent, open-source web application that revolutio
 
 ## 🏗 System Architecture
 
-\`\`\`mermaid
-graph TD
-    A1[User Interface Layer] --> A2[API Gateway]
-    A2 --> B[Application Layer]
+```mermaid
+flowchart TD
+    subgraph Client[Client Side]
+        UI[User Interface]
+        Browser[Web Browser]
+    end
+
+    subgraph Server[Server Side]
+        API[API Gateway]
+        
+        subgraph "Document Processing"
+            DP1[PDF Upload & Validation]
+            DP2[Text Extraction]
+            DP3[Chunking & Indexing]
+        end
+        
+        subgraph "AI Processing"
+            AI1[Embedding Generation]
+            AI2[Vector Store]
+            AI3[LLM Integration]
+        end
+        
+        subgraph "Query Processing"
+            QP1[Query Understanding]
+            QP2[Context Retrieval]
+            QP3[Response Generation]
+        end
+        
+        DB[(Database)]
+    end
     
-    B --> C1[Document Processing]
-    C1 -->|PyMuPDF| C2[Text Processing]
-    C2 --> C3[Database Layer]
-    
-    B --> D1[AI Processing]
-    D1 -->|Transformers| D2[Vector Store]
-    
-    B --> E1[Query Processing]
-    E1 --> E2[Context Retrieval]
-    E2 --> F1[Response Generation]
-    F1 --> G[Result Presentation]
-\`\`\`
+    UI -->|HTTP/HTTPS| API
+    API --> DP1
+    DP1 --> DP2 --> DP3
+    DP3 --> AI1 --> AI2
+    API --> QP1
+    QP1 --> QP2 --> AI2
+    QP2 --> QP3 --> AI3
+    AI3 --> API
+    DP3 --> DB
+    QP2 --> DB
+```
+
+### Architecture Components
+
+| Component | Technology | Description |
+|-----------|------------|-------------|
+| **Frontend** | Next.js, React, TypeScript | Interactive user interface with responsive design |
+| **API Gateway** | Next.js API Routes | Handles client requests and responses |
+| **Document Processing** | PyMuPDF, Unstructured | Extracts and processes text from PDFs |
+| **Vector Database** | FAISS, Chroma | Stores document embeddings for semantic search |
+| **LLM Integration** | LangChain, OpenAI/Gemini | Processes queries and generates responses |
+| **Caching** | Redis | Improves response times for frequent queries |
 
 ## 🛠 Technology Stack
 
-| Layer | Technologies | Purpose |
-|-------|-------------|----------|
-| **Frontend** | ![TypeScript](https://img.shields.io/badge/-TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white) ![Next.js](https://img.shields.io/badge/-Next.js-000000?style=flat-square&logo=next.js&logoColor=white) ![React](https://img.shields.io/badge/-React-61DAFB?style=flat-square&logo=react&logoColor=black) | User interface and client-side logic |
-| **Backend** | ![Python](https://img.shields.io/badge/-Python-3776AB?style=flat-square&logo=python&logoColor=white) ![Flask](https://img.shields.io/badge/-Flask-000000?style=flat-square&logo=flask&logoColor=white) | Server-side processing and API endpoints |
-| **Database** | ![SQLite](https://img.shields.io/badge/-SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white) | Document metadata and text storage |
-| **AI/ML** | ![PyTorch](https://img.shields.io/badge/-PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white) ![Transformers](https://img.shields.io/badge/-Transformers-FFD700?style=flat-square) | Machine learning and NLP processing |
+### Core Technologies
+
+| Layer | Technologies | Version | Purpose |
+|-------|-------------|---------|----------|
+| **Frontend** | ![TypeScript](https://img.shields.io/badge/TypeScript-4.9.5-3178C6?style=flat-square&logo=typescript&logoColor=white) ![Next.js](https://img.shields.io/badge/Next.js-13.4.0-000000?style=flat-square&logo=next.js&logoColor=white) ![React](https://img.shields.io/badge/React-18.2.0-61DAFB?style=flat-square&logo=react&logoColor=black) | v18+ | Interactive UI with server-side rendering |
+| **Backend** | ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.95.0-009688?style=flat-square&logo=fastapi&logoColor=white) | 3.9+ | High-performance API and business logic |
+| **Vector Database** | ![FAISS](https://img.shields.io/badge/FAISS-1.7.3-FF6B6B?style=flat-square) ![Chroma](https://img.shields.io/badge/Chroma-0.4.0-4CAF50?style=flat-square) | Latest | Efficient similarity search and storage |
+| **AI/ML** | ![PyTorch](https://img.shields.io/badge/PyTorch-2.0.0-EE4C2C?style=flat-square&logo=pytorch&logoColor=white) ![Transformers](https://img.shields.io/badge/Transformers-4.28.0-FFD700?style=flat-square) | Latest | Model inference and embeddings |
+| **Deployment** | ![Docker](https://img.shields.io/badge/Docker-24.0-2496ED?style=flat-square&logo=docker&logoColor=white) ![Kubernetes](https://img.shields.io/badge/Kubernetes-1.26-326CE5?style=flat-square&logo=kubernetes&logoColor=white) | - | Containerization and orchestration |
+
+### Key Dependencies
+
+```yaml
+# Core Backend
+langchain: ^0.0.200  # LLM orchestration
+pymupdf: ^1.22.0     # PDF processing
+sentence-transformers: ^2.2.2  # Embeddings
+faiss-cpu: ^1.7.4    # Vector similarity search
+
+# Frontend
+next: 13.4.0
+react: 18.2.0
+typescript: 4.9.5
+@radix-ui/react-dialog: ^1.0.4
+
+# Development
+pytest: ^7.3.1
+black: ^23.3.0
+mypy: ^1.3.0
+```
 
 ## 📦 Installation
 
 ### Prerequisites
 
-| Requirement | Version | Description |
-|------------|---------|-------------|
-| Python | ≥ 3.8 | For backend services |
-| Node.js | ≥ 16 | For Next.js frontend |
-| RAM | ≥ 8GB | 16GB+ recommended for local LLMs |
-| GPU (Optional) | CUDA-compatible | For accelerated processing |
+| Requirement | Version | Description | Recommended |
+|------------|---------|-------------|-------------|
+| Python | ≥ 3.9 | Backend services | 3.10+ |
+| Node.js | ≥ 18 | Frontend development | 18 LTS |
+| RAM | ≥ 8GB | 16GB+ recommended for local LLMs | 32GB |
+| Storage | 10GB+ | For models and dependencies | SSD recommended |
+| GPU (Optional) | CUDA 11.8 | For accelerated processing | NVIDIA RTX 30xx+ |
 
 ### Quick Start Guide
 
-\`\`\`bash
-# Clone repository
-git clone https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
-cd QuantumPDF_ChatApp
+1. **Clone and setup repository**
+   ```bash
+   # Clone with submodules
+   git clone --recurse-submodules https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
+   cd QuantumPDF_ChatApp
+   ```
 
-# Setup environment
-cp .env.example .env
-python -m venv venv
-source venv/bin/activate  # Windows: .\venv\Scripts\activate
+2. **Setup Python environment**
+   ```bash
+   # Create and activate virtual environment
+   python -m venv .venv
+   # Windows
+   .\.venv\Scripts\activate
+   # Unix/macOS
+   source .venv/bin/activate
+   
+   # Install Python dependencies
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
 
-# Install dependencies
-pip install -r requirements.txt
-npm install
+3. **Setup Node.js environment**
+   ```bash
+   # Install Node.js dependencies
+   npm install
+   
+   # Copy environment variables
+   cp .env.example .env.local
+   # Edit .env.local with your API keys
+   ```
 
-# Start services
-python app.py  # Terminal 1
-npm run dev    # Terminal 2
-\`\`\`
+4. **Start the application**
+   ```bash
+   # Terminal 1: Start backend
+   uvicorn app.main:app --reload
+   
+   # Terminal 2: Start frontend
+   npm run dev
+   ```
+
+5. **Access the application**
+   Open [http://localhost:3000](http://localhost:3000) in your browser
+
+### Docker Setup (Alternative)
+
+```bash
+# Build and start containers
+docker-compose up --build
+
+# View logs
+docker-compose logs -f
+```
 
 ## 🎮 Usage Guide
 
@@ -144,7 +239,7 @@ npm run dev    # Terminal 2
 
 ### Environment Variables
 
-\`\`\`env
+```env
 # API Keys
 OPENAI_API_KEY=your_openai_key
 GEMINI_API_KEY=your_gemini_key
@@ -154,7 +249,7 @@ AIML_API_KEY=your_aiml_key
 WANDB_API_KEY=your_wandb_key
 MAX_TOKENS=500
 CHUNK_OVERLAP=50
-\`\`\`
+```
 
 ### Model Configuration
 
