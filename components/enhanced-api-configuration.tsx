@@ -36,6 +36,7 @@ const PROVIDER_INFO = {
     limitations: ["Paid Service", "Usage Limits", "API Costs"],
     signupUrl: "https://platform.openai.com/api-keys",
     embeddingSupport: true,
+    disabled: false,
   },
   anthropic: {
     name: "Anthropic",
@@ -47,6 +48,7 @@ const PROVIDER_INFO = {
     limitations: ["Paid Service", "No Embeddings", "Limited Availability"],
     signupUrl: "https://console.anthropic.com/",
     embeddingSupport: false,
+    disabled: false,
   },
   aiml: {
     name: "AIML API",
@@ -58,6 +60,7 @@ const PROVIDER_INFO = {
     limitations: ["Paid Service", "Third Party", "API Reliability"],
     signupUrl: "https://aimlapi.com/",
     embeddingSupport: true,
+    disabled: false,
   },
   groq: {
     name: "Groq",
@@ -69,6 +72,7 @@ const PROVIDER_INFO = {
     limitations: ["Limited Models", "No Embeddings", "Rate Limits"],
     signupUrl: "https://console.groq.com/keys",
     embeddingSupport: false,
+    disabled: false,
   },
   openrouter: {
     name: "OpenRouter",
@@ -80,6 +84,7 @@ const PROVIDER_INFO = {
     limitations: ["Third Party", "No Embeddings", "Added Latency"],
     signupUrl: "https://openrouter.ai/keys",
     embeddingSupport: false,
+    disabled: false,
   },
   cohere: {
     name: "Cohere",
@@ -91,6 +96,7 @@ const PROVIDER_INFO = {
     limitations: ["Paid Service", "Limited Models", "API Costs"],
     signupUrl: "https://dashboard.cohere.com/api-keys",
     embeddingSupport: true,
+    disabled: false,
   },
   deepinfra: {
     name: "DeepInfra",
@@ -102,6 +108,7 @@ const PROVIDER_INFO = {
     limitations: ["No Embeddings", "Limited Features", "API Reliability"],
     signupUrl: "https://deepinfra.com/",
     embeddingSupport: false,
+    disabled: false,
   },
   deepseek: {
     name: "DeepSeek",
@@ -113,6 +120,7 @@ const PROVIDER_INFO = {
     limitations: ["No Embeddings", "Limited Availability", "API Costs"],
     signupUrl: "https://platform.deepseek.com/",
     embeddingSupport: false,
+    disabled: false,
   },
   googleai: {
     name: "Google AI Studio",
@@ -124,6 +132,7 @@ const PROVIDER_INFO = {
     limitations: ["No Embeddings", "API Costs", "Limited Models"],
     signupUrl: "https://aistudio.google.com/",
     embeddingSupport: false,
+    disabled: false,
   },
   vertex: {
     name: "Google Vertex AI",
@@ -135,6 +144,7 @@ const PROVIDER_INFO = {
     limitations: ["Complex Setup", "API Costs", "GCP Required"],
     signupUrl: "https://console.cloud.google.com/",
     embeddingSupport: true,
+    disabled: false,
   },
   mistral: {
     name: "Mistral AI",
@@ -146,6 +156,7 @@ const PROVIDER_INFO = {
     limitations: ["No Embeddings", "Limited Models", "API Costs"],
     signupUrl: "https://console.mistral.ai/",
     embeddingSupport: false,
+    disabled: false,
   },
   perplexity: {
     name: "Perplexity",
@@ -157,6 +168,7 @@ const PROVIDER_INFO = {
     limitations: ["No Embeddings", "Limited Features", "API Costs"],
     signupUrl: "https://www.perplexity.ai/settings/api",
     embeddingSupport: false,
+    disabled: false,
   },
   together: {
     name: "Together AI",
@@ -168,6 +180,7 @@ const PROVIDER_INFO = {
     limitations: ["No Embeddings", "Limited Features", "API Costs"],
     signupUrl: "https://api.together.xyz/settings/api-keys",
     embeddingSupport: false,
+    disabled: false,
   },
   xai: {
     name: "xAI (Grok)",
@@ -179,6 +192,7 @@ const PROVIDER_INFO = {
     limitations: ["No Embeddings", "Limited Availability", "API Costs"],
     signupUrl: "https://grok.x.ai/",
     embeddingSupport: false,
+    disabled: false,
   },
   alibaba: {
     name: "Alibaba Cloud",
@@ -190,6 +204,7 @@ const PROVIDER_INFO = {
     limitations: ["No Embeddings", "Limited Global Availability", "API Costs"],
     signupUrl: "https://www.alibabacloud.com/",
     embeddingSupport: false,
+    disabled: false,
   },
   minimax: {
     name: "MiniMax",
@@ -201,6 +216,7 @@ const PROVIDER_INFO = {
     limitations: ["No Embeddings", "Limited Global Availability", "API Costs"],
     signupUrl: "https://api.minimax.chat/",
     embeddingSupport: false,
+    disabled: false,
   },
 }
 

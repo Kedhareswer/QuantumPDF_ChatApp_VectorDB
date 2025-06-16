@@ -30,7 +30,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { ErrorHandler } from "@/components/error-handler"
 import { useAppStore } from "@/lib/store"
 import { RAGEngine } from "@/lib/rag-engine"
-import { createVectorDatabase } from "@/lib/vector-database"
+import { VectorDatabaseClient } from "@/lib/vector-database-client"
 
 export default function QuantumPDFChatbot() {
   const {
@@ -63,7 +63,7 @@ export default function QuantumPDFChatbot() {
   } = useAppStore()
 
   const [ragEngine] = useState(() => new RAGEngine())
-  const [vectorDB, setVectorDB] = useState(() => createVectorDatabase(vectorDBConfig))
+  const [vectorDB, setVectorDB] = useState(() => new VectorDatabaseClient(vectorDBConfig))
 
   // Check if chat is ready
   const isChatReady = modelStatus === "ready" && documents.length > 0
@@ -98,7 +98,7 @@ export default function QuantumPDFChatbot() {
 
   useEffect(() => {
     // Initialize vector database when config changes
-    const newVectorDB = createVectorDatabase(vectorDBConfig)
+    const newVectorDB = new VectorDatabaseClient(vectorDBConfig)
     setVectorDB(newVectorDB)
 
     newVectorDB.initialize().catch((error) => {
@@ -249,8 +249,14 @@ export default function QuantumPDFChatbot() {
 
   const handleSearch = async (query: string, filters: any) => {
     try {
-      // Generate embedding for the query
-      const embedding = (await ragEngine.aiClient?.generateEmbedding(query)) || []
+      // Generate embedding for the query or use empty array if not available
+      let embedding: number[] = []
+      try {
+        // Call the RAG engine to generate embeddings (avoiding direct access to aiClient)
+        embedding = await ragEngine.generateEmbedding(query)
+      } catch (err) {
+        console.error("Could not generate embedding, using fallback:", err)
+      }
 
       // Search using vector database
       const results = await vectorDB.search(query, embedding, {
@@ -287,7 +293,7 @@ export default function QuantumPDFChatbot() {
 
   const handleTestVectorDB = async (config: any): Promise<boolean> => {
     try {
-      const testDB = createVectorDatabase(config)
+      const testDB = new VectorDatabaseClient(config)
       await testDB.initialize()
       return await testDB.testConnection()
     } catch (error) {
@@ -480,7 +486,7 @@ export default function QuantumPDFChatbot() {
                       <h2 className="font-bold text-lg">System Monitor</h2>
                       <SystemStatus
                         modelStatus={modelStatus}
-                        aiConfig={aiConfig}
+                        apiConfig={aiConfig}
                         documents={documents}
                         messages={messages}
                         ragEngine={ragEngine ? ragEngine.getStatus() : {}}
@@ -586,8 +592,10 @@ export default function QuantumPDFChatbot() {
             <ChatInterface
               messages={messages}
               onSendMessage={handleSendMessage}
+              onClearChat={handleClearChat}
+              onNewSession={handleNewSession}
               isProcessing={isProcessing}
-              disabled={!documents.length}
+              disabled={!isChatReady}
             />
           </div>
         </main>

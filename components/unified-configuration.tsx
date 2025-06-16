@@ -235,6 +235,9 @@ const VECTOR_DB_PROVIDERS = {
     limitations: ["No Persistence", "Limited Scale"],
     icon: <Database className="w-4 h-4" />,
     difficulty: "Easy",
+    defaultUrl: "",
+    setupInstructions: "No setup required. Data is stored in memory.",
+    signupUrl: "",
   },
   chroma: {
     name: "ChromaDB",
@@ -261,6 +264,8 @@ const VECTOR_DB_PROVIDERS = {
     signupUrl: "https://www.pinecone.io/",
     icon: <Zap className="w-4 h-4" />,
     difficulty: "Easy",
+    defaultUrl: "",
+    setupInstructions: "Create an account at Pinecone.io and create an index with the dimensions set to match your embedding model",
   },
   weaviate: {
     name: "Weaviate",
@@ -502,18 +507,30 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
       </div>
 
       <Tabs defaultValue="ai" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 border-2 border-black bg-white">
-          <TabsTrigger value="ai" className="data-[state=active]:bg-black data-[state=active]:text-white">
+        <TabsList className="grid w-full grid-cols-3 gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
+          <TabsTrigger 
+            value="ai"
+            className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
+                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2"
+          >
             <Zap className="w-4 h-4 mr-2" />
-            AI Provider
+            <span className="text-sm">AI Provider</span>
           </TabsTrigger>
-          <TabsTrigger value="vectordb" className="data-[state=active]:bg-black data-[state=active]:text-white">
+          <TabsTrigger 
+            value="vectordb"
+            className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
+                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2"
+          >
             <Database className="w-4 h-4 mr-2" />
-            Vector Database
+            <span className="text-sm">Vector Database</span>
           </TabsTrigger>
-          <TabsTrigger value="wandb" className="data-[state=active]:bg-black data-[state=active]:text-white">
+          <TabsTrigger 
+            value="wandb"
+            className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
+                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2"
+          >
             <BarChart3 className="w-4 h-4 mr-2" />
-            Wandb Tracking
+            <span className="text-sm">Wandb Tracking</span>
           </TabsTrigger>
         </TabsList>
 

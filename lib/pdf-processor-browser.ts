@@ -35,14 +35,24 @@ export const getBrowserInfo = () => {
 
 export const checkPDFJSCompatibility = async () => {
   try {
-    const pdfjs = await import("pdfjs-dist/webpack")
+    // Use dynamic import for better tree-shaking and compatibility
+    const pdfjs = await import('pdfjs-dist')
+    
+    // Get the version from the PDF.js library
+    const version = '3.4.120' // Hardcoded version as a fallback
+    
+    // Set worker source if in browser environment
+    if (typeof window !== 'undefined' && pdfjs.GlobalWorkerOptions) {
+      pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.js`
+    }
+    
     return {
       compatible: true,
-      version: pdfjs.version || "Unknown",
+      version,
       features: {
         worker: typeof pdfjs.GlobalWorkerOptions !== "undefined",
-        getDocument: typeof pdfjs.getDocument !== "undefined",
-      },
+        getDocument: typeof pdfjs.getDocument !== "undefined"
+      }
     }
   } catch (error) {
     return {

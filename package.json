@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@chroma-core/default-embed": "^0.1.8",
     "@hookform/resolvers": "^3.9.1",
     "@huggingface/inference": "latest",
     "@pinecone-database/pinecone": "latest",

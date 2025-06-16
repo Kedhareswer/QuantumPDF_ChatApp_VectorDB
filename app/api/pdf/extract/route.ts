@@ -29,8 +29,9 @@ export async function POST(request: NextRequest) {
       const pdfString = new TextDecoder("latin1").decode(uint8Array)
 
       // Extract text between common PDF text markers
-      const textMatches = pdfString.match(/$$([^)]+)$$/g) || []
-      const streamMatches = pdfString.match(/stream\s*(.*?)\s*endstream/gs) || []
+      const textMatches = pdfString.match(/\$\$([^)]+)\$\$/g) || []
+      // Replace /s flag with [\s\S] to match any character including newlines
+      const streamMatches = pdfString.match(/stream\s*([\s\S]*?)\s*endstream/g) || []
 
       // Process parentheses-enclosed text (common in PDFs)
       const parenthesesText = textMatches

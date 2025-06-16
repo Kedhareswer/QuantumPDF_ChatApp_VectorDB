@@ -11,6 +11,7 @@ import { AlertCircle, FileText, Upload, X, CheckCircle, AlertTriangle, RefreshCw
 import { useAppStore } from "@/lib/store"
 import { EnhancedPDFProcessor, type ProcessingProgress } from "@/lib/enhanced-pdf-processor"
 import { PDFProcessorSkeleton } from "@/components/skeleton-loaders"
+import { PDFClientWrapper } from "@/components/pdf-client-wrapper"
 
 interface UnifiedPDFProcessorProps {
   onDocumentProcessed: (document: any) => void
@@ -26,9 +27,10 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const [processingStats, setProcessingStats] = useState<any>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [isInitializing, setIsInitializing] = useState(false)
+  const [pdfProcessorReady, setPdfProcessorReady] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const pdfProcessor = useRef<EnhancedPDFProcessor>(new EnhancedPDFProcessor())
+  const pdfProcessor = useRef<EnhancedPDFProcessor | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -105,25 +107,18 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   }
 
   const handleProcessFile = async () => {
-    if (!file) {
-      setError("Please select a PDF file")
-      addError({
-        type: "error",
-        title: "No File Selected",
-        message: "Please select a PDF file to process",
-      })
-      return
-    }
-
-    setIsProcessing(true)
-    setIsInitializing(true)
-    setError(null)
-    setProgress({ stage: "Initializing enhanced PDF processor...", progress: 0 })
+    if (!file || !pdfProcessor.current) return
 
     try {
-      // Add initialization delay for better UX
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      setIsInitializing(false)
+      setIsProcessing(true)
+      setError(null)
+      setProgress(null)
+      setProcessingStats(null)
+
+      // Check if the processor is ready
+      if (!pdfProcessorReady) {
+        throw new Error("PDF processor is not ready yet. Please wait.")
+      }
 
       const result = await pdfProcessor.current.processFile(file, (progressUpdate) => {
         setProgress(progressUpdate)
@@ -199,7 +194,6 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
       })
     } finally {
       setIsProcessing(false)
-      setIsInitializing(false)
       setProgress({ stage: "Processing complete", progress: 100 })
     }
   }
@@ -213,11 +207,12 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   }
 
   const handleAbortProcessing = () => {
-    pdfProcessor.current.abort()
-    setIsProcessing(false)
-    setIsInitializing(false)
-    setProgress(null)
-    setError("Processing was cancelled by user")
+    if (pdfProcessor.current) {
+      pdfProcessor.current.abort();
+      setIsProcessing(false);
+      setProgress(null);
+      setError("Processing was cancelled by user");
+    }
   }
 
   const getProgressColor = useCallback(() => {
@@ -240,42 +235,50 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
     }
   }
 
+  // Handler for when the PDF processor is ready
+  const handleProcessorReady = useCallback((processor: EnhancedPDFProcessor) => {
+    pdfProcessor.current = processor;
+    setPdfProcessorReady(true);
+  }, []);
+
   // Show skeleton during initialization
   if (isInitializing) {
     return <PDFProcessorSkeleton />
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="border-2 border-black shadow-none">
-        <CardHeader className="border-b border-black">
-          <CardTitle className="text-sm flex items-center space-x-2">
-            <FileText className="w-4 h-4" />
-            <span>ENHANCED PDF PROCESSOR</span>
-            {isProcessing && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+    <div className="w-full max-w-4xl mx-auto">
+      <Card className="shadow-lg">
+        {/* Client-only PDF wrapper to initialize PDF.js */}
+        <PDFClientWrapper onProcessorReady={handleProcessorReady} />
+        
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            PDF Document Processor
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="p-4">
-          {/* File Upload Area */}
-          <div
-            className={`border-2 ${
-              error ? "border-red-500" : file ? "border-green-500" : "border-gray-300"
-            } border-dashed rounded-md p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors ${
-              isProcessing ? "pointer-events-none opacity-50" : ""
-            }`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onClick={() => !isProcessing && fileInputRef.current?.click()}
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".pdf"
-              className="hidden"
-              disabled={isProcessing}
-            />
+      <CardContent className="p-4">
+        {/* File Upload Area */}
+        <div
+          className={`border-2 ${
+            error ? "border-red-500" : file ? "border-green-500" : "border-gray-300"
+          } border-dashed rounded-md p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors ${
+            isProcessing ? "pointer-events-none opacity-50" : ""
+          }`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onClick={() => !isProcessing && fileInputRef.current?.click()}
+        >
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".pdf"
+            className="hidden"
+            disabled={isProcessing}
+          />
 
             {file ? (
               <div className="flex flex-col items-center space-y-3">
@@ -479,7 +482,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
           <AlertTriangle className="w-3 h-3 mr-1 text-yellow-500" />
           Comprehensive error handling and recovery
         </p>
-      </div>
-    </div>
+        </div>
+  </div>
   )
 }

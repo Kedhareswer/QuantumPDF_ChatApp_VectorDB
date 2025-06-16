@@ -57,9 +57,11 @@ export abstract class VectorDatabase {
   }
 }
 
+import type { Pinecone as PineconeClient, Index as PineconeIndex } from "@pinecone-database/pinecone";
+
 class PineconeDatabase extends VectorDatabase {
-  private pinecone: any
-  private index: any
+  private pinecone!: PineconeClient
+  private index!: PineconeIndex
 
   async initialize(): Promise<void> {
     try {
@@ -105,7 +107,8 @@ class PineconeDatabase extends VectorDatabase {
       this.isInitialized = true
     } catch (error) {
       console.error("Failed to initialize Pinecone:", error)
-      throw new Error(`Pinecone initialization failed: ${error.message}`)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new Error(`Pinecone initialization failed: ${errorMessage}`)
     }
   }
 
@@ -212,8 +215,10 @@ class PineconeDatabase extends VectorDatabase {
   }
 }
 
+import type { WeaviateClient } from "weaviate-ts-client";
+
 class WeaviateDatabase extends VectorDatabase {
-  private client: any
+  private client!: WeaviateClient
 
   async initialize(): Promise<void> {
     try {
@@ -222,7 +227,7 @@ class WeaviateDatabase extends VectorDatabase {
       this.client = weaviate.default.client({
         scheme: "https",
         host: this.config.url || "localhost:8080",
-        apiKey: this.config.apiKey ? weaviate.default.apiKey(this.config.apiKey) : undefined,
+        ...(this.config.apiKey ? { headers: { Authorization: `Bearer ${this.config.apiKey}` } } : {}),
       })
 
       // Create schema if it doesn't exist
@@ -373,9 +378,11 @@ class WeaviateDatabase extends VectorDatabase {
   }
 }
 
+import type { ChromaClient, Collection as ChromaCollection } from "chromadb";
+
 class ChromaDatabase extends VectorDatabase {
-  private client: any
-  private collection: any
+  private client!: ChromaClient
+  private collection!: ChromaCollection
 
   async initialize(): Promise<void> {
     try {
@@ -407,8 +414,9 @@ class ChromaDatabase extends VectorDatabase {
       this.isInitialized = true
     } catch (error) {
       console.error("Failed to initialize Chroma:", error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
       throw new Error(
-        `Chroma initialization failed: ${error.message}. Make sure ChromaDB server is running at ${this.config.url || "http://localhost:8000"}`,
+        `Chroma initialization failed: ${errorMessage}. Make sure ChromaDB server is running at ${this.config.url || "http://localhost:8000"}`,
       )
     }
   }
@@ -494,13 +502,29 @@ class ChromaDatabase extends VectorDatabase {
 
     try {
       const collectionName = this.config.collection || "documents"
-      await this.client.deleteCollection({ name: collectionName })
+      // Get the collection first, then delete it if it exists
+      try {
+        const collection = await this.client.getCollection({
+          name: collectionName
+        })
+        if (collection) {
+          // Delete all documents by passing an empty where filter
+          await collection.delete({
+            where: {}
+          })
+        }
+      } catch (err) {
+        // Collection might not exist, which is fine for a clear operation
+        console.log(`Collection ${collectionName} might not exist or couldn't be deleted.`)
+      }
 
       // Recreate the collection
       this.collection = await this.client.createCollection({
-        name: collectionName,
-        metadata: { description: "PDF document chunks" },
+        name: collectionName
       })
+      
+      // Note: metadata handling would typically go here, but the current type definitions
+      // don't expose a metadata property directly
     } catch (error) {
       console.error("Failed to clear Chroma collection:", error)
       throw error
@@ -623,7 +647,7 @@ export interface VectorEntry {
   text: string
 }
 
-export interface SearchResult {
+export interface BrowserSearchResult {
   entry: VectorEntry
   similarity: number
 }
@@ -639,7 +663,7 @@ export class BrowserVectorDatabase {
     this.entries.push(...entries)
   }
 
-  async search(queryVector: number[], limit = 5): Promise<SearchResult[]> {
+  async search(queryVector: number[], limit = 5): Promise<BrowserSearchResult[]> {
     const results = this.entries
       .map((entry) => ({
         entry,

@@ -10,70 +10,80 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  webpack: (config, { isServer }) => {
-    // Completely disable Node.js polyfills for client-side
-    if (!isServer) {
-      config.resolve.fallback = {
+  // Combine all experimental features into one property
+  experimental: {
+    serverComponentsExternalPackages: ['onnxruntime-node', 'chromadb', '@huggingface/transformers'],
+    serverActions: true,
+  },
+  // Configure page extensions
+  pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
+  // Configure webpack
+  webpack: (config, { isServer, dev }) => {
+    // Fixes npm packages that depend on `node:` protocol
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      // Disable Node.js specific modules in the browser
+      ...(!isServer && {
         fs: false,
-        path: false,
-        stream: false,
-        console: false,
-        util: false,
-        os: false,
-        crypto: false,
-        http: false,
-        https: false,
-        zlib: false,
         net: false,
         tls: false,
-        child_process: false,
-        buffer: false,
-        process: false,
-        vm: false,
-        url: false,
-        querystring: false,
-        events: false,
-        string_decoder: false,
-        punycode: false,
-        assert: false,
-        constants: false,
-        domain: false,
-        timers: false,
-        worker_threads: false,
-        cluster: false,
-        dgram: false,
         dns: false,
-        readline: false,
-        repl: false,
-        tty: false,
-        v8: false,
-        inspector: false,
-        async_hooks: false,
-        perf_hooks: false,
-        trace_events: false,
-        wasi: false,
-      }
-    }
+        child_process: false,
+        worker_threads: false,
+      }),
+    };
 
-    // Exclude problematic modules from bundling
-    config.externals = config.externals || []
+    // Exclude problematic modules from client-side bundle
     if (!isServer) {
-      config.externals.push({
-        'node:fs': 'commonjs node:fs',
-        'node:path': 'commonjs node:path',
-        'node:stream': 'commonjs node:stream',
-        'node:crypto': 'commonjs node:crypto',
-        'node:util': 'commonjs node:util',
-        'node:os': 'commonjs node:os',
-        'node:buffer': 'commonjs node:buffer',
-        'node:process': 'commonjs node:process',
-        'node:url': 'commonjs node:url',
-        'node:events': 'commonjs node:events',
-      })
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        // Replace server-only modules with empty mocks
+        'onnxruntime-node': './src/utils/empty-module.js',
+        'chromadb': './src/utils/empty-module.js',
+        '@huggingface/transformers': './src/utils/empty-module.js',
+        '@chroma-core/default-embed': './src/utils/empty-module.js',
+        // Don't alias PDF.js, but ensure it's properly loaded
+        // 'pdfjs-dist': 'pdfjs-dist/legacy/build/pdf',
+      };
+
+      // Add more externals if needed
+      config.externals = [...(config.externals || []), {
+        'onnxruntime-node': 'commonjs onnxruntime-node',
+        'chromadb': 'commonjs chromadb',
+        '@huggingface/transformers': 'commonjs @huggingface/transformers',
+        '@chroma-core/default-embed': 'commonjs @chroma-core/default-embed',
+      }];
     }
 
-    return config
-  },
-}
+    // Configure PDF.js worker
+    config.module.rules.push({
+      test: /\.worker\.(js|ts|tsx)$/,
+      use: [
+        {
+          loader: 'worker-loader',
+          options: {
+            publicPath: '/_next/',
+          },
+        },
+      ],
+    });
 
-export default nextConfig
+    return config;
+  },
+  // Configure CORS for development
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-Requested-With, Accept, Content-Type, Authorization' },
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;

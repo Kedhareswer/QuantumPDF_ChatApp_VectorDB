@@ -1,4 +1,4 @@
-import { OCRProcessor } from "./ocr-processor"
+import { BrowserOCRProcessor } from "./ocr-processor"
 import { AdvancedChunker, type TextChunk } from "./advanced-chunking"
 
 export interface PDFProcessingResult {
@@ -37,11 +37,25 @@ export class AdvancedPDFProcessor {
   private pdfjsLib: any = null
   private isInitialized = false
   private workerInitialized = false
-  private ocrProcessor: OCRProcessor
+  private ocrProcessor: BrowserOCRProcessor
   private chunker: AdvancedChunker
+  private onOCRProgress?: (progress: { progress: number; page?: number; totalPages?: number }) => void
+  private options: {
+    useOCR?: boolean;
+    ocrLanguage?: string;
+    // Add other options as needed
+  } = {
+    useOCR: false,
+    ocrLanguage: 'eng'
+  };
 
-  constructor() {
-    this.ocrProcessor = new OCRProcessor()
+  constructor(options?: {
+    useOCR?: boolean;
+    ocrLanguage?: string;
+    // Add other options as needed
+  }) {
+    this.options = { ...this.options, ...options };
+    this.ocrProcessor = new BrowserOCRProcessor()
     this.chunker = new AdvancedChunker({
       maxChunkSize: 800,
       minChunkSize: 200,
@@ -144,7 +158,12 @@ export class AdvancedPDFProcessor {
     }
   }
 
-  async processFile(file: File, onProgress?: (progress: ProcessingProgress) => void): Promise<PDFProcessingResult> {
+  async processFile(
+    file: File, 
+    onProgress?: (progress: ProcessingProgress) => void, 
+    onOCRProgress?: (ocrProgress: { progress: number; page?: number; totalPages?: number }) => void
+  ): Promise<PDFProcessingResult> {
+    this.onOCRProgress = onOCRProgress;
     const startTime = Date.now()
 
     try {
@@ -498,8 +517,10 @@ export class AdvancedPDFProcessor {
     })
 
     try {
-      // Check if OCR is available before proceeding
-      if (!this.ocrProcessor.isAvailable()) {
+      // Check if OCR should be used
+      const useOCR = this.ocrProcessor && (this.options?.useOCR || false)
+
+      if (!useOCR) {
         throw new Error("OCR processor not available - Tesseract.js initialization failed")
       }
 
@@ -539,13 +560,12 @@ export class AdvancedPDFProcessor {
 
           await page.render({ canvasContext: context, viewport }).promise
 
-          const ocrResult = await this.ocrProcessor.processWithPreprocessing(canvas, (ocrProgress) => {
-            onProgress?.({
-              stage: `OCR processing page ${pageNum}: ${ocrProgress.stage}`,
-              progress: 20 + (pageNum / pdf.numPages) * 60 + ocrProgress.progress * 0.1,
-              method: "OCR",
-              details: ocrProgress.details,
-            })
+          const ocrResult = await this.ocrProcessor.processCanvas(canvas)
+          // Update progress after OCR processing
+          this.onOCRProgress?.({
+            progress: 100,
+            page: pageNum,
+            totalPages: pdf.numPages
           })
 
           if (ocrResult.text.trim() && !ocrResult.text.includes("[OCR processing failed")) {

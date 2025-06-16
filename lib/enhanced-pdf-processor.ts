@@ -1,4 +1,19 @@
+'use client';
+
 import { AdvancedChunker, type TextChunk } from "./advanced-chunking"
+
+// Import from our new client-only wrapper
+import { loadPdfJs, getPdfJs, isPdfJsLoaded } from "./pdf-client"
+
+// Define a type for the PDF.js library to avoid TypeScript errors
+type PDFJSLib = {
+  getDocument: any;
+  GlobalWorkerOptions: any;
+  version: string;
+  PDFWorker: any;
+  AnnotationLayer: any;
+  renderTextLayer: any;
+}
 
 export interface PDFProcessingResult {
   text: string
@@ -35,12 +50,14 @@ export interface ProcessingProgress {
 }
 
 export class EnhancedPDFProcessor {
-  private pdfjsLib: any = null
+  // Will be populated when initialized
+  private pdfjsLib: PDFJSLib | null = null
   private isInitialized = false
   private chunker: AdvancedChunker
   private processingAborted = false
 
   constructor() {
+    // PDF.js will be initialized lazily when needed
     this.chunker = new AdvancedChunker({
       maxChunkSize: 1000,
       minChunkSize: 200,
@@ -50,73 +67,60 @@ export class EnhancedPDFProcessor {
     })
   }
 
-  private async initializePDFJS(): Promise<void> {
-    if (this.isInitialized) return
+  private async initializePDFJS(): Promise<boolean> {
+    if (this.isInitialized) return true;
 
     try {
-      console.log("Initializing Enhanced PDF.js library...")
-
-      // Import specific version to match worker
-      const pdfjs = await import("pdfjs-dist/legacy/build/pdf")
-      this.pdfjsLib = pdfjs
-
-      if (!this.pdfjsLib?.getDocument) {
-        throw new Error("PDF.js getDocument method not available")
+      console.log("Initializing Enhanced PDF.js library...");
+      
+      // Load the PDF.js library
+      const pdfjsLib = await loadPdfJs();
+      if (!pdfjsLib) {
+        throw new Error("Failed to load PDF.js library");
       }
-
-      console.log(`PDF.js version: ${this.pdfjsLib.version || "unknown"}`)
-
-      // Configure worker to match API version
-      await this.configureWorker()
-
-      this.isInitialized = true
-      console.log("Enhanced PDF.js initialized successfully")
+      
+      this.pdfjsLib = pdfjsLib;
+      this.isInitialized = true;
+      
+      console.log("PDF.js library initialized successfully");
+      return true;
     } catch (error) {
-      console.error("Failed to initialize Enhanced PDF.js:", error)
-      throw new Error(
-        `Enhanced PDF.js initialization failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-      )
+      console.error("Failed to initialize PDF processor:", error);
+      this.isInitialized = false;
+      return false;
     }
   }
 
-  private async configureWorker(): Promise<void> {
-    if (typeof window === "undefined" || !this.pdfjsLib?.GlobalWorkerOptions) {
-      console.log("Worker configuration not available")
-      return
-    }
-
-    try {
-      // Set worker source to empty string to disable worker
-      this.pdfjsLib.GlobalWorkerOptions.workerSrc = ""
-      console.log("Worker source set to empty string (disabled)")
-    } catch (error) {
-      console.warn("Worker configuration failed:", error)
-    }
+  public async initialize(): Promise<boolean> {
+    return await this.initializePDFJS();
   }
 
   async processFile(file: File, onProgress?: (progress: ProcessingProgress) => void): Promise<PDFProcessingResult> {
-    const startTime = Date.now()
-    this.processingAborted = false
-    const warnings: string[] = []
+    const startTime = Date.now();
+    this.processingAborted = false;
+    const warnings: string[] = [];
 
     try {
-      this.validateFile(file)
+      this.validateFile(file);
 
       onProgress?.({
         stage: "Initializing enhanced PDF processor...",
         progress: 2,
         method: "Enhanced PDF.js",
-      })
+      });
 
-      await this.initializePDFJS()
+      const isInitialized = await this.initializePDFJS();
+      if (!isInitialized) {
+        throw new Error("Failed to initialize PDF processor");
+      }
 
       onProgress?.({
         stage: "Loading PDF document...",
         progress: 5,
         method: "Enhanced PDF.js",
-      })
+      });
 
-      const result = await this.processWithEnhancedMethod(file, onProgress, startTime, warnings)
+      const result = await this.processWithEnhancedMethod(file, onProgress, startTime, warnings);
 
       return {
         ...result,
@@ -209,8 +213,11 @@ export class EnhancedPDFProcessor {
     file: File,
     onProgress?: (progress: ProcessingProgress) => void,
     startTime: number = Date.now(),
-    warnings: string[] = [],
+    warnings: string[] = []
   ): Promise<PDFProcessingResult> {
+    if (!this.pdfjsLib) {
+      throw new Error("PDF.js library not initialized");
+    }
     onProgress?.({
       stage: "Reading file data...",
       progress: 10,
@@ -391,119 +398,117 @@ export class EnhancedPDFProcessor {
           await new Promise((resolve) => setTimeout(resolve, 50))
         }
       } catch (pageError) {
-        failedPages++
-        const errorMsg = pageError instanceof Error ? pageError.message : "Unknown error"
-        console.warn(`Error processing page ${pageNum}:`, pageError)
-        warnings.push(`Page ${pageNum}: Processing error - ${errorMsg}`)
-        fullText += `\n\n=== Page ${pageNum} (Error) ===\n[Page processing failed: ${errorMsg}]`
+        failedPages++;
+        const errorMsg = pageError instanceof Error ? pageError.message : "Unknown error";
+        console.warn(`Error processing page ${pageNum}:`, pageError);
+        warnings.push(`Page ${pageNum}: Processing error - ${errorMsg}`);
+        fullText += `\n\n=== Page ${pageNum} (Error) ===\n[Page processing failed: ${errorMsg}]`;
       }
     }
 
-    const averageConfidence = confidenceCount > 0 ? totalConfidence / confidenceCount : 0
+    const averageConfidence = confidenceCount > 0 ? totalConfidence / confidenceCount : 0;
 
     return {
-      fullText,
+      fullText: fullText.trim(),
       successfulPages,
       failedPages,
       confidence: averageConfidence,
-    }
+    };
   }
 
   private async extractPageTextEnhanced(
     page: any,
-    pageNum: number,
-  ): Promise<{
-    text: string
-    confidence: number
-  }> {
+    pageNum: number
+  ): Promise<{ text: string; confidence: number }> {
     try {
       const textContent = await page.getTextContent({
         normalizeWhitespace: true,
         disableCombineTextItems: false,
-      })
+      });
 
       if (!textContent?.items || textContent.items.length === 0) {
-        return { text: "", confidence: 0 }
+        return { text: "", confidence: 0 };
       }
 
-      const formattedText = this.formatTextContentEnhanced(textContent)
-      const confidence = this.calculateTextConfidence(formattedText, textContent.items.length)
+      const formattedText = this.formatTextContentEnhanced(textContent);
+      const confidence = this.calculateTextConfidence(formattedText, textContent.items.length);
 
       return {
         text: formattedText,
         confidence,
-      }
+      };
     } catch (error) {
-      console.warn(`Enhanced text extraction failed for page ${pageNum}:`, error)
-      return { text: "", confidence: 0 }
+      console.warn(`Enhanced text extraction failed for page ${pageNum}:`, error);
+      return { text: "", confidence: 0 };
     }
   }
 
   private formatTextContentEnhanced(textContent: any): string {
-    if (!textContent?.items) return ""
+    if (!textContent?.items) return "";
 
-    let text = ""
-    let lastY = null
-    const lines: Array<{ y: number; text: string }> = []
+    let text = "";
+    let lastY: number | null = null;
+    const lines: Array<{ y: number; text: string }> = [];
 
     for (const item of textContent.items) {
-      if (!item.str || item.str.trim() === "") continue
+      if (!item.str || item.str.trim() === "") continue;
 
-      const currentY = Math.round(item.transform[5])
+      const currentY = Math.round(item.transform[5]);
 
       if (lastY === null || Math.abs(currentY - lastY) > 3) {
-        lines.push({ y: currentY, text: item.str })
+        lines.push({ y: currentY, text: item.str });
       } else {
-        const lastLine = lines[lines.length - 1]
-        lastLine.text += " " + item.str
+        const lastLine = lines[lines.length - 1];
+        lastLine.text += " " + item.str;
       }
 
-      lastY = currentY
+      lastY = currentY;
     }
 
-    lines.sort((a, b) => b.y - a.y)
+    lines.sort((a, b) => b.y - a.y);
 
-    let previousY = null
+    let previousY: number | null = null;
     for (const line of lines) {
-      const lineText = line.text.trim()
-      if (!lineText) continue
+      const lineText = line.text.trim();
+      if (!lineText) continue;
 
       if (previousY !== null && previousY - line.y > 20) {
-        text += "\n\n"
+        text += "\n\n";
       } else if (text && !text.endsWith("\n")) {
-        text += "\n"
+        text += "\n";
       }
 
-      text += lineText
-      previousY = line.y
+      text += lineText;
+      previousY = line.y;
     }
 
     return text
       .replace(/\s+/g, " ")
       .replace(/\n\s*\n\s*\n/g, "\n\n")
-      .trim()
+      .trim();
   }
 
+  
   private calculateTextConfidence(text: string, itemCount: number): number {
-    if (!text || text.length === 0) return 0
+    if (!text || text.length === 0) return 0;
 
-    let confidence = 50
+    let confidence = 50;
 
-    if (text.length > 100) confidence += 20
-    if (text.length > 500) confidence += 10
+    if (text.length > 100) confidence += 20;
+    if (text.length > 500) confidence += 10;
 
-    const wordCount = text.split(/\s+/).length
-    if (wordCount > 20) confidence += 10
-    if (wordCount > 100) confidence += 5
+    const wordCount = text.split(/\s+/).length;
+    if (wordCount > 20) confidence += 10;
+    if (wordCount > 100) confidence += 5;
 
-    if (text.includes("\n\n")) confidence += 5
-    if (/[.!?]/.test(text)) confidence += 5
-    if (/[A-Z][a-z]/.test(text)) confidence += 5
+    if (text.includes("\n\n")) confidence += 5;
+    if (/[.!?]/.test(text)) confidence += 5;
+    if (/[A-Z][a-z]/.test(text)) confidence += 5;
 
-    if (text.length < 50) confidence -= 20
-    if (!/[a-zA-Z]/.test(text)) confidence -= 30
+    if (text.length < 50) confidence -= 20;
+    if (!/[a-zA-Z]/.test(text)) confidence -= 30;
 
-    return Math.max(0, Math.min(100, confidence))
+    return Math.max(0, Math.min(100, confidence));
   }
 
   private determineExtractionQuality(
@@ -512,27 +517,28 @@ export class EnhancedPDFProcessor {
     text: string,
     confidence: number,
   ): "high" | "medium" | "low" {
-    const successRate = successfulPages / totalPages
-    const textDensity = text.length / totalPages
-    const avgConfidence = confidence
+    const successRate = successfulPages / totalPages;
+    const textDensity = text.length / totalPages;
+    const avgConfidence = confidence;
 
-    if (successRate >= 0.9 && textDensity > 800 && avgConfidence > 80) return "high"
-    if (successRate >= 0.7 && textDensity > 400 && avgConfidence > 60) return "medium"
-    return "low"
+    if (successRate >= 0.9 && textDensity > 800 && avgConfidence > 80) return "high";
+    if (successRate >= 0.7 && textDensity > 400 && avgConfidence > 60) return "medium";
+    return "low";
   }
 
   private detectLanguage(text: string): string {
-    const sample = text.slice(0, 2000).toLowerCase()
-
-    const languages = {
+    if (!text) return 'en';
+    
+    const sample = text.slice(0, 2000).toLowerCase();
+    const languages: Record<string, string[]> = {
       english: ["the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "is", "are"],
       spanish: ["el", "la", "de", "que", "y", "en", "un", "es", "se", "no"],
       french: ["le", "de", "et", "à", "un", "il", "être", "en", "avoir", "que"],
       german: ["der", "die", "und", "in", "den", "von", "zu", "das", "mit", "sich"],
-    }
+    };
 
-    let bestMatch = "Unknown"
-    let bestScore = 0
+    let bestMatch = "english";
+    let bestScore = 0;
 
     for (const [language, words] of Object.entries(languages)) {
       const score = words.reduce((count, word) => {

@@ -65,7 +65,7 @@ interface Document {
   metadata?: any
 }
 
-interface WandbConfig {
+export interface WandbClientConfig {
   enabled: boolean
   apiKey: string
   projectName: string
@@ -78,13 +78,13 @@ export class WandbTracker {
   private sessionId: string
   private interactions: InteractionLog[] = []
   private runId: string | null = null
-  private config: WandbConfig | null = null
+  private config: WandbClientConfig | null = null
 
   constructor() {
     this.sessionId = `session_${Date.now()}`
   }
 
-  async initialize(config?: WandbConfig) {
+  async initialize(config?: WandbClientConfig) {
     try {
       console.log("Initializing Wandb tracking...")
 
@@ -358,7 +358,7 @@ export class WandbTracker {
   }
 
   // Get current configuration
-  getConfig(): WandbConfig | null {
+  getConfig(): WandbClientConfig | null {
     return this.config
   }
 }

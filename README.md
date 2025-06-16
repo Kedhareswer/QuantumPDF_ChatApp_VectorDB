@@ -2,10 +2,6 @@
 
 # 🌌 QuantumPDF ChatApp
 
-<p align="center">
-  <img src="public/placeholder-logo.svg" width="160" alt="QuantumPDF ChatApp Logo">
-</p>
-
 [![GitHub Stars](https://img.shields.io/github/stars/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/fork)
 [![License](https://img.shields.io/github/license/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](LICENSE)
@@ -206,15 +202,6 @@ mypy: ^1.3.0
 5. **Access the application**
    Open [http://localhost:3000](http://localhost:3000) in your browser
 
-### Docker Setup (Alternative)
-
-```bash
-# Build and start containers
-docker-compose up --build
-
-# View logs
-docker-compose logs -f
-```
 
 ## 🎮 Usage Guide
 

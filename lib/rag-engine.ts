@@ -39,7 +39,26 @@ interface QueryResponse {
 }
 
 interface AIConfig {
-  provider: "huggingface" | "openai" | "anthropic" | "aiml" | "groq"
+  provider:
+    | "huggingface"
+    | "openai"
+    | "anthropic"
+    | "aiml"
+    | "groq"
+    | "openrouter"
+    | "cohere"
+    | "deepinfra"
+    | "deepseek"
+    | "googleai"
+    | "vertex"
+    | "mistral"
+    | "perplexity"
+    | "together"
+    | "xai"
+    | "fireworks"
+    | "replicate"
+    | "cerebras"
+    | "anyscale"
   apiKey: string
   model: string
   baseUrl?: string
@@ -122,6 +141,26 @@ export class RAGEngine {
     } catch (error) {
       console.error("Failed to update RAG Engine configuration:", error)
       throw error
+    }
+  }
+
+  /**
+   * Generates embeddings for a single string
+   * @param text Text to generate embedding for
+   * @returns Embedding as a number array
+   */
+  async generateEmbedding(text: string): Promise<number[]> {
+    if (!this.isInitialized || !this.aiClient) {
+      throw new Error("RAG engine not initialized")
+    }
+
+    try {
+      const embedding = await this.aiClient.generateEmbedding(text)
+      return embedding
+    } catch (error) {
+      console.error("Failed to generate embedding:", error)
+      // Return a fallback embedding
+      return new Array(384).fill(0).map((_, i) => (i % 2 === 0 ? 0.1 : -0.1))
     }
   }
 

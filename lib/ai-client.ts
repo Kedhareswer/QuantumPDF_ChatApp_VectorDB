@@ -36,6 +36,9 @@ interface ChatMessage {
 
 export class AIClient {
   private config: AIConfig
+  private text: string = ''
+  private prompt: string = ''
+  private context: string = ''
 
   constructor(config: AIConfig) {
     this.config = config
@@ -78,7 +81,7 @@ export class AIClient {
     } catch (directError) {
       console.error(
         `AIClient: Error in direct text embedding with provider ${this.config.provider}:`,
-        directError.message,
+        directError instanceof Error ? directError.message : String(directError),
       )
       console.log("AIClient: Attempting final hash-fallback for text...")
       return this.generateFallbackEmbedding(text)
@@ -104,7 +107,7 @@ export class AIClient {
       } catch (error) {
         console.error(
           `AIClient:generateEmbeddings - Error for text at index ${i} ('${text.substring(0, 30)}...'):`,
-          error.message,
+          error instanceof Error ? error.message : String(error),
         )
         embeddings.push(this.generateFallbackEmbedding(text))
       }
@@ -140,8 +143,9 @@ export class AIClient {
       }
       return result.embedding
     } catch (error) {
-      console.error("AIClient: Error calling backend HuggingFace embedding API:", error.message)
-      throw new Error(`Hugging Face embedding via backend failed: ${error.message}`)
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("AIClient: Error calling backend HuggingFace embedding API:", errorMessage)
+      throw new Error(`Hugging Face embedding via backend failed: ${errorMessage}`)
     }
   }
 
@@ -181,7 +185,7 @@ export class AIClient {
       }
       return result.data[0].embedding
     } catch (error) {
-      throw new Error(`OpenAI text embedding API request failed: ${error.message}`)
+      throw new Error(`OpenAI text embedding API request failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -294,7 +298,7 @@ export class AIClient {
       }
 
       // Validate embedding values
-      if (!embedding.every((val) => typeof val === "number" && !isNaN(val))) {
+      if (!embedding.every((val: number) => typeof val === "number" && !isNaN(val))) {
         throw new Error("Invalid embedding values from AIML API")
       }
 
@@ -443,7 +447,7 @@ export class AIClient {
 
       return result.data[0].embedding
     } catch (error) {
-      console.error(`Fireworks embedding generation failed: ${error.message}`)
+      console.error(`Fireworks embedding generation failed: ${error instanceof Error ? error.message : String(error)}`)
       return this.generateFallbackEmbedding(text)
     }
   }
@@ -484,7 +488,7 @@ export class AIClient {
 
       return result.data[0].embedding
     } catch (error) {
-      console.error(`DeepInfra embedding generation failed: ${error.message}`)
+      console.error(`DeepInfra embedding generation failed: ${error instanceof Error ? error.message : String(error)}`)
       return this.generateFallbackEmbedding(text)
     }
   }
@@ -525,7 +529,7 @@ export class AIClient {
 
       return result.data[0].embedding
     } catch (error) {
-      console.error(`Together embedding generation failed: ${error.message}`)
+      console.error(`Together embedding generation failed: ${error instanceof Error ? error.message : String(error)}`)
       return this.generateFallbackEmbedding(text)
     }
   }
@@ -565,14 +569,18 @@ export class AIClient {
       }
 
       return result.embedding.values
-    } catch (error) {
-      console.error(`Google AI embedding generation failed: ${error.message}`)
+    } catch (error: any) {
+      if (error instanceof Error) {
+        console.error(`Vertex AI embedding generation failed: ${error.message}`)
+      } else {
+        console.error(`Vertex AI embedding generation failed: ${String(error)}`)
+      }
       return this.generateFallbackEmbedding(text)
     }
   }
 
   // --- generateText and testConnection methods remain largely the same ---
-  // ... (they use this.config.provider and this.config.apiKey as before)
+  // They use this.config.provider and this.config.apiKey as before
   async generateText(messages: ChatMessage[]): Promise<string> {
     try {
       if (!Array.isArray(messages) || messages.length === 0) {
@@ -687,19 +695,31 @@ export class AIClient {
   }
 
   private generateFallbackEmbedding(text: string): number[] {
-    console.log("AIClient: Generating final fallback hash-based embedding for text length:", text.length)
-    const words = text
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((word) => word.length > 0)
-    const dimension = 384
-    const embedding = new Array(dimension).fill(0)
-    words.forEach((word, index) => {
-      const hash = this.simpleHash(word)
-      embedding[hash % dimension] += 1 / (index + 1)
-    })
-    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0))
-    return embedding.map((val) => (magnitude > 0 ? val / magnitude : 0))
+    console.warn("Using fallback embedding generation")
+    try {
+      if (!text || typeof text !== 'string' || text.trim().length === 0) {
+        throw new Error("Invalid input text for fallback embedding");
+      }
+      
+      const dimension = 384;
+      const embedding = new Array<number>(dimension).fill(0);
+      
+      // Simple hash-based embedding for fallback
+      for (let i = 0; i < text.length; i++) {
+        const charCode = text.charCodeAt(i);
+        const index = charCode % dimension;
+        embedding[index] += charCode / 128;
+      }
+      
+      const magnitude = Math.sqrt(embedding.reduce((sum: number, val: number) => sum + val * val, 0));
+      return magnitude > 0 
+        ? embedding.map((val: number) => val / magnitude)
+        : embedding;
+    } catch (error) {
+      console.error("Error in fallback embedding generation:", error);
+      // Return a zero vector of the expected dimension
+      return new Array(384).fill(0);
+    }
   }
 
   private simpleHash(str: string): number {
@@ -712,11 +732,13 @@ export class AIClient {
     return Math.abs(hash)
   }
 
-  cosineSimilarity(a: number[], b: number[]): number {
-    if (a.length !== b.length) return 0
-    const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0)
-    const magnitudeA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0))
-    const magnitudeB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0))
+  public cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) {
+      throw new Error("Vectors must have the same dimension")
+    }
+    const dotProduct = a.reduce((sum: number, val: number, i: number) => sum + val * b[i], 0)
+    const magnitudeA = Math.sqrt(a.reduce((sum: number, val: number) => sum + val * val, 0))
+    const magnitudeB = Math.sqrt(b.reduce((sum: number, val: number) => sum + val * val, 0))
     if (magnitudeA === 0 || magnitudeB === 0) return 0
     return dotProduct / (magnitudeA * magnitudeB)
   }
@@ -727,8 +749,8 @@ export class AIClient {
     const prompt = this.formatMessagesForHuggingFace(messages)
     const context = messages.find((m) => m.role === "system")?.content || ""
     const requestBody: { prompt: string; context: string; model: string; apiKey?: string } = {
-      prompt: prompt,
-      context: context,
+      prompt,
+      context,
       model: this.config.model,
     }
     if (this.config.provider === "huggingface" && this.config.apiKey) {
@@ -1105,11 +1127,32 @@ export class AIClient {
     return `Placeholder response from ${provider} for: "${userMessage.substring(0, 50)}..."`
   }
   private async simpleGenerateEmbedding(provider: string, text: string): Promise<number[]> {
-    console.log(`Generating text embedding with ${provider} (simplified hash) for: ${text.substring(0, 30)}`)
-    const d = 384,
-      e = new Array(d).fill(0)
-    for (let i = 0; i < text.length; i++) e[text.charCodeAt(i) % d] += text.charCodeAt(i) / 128
-    const m = Math.sqrt(e.reduce((s, v) => s + v * v, 0))
-    return e.map((v) => (m > 0 ? v / m : 0))
+    try {
+      if (!text || typeof text !== 'string' || text.trim().length === 0) {
+        throw new Error(`Invalid text input for ${provider} embedding`);
+      }
+      
+      console.log(`Generating text embedding with ${provider} (simplified hash) for: ${text.substring(0, 30)}`)
+      const dimension = 384;
+      const embedding = new Array<number>(dimension).fill(0);
+      
+      // Simple hash-based embedding
+      for (let i = 0; i < text.length; i++) {
+        const charCode = text.charCodeAt(i);
+        const index = charCode % dimension;
+        embedding[index] += charCode / 128;
+      }
+      
+      // Calculate magnitude and normalize the vector
+      const magnitude = Math.sqrt(embedding.reduce((sum: number, val: number) => sum + val * val, 0));
+      return magnitude > 0 
+        ? embedding.map((val: number) => val / magnitude)
+        : embedding;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Error in ${provider} simple embedding generation:`, errorMessage);
+      // Return a zero vector of the expected dimension
+      return new Array(384).fill(0);
+    }
   }
 }

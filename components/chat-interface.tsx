@@ -14,6 +14,10 @@ import {
   Copy,
   ThumbsUp,
   ThumbsDown,
+  Trash2,
+  RotateCcw,
+  Download,
+  Share,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -37,6 +41,8 @@ interface Message {
 interface ChatInterfaceProps {
   messages: Message[]
   onSendMessage: (content: string) => void
+  onClearChat: () => void
+  onNewSession: () => void
   isProcessing: boolean
   disabled: boolean
 }
@@ -48,7 +54,14 @@ const SUGGESTED_QUESTIONS = [
   "How do the documents relate to each other?",
 ]
 
-export function ChatInterface({ messages, onSendMessage, isProcessing, disabled }: ChatInterfaceProps) {
+export function ChatInterface({ 
+  messages, 
+  onSendMessage, 
+  onClearChat, 
+  onNewSession, 
+  isProcessing, 
+  disabled 
+}: ChatInterfaceProps) {
   const [input, setInput] = useState("")
   const [isExpanded, setIsExpanded] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -112,6 +125,55 @@ export function ChatInterface({ messages, onSendMessage, isProcessing, disabled 
 
   return (
     <div className="flex flex-col h-full bg-white">
+      {/* Chat Header with Controls */}
+      <div className="border-b border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Chat</h2>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClearChat}
+              disabled={disabled || messages.length === 0}
+              title="Clear Chat"
+              className="text-gray-500 hover:text-black"
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onNewSession}
+              disabled={disabled}
+              title="New Session"
+              className="text-gray-500 hover:text-black"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {}}
+              disabled={disabled}
+              title="Export Chat"
+              className="text-gray-500 hover:text-black"
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {}}
+              disabled={disabled}
+              title="Share"
+              className="text-gray-500 hover:text-black"
+            >
+              <Share className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+      
       {/* Skip to content link for accessibility */}
       <a href="#chat-messages" className="skip-to-content">
         Skip to chat messages

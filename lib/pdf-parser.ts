@@ -1,4 +1,4 @@
-// Browser-compatible PDF parser without Node.js dependencies
+import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 
 export interface PDFParseResult {
   text: string
@@ -86,8 +86,8 @@ export class PDFParser {
     try {
       console.log("Initializing PDF.js...")
 
-      // Use webpack-compatible import
-      const pdfjs = await import("pdfjs-dist/webpack")
+      // Use dynamic import for PDF.js
+      const pdfjs = await import('pdfjs-dist')
       this.pdfjsLib = pdfjs
 
       console.log("PDF.js loaded, version:", this.pdfjsLib.version)
@@ -164,14 +164,14 @@ export class PDFParser {
           const textContent = await page.getTextContent()
 
           const pageText = textContent.items
-            .map((item: any) => {
-              if (item && typeof item === "object" && "str" in item) {
-                return item.str
+            .map((item: unknown) => {
+              if (item && typeof item === 'object' && 'str' in item) {
+                return (item as { str: string }).str;
               }
-              return ""
+              return '';
             })
-            .filter((text) => text.trim().length > 0)
-            .join(" ")
+            .filter((text: string) => text.trim().length > 0)
+            .join(' ')
 
           if (pageText.trim()) {
             fullText += `\n\n--- Page ${pageNum} ---\n${pageText}`
