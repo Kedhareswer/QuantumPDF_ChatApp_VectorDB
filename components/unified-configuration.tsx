@@ -507,30 +507,30 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
       </div>
 
       <Tabs defaultValue="ai" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
+        <TabsList className="grid w-full grid-cols-3 gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
           <TabsTrigger 
             value="ai"
             className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
-                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2"
+                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
           >
-            <Zap className="w-4 h-4 mr-2" />
-            <span className="text-sm">AI Provider</span>
+            <Zap className="w-4 h-4 mr-1" />
+            <span className="text-sm truncate">AI Provider</span>
           </TabsTrigger>
           <TabsTrigger 
             value="vectordb"
             className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
-                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2"
+                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
           >
-            <Database className="w-4 h-4 mr-2" />
-            <span className="text-sm">Vector Database</span>
+            <Database className="w-4 h-4 mr-1" />
+            <span className="text-sm truncate">Vector DB</span>
           </TabsTrigger>
           <TabsTrigger 
             value="wandb"
             className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
-                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2"
+                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
           >
-            <BarChart3 className="w-4 h-4 mr-2" />
-            <span className="text-sm">Wandb Tracking</span>
+            <BarChart3 className="w-4 h-4 mr-1" />
+            <span className="text-sm truncate">Wandb</span>
           </TabsTrigger>
         </TabsList>
 

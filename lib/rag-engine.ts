@@ -262,152 +262,19 @@ export class RAGEngine {
     }
   }
 
-  async query(question: string): Promise<QueryResponse> {
-    console.log("RAG query started:", question)
-
-    // Create default response structure
-    const defaultResponse: QueryResponse = {
-      answer: "I apologize, but I couldn't process your question properly.",
-      sources: [],
-      relevanceScore: 0,
-      retrievedChunks: [],
-    }
-
-    try {
-      if (!this.isInitialized || !this.aiClient) {
-        console.error("RAG engine not initialized")
-        return {
-          ...defaultResponse,
-          answer: "The system is not properly initialized. Please configure your AI provider and try again.",
-        }
-      }
-
-      if (!question || typeof question !== "string" || question.trim().length === 0) {
-        console.error("Invalid question provided")
-        return {
-          ...defaultResponse,
-          answer: "Please provide a valid question.",
-        }
-      }
-
-      if (!this.documents || !Array.isArray(this.documents) || this.documents.length === 0) {
-        console.error("No documents available")
-        return {
-          ...defaultResponse,
-          answer: "No documents are available for querying. Please upload some documents first.",
-        }
-      }
-
-      console.log(`Processing query: ${question}`)
-
-      // Generate embedding for the question
-      let questionEmbedding: number[] = []
-      try {
-        questionEmbedding = await this.aiClient.generateEmbedding(question)
-        if (!questionEmbedding || !Array.isArray(questionEmbedding) || questionEmbedding.length === 0) {
-          throw new Error("Failed to generate question embedding")
-        }
-      } catch (embeddingError) {
-        console.error("Error generating question embedding:", embeddingError)
-        return {
-          ...defaultResponse,
-          answer: "I had trouble processing your question. Please try rephrasing it or check your API configuration.",
-        }
-      }
-
-      // Find relevant chunks
-      let relevantChunks: Array<{ content: string; source: string; similarity: number }> = []
-      try {
-        relevantChunks = this.findRelevantChunks(questionEmbedding, 3)
-        console.log(`Found ${relevantChunks.length} relevant chunks`)
-      } catch (retrievalError) {
-        console.error("Error finding relevant chunks:", retrievalError)
-        return {
-          ...defaultResponse,
-          answer: "I had trouble searching through the documents. Please try again.",
-        }
-      }
-
-      if (relevantChunks.length === 0) {
-        return {
-          ...defaultResponse,
-          answer:
-            "I couldn't find relevant information in the uploaded documents to answer your question. Please try rephrasing your question or upload more relevant documents.",
-        }
-      }
-
-      // Generate answer using the relevant context
-      let answer = ""
-      try {
-        const context = relevantChunks.map((chunk) => chunk.content).join("\n\n")
-
-        const messages = [
-          {
-            role: "system" as const,
-            content:
-              "You are a helpful assistant that answers questions based on the provided context. If the context doesn't contain relevant information, say so clearly.",
-          },
-          {
-            role: "user" as const,
-            content: `Context: ${context}\n\nQuestion: ${question}\n\nAnswer:`,
-          },
-        ]
-
-        answer = await this.aiClient.generateText(messages)
-
-        if (!answer || typeof answer !== "string" || answer.trim().length === 0) {
-          answer =
-            "I found relevant information but had trouble generating a response. Please try rephrasing your question."
-        }
-      } catch (generationError) {
-        console.error("Error generating answer:", generationError)
-        answer = "I found relevant information but had trouble generating a response. Please try again."
-      }
-
-      // Calculate relevance score
-      const relevanceScore = this.calculateRelevanceScore(relevantChunks)
-
-      // Prepare sources
-      const sources = relevantChunks
-        .map((chunk) => chunk.source)
-        .filter((source) => source && typeof source === "string")
-
-      const response: QueryResponse = {
-        answer: answer.trim(),
-        sources,
-        relevanceScore,
-        retrievedChunks: relevantChunks,
-      }
-
-      console.log("RAG query completed successfully")
-      return response
-    } catch (error) {
-      console.error("Error processing query:", error)
-      return {
-        ...defaultResponse,
-        answer:
-          "I encountered an unexpected error while processing your question. Please try again or check your API configuration.",
-      }
-    }
-  }
-
   private findRelevantChunks(questionEmbedding: number[], topK: number) {
-    const allChunks: Array<{
-      content: string
-      source: string
-      similarity: number
-    }> = []
+    const allChunks: Array<{ content: string; source: string; similarity: number }> = [];
 
     try {
       // Validate inputs
       if (!Array.isArray(questionEmbedding) || questionEmbedding.length === 0) {
-        console.error("Invalid question embedding")
-        return []
+        console.error("Invalid question embedding");
+        return [];
       }
 
       if (!Array.isArray(this.documents) || this.documents.length === 0) {
-        console.error("No documents available")
-        return []
+        console.error("No documents available");
+        return [];
       }
 
       // Calculate similarity for all chunks
@@ -415,61 +282,172 @@ export class RAGEngine {
         try {
           // Validate document structure
           if (!doc || !doc.chunks || !doc.embeddings) {
-            console.warn(`Document ${docIndex} has invalid structure`)
-            return
+            console.warn(`Document ${docIndex} has invalid structure`);
+            return;
           }
 
           if (!Array.isArray(doc.chunks) || !Array.isArray(doc.embeddings)) {
-            console.warn(`Document ${docIndex} has invalid chunks or embeddings`)
-            return
+            console.warn(`Document ${docIndex} has invalid chunks or embeddings`);
+            return;
           }
 
           if (doc.chunks.length !== doc.embeddings.length) {
-            console.warn(`Document ${docIndex} has mismatched chunks and embeddings`)
-            return
+            console.warn(`Document ${docIndex} has mismatched chunks and embeddings`);
+            return;
           }
 
           doc.chunks.forEach((chunk, chunkIndex) => {
             try {
-              const chunkEmbedding = doc.embeddings[chunkIndex]
+              const chunkEmbedding = doc.embeddings[chunkIndex];
 
               // Validate chunk embedding
               if (!Array.isArray(chunkEmbedding) || chunkEmbedding.length === 0) {
-                console.warn(`Invalid embedding for chunk ${chunkIndex} in document ${docIndex}`)
-                return
+                console.warn(`Invalid embedding for chunk ${chunkIndex} in document ${docIndex}`);
+                return;
               }
 
               if (chunkEmbedding.length !== questionEmbedding.length) {
-                console.warn(`Embedding dimension mismatch for chunk ${chunkIndex} in document ${docIndex}`)
-                return
+                console.warn(`Embedding dimension mismatch for chunk ${chunkIndex} in document ${docIndex}`);
+                return;
               }
 
-              const similarity = this.aiClient!.cosineSimilarity(questionEmbedding, chunkEmbedding)
+              const similarity = this.aiClient!.cosineSimilarity(questionEmbedding, chunkEmbedding);
 
               if (typeof similarity === "number" && !isNaN(similarity)) {
                 allChunks.push({
                   content: chunk || "",
                   source: `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`,
                   similarity,
-                })
+                });
               }
             } catch (chunkError) {
-              console.warn(`Error processing chunk ${chunkIndex} in document ${docIndex}:`, chunkError)
+              console.warn(`Error processing chunk ${chunkIndex} in document ${docIndex}:`, chunkError);
             }
-          })
+          });
         } catch (docError) {
-          console.warn(`Error processing document ${docIndex}:`, docError)
+          console.warn(`Error processing document ${docIndex}:`, docError);
         }
-      })
+      });
 
       // Sort by similarity and return top K
       return allChunks
         .sort((a, b) => b.similarity - a.similarity)
         .slice(0, topK)
-        .filter((chunk) => chunk.similarity > 0.1) // Filter out very low similarity chunks
+        .filter((chunk) => chunk.similarity > 0.1); // Filter out very low similarity chunks
     } catch (error) {
-      console.error("Error finding relevant chunks:", error)
-      return []
+      console.error("Error finding relevant chunks:", error);
+      return [];
+    }
+  }
+
+  async query(question: string): Promise<QueryResponse> {
+    console.log("RAG query started:", question);
+
+    // Create default response structure
+    const defaultResponse: QueryResponse = {
+      answer: "I apologize, but I couldn't process your question properly.",
+      sources: [],
+      relevanceScore: 0,
+      retrievedChunks: [],
+    };
+
+    try {
+      // Validate system state
+      if (!this.isInitialized || !this.aiClient) {
+        console.error("RAG engine not initialized");
+        return {
+          ...defaultResponse,
+          answer: "The system is not properly initialized. Please configure your AI provider and try again.",
+        };
+      }
+
+      // Validate input
+      if (!question || typeof question !== "string" || question.trim().length === 0) {
+        console.error("Invalid question provided");
+        return {
+          ...defaultResponse,
+          answer: "Please provide a valid question.",
+        };
+      }
+
+      // Check if this is a certificate-related query
+      const isCertificateQuery = /(name|award|certificate|recipient|awarded to)/i.test(question);
+      
+      // Generate embedding for the question
+      const questionEmbedding = await this.aiClient.generateEmbedding(question);
+      if (!questionEmbedding || !Array.isArray(questionEmbedding) || questionEmbedding.length === 0) {
+        throw new Error("Failed to generate question embedding");
+      }
+
+      // Find relevant chunks - use more chunks for certificate queries
+      const chunkLimit = isCertificateQuery ? 10 : 5;
+      let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit);
+
+      if (relevantChunks.length === 0) {
+        return {
+          ...defaultResponse,
+          answer: "I couldn't find any relevant information to answer your question.",
+        };
+      }
+
+      // For certificate queries, prioritize chunks with certificate-related content
+      if (isCertificateQuery) {
+        relevantChunks = relevantChunks.sort((a, b) => {
+          const aIsCert = /(certificate|award|awarded to)/i.test(a.content);
+          const bIsCert = /(certificate|award|awarded to)/i.test(b.content);
+          
+          if (aIsCert && !bIsCert) return -1;
+          if (!aIsCert && bIsCert) return 1;
+          return b.similarity - a.similarity; // Fall back to similarity if both are certs or both are not
+        });
+      }
+
+      // Prepare context with special handling for certificate content
+      const context = relevantChunks.map(chunk => chunk.content).join("\n\n");
+      
+      // Create a more focused prompt for certificate queries
+      const systemPrompt = isCertificateQuery 
+        ? `You are an assistant that extracts information from certificates. Focus on the following details:
+           - Names of recipients
+           - Award/certificate types
+           - Dates
+           - Issuing organizations
+           - Any other relevant details
+           
+           If the information is not present in the context, clearly state that.`
+        : "You are a helpful assistant that answers questions based on the provided context. If the context doesn't contain relevant information, say so clearly.";
+
+      // Generate answer using AI
+      const messages = [
+        { role: "system" as const, content: systemPrompt },
+        { 
+          role: "user" as const, 
+          content: `Context: ${context}\n\nQuestion: ${question}\n\nAnswer:` 
+        },
+      ];
+
+      const answer = await this.aiClient.generateText(messages);
+
+      // Calculate relevance score
+      const relevanceScore = this.calculateRelevanceScore(relevantChunks);
+
+      // Prepare sources
+      const sources = Array.from(
+        new Set(relevantChunks.map(chunk => chunk.source))
+      ).filter(Boolean) as string[];
+
+      return {
+        answer: answer.trim(),
+        sources,
+        relevanceScore,
+        retrievedChunks: relevantChunks,
+      };
+    } catch (error) {
+      console.error("Error in RAG query:", error);
+      return {
+        ...defaultResponse,
+        answer: "I encountered an error while processing your request. Please try again later.",
+      };
     }
   }
 

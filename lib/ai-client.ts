@@ -887,22 +887,71 @@ export class AIClient {
   }
 
   private async generateGroqText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://api.groq.com/openai/v1"
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
-    })
-    if (!response.ok) throw new Error(`Groq API error: ${response.statusText}`)
-    const result = await response.json()
-    return result.choices[0].message.content
+    try {
+      const baseUrl = this.config.baseUrl || "https://api.groq.com/openai/v1"
+      const apiKey = this.config.apiKey.trim()
+      
+      if (!apiKey) {
+        throw new Error("Groq API key is not configured")
+      }
+
+      console.log("Sending request to Groq API with model:", this.config.model)
+      
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { 
+          "Authorization": `Bearer ${apiKey}`, 
+          "Content-Type": "application/json",
+          "User-Agent": "QuantumPDF-ChatApp/1.0"
+        },
+        body: JSON.stringify({ 
+          model: this.config.model, 
+          messages: messages,
+          max_tokens: 2048, // Increased from 500 to allow for longer responses
+          temperature: 0.7,
+          top_p: 1,
+          stream: false
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("Groq API error:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        })
+        throw new Error(`Groq API error (${response.status}): ${response.statusText} - ${errorText}`)
+      }
+      
+      const result = await response.json()
+      
+      if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+        console.error("Invalid response format from Groq API:", result)
+        throw new Error("Invalid response format from Groq API")
+      }
+      
+      return result.choices[0].message.content
+    } catch (error) {
+      console.error("Error in generateGroqText:", error)
+      throw error // Re-throw to be handled by the caller
+    }
   }
 
   private async testGroqConnection(): Promise<boolean> {
     try {
-      await this.generateGroqText([{ role: "user", content: "test" }])
+      const testMessage = { role: "user" as const, content: "This is a test connection message." }
+      const response = await this.generateGroqText([testMessage])
+      
+      if (!response || typeof response !== 'string') {
+        console.error("Invalid response from Groq API during connection test")
+        return false
+      }
+      
+      console.log("Successfully connected to Groq API")
       return true
-    } catch {
+    } catch (error) {
+      console.error("Groq connection test failed:", error)
       return false
     }
   }
@@ -951,15 +1000,61 @@ export class AIClient {
 
   // New provider implementations
   private async generateFireworksText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://api.fireworks.ai/inference/v1"
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
-    })
-    if (!response.ok) throw new Error(`Fireworks API error: ${response.statusText}`)
-    const result = await response.json()
-    return result.choices[0].message.content
+    try {
+      // Fireworks follows an OpenAI-compatible endpoint but sometimes requires /v1 instead of /inference/v1
+      const defaultBase = "https://api.fireworks.ai/inference/v1"
+      const baseUrl = this.config.baseUrl?.trim() || defaultBase
+      const apiKey = this.config.apiKey.trim()
+
+      if (!apiKey) throw new Error("Fireworks API key is not configured")
+
+      const url = `${baseUrl}/chat/completions`
+      console.log("Sending request to Fireworks API:", url)
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "User-Agent": "QuantumPDF-ChatApp/1.0"
+        },
+        body: JSON.stringify({
+          model: this.config.model,
+          messages: messages,
+          max_tokens: 2048,
+          temperature: 0.7,
+          top_p: 1,
+          stream: false
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("Fireworks API error:", {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        })
+
+        // Common error: 404 Not Found when the model name is invalid or not hosted.
+        if (response.status === 404) {
+          throw new Error(`Fireworks model not found or endpoint invalid (404). Check the model name '${this.config.model}' and base URL '${baseUrl}'.`)
+        }
+
+        throw new Error(`Fireworks API error (${response.status}): ${response.statusText} - ${errorText}`)
+      }
+
+      const result = await response.json()
+      if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+        console.error("Invalid response format from Fireworks API:", result)
+        throw new Error("Invalid response format from Fireworks API")
+      }
+
+      return result.choices[0].message.content
+    } catch (error) {
+      console.error("Error in generateFireworksText:", error)
+      throw error
+    }
   }
 
   private async testFireworksConnection(): Promise<boolean> {

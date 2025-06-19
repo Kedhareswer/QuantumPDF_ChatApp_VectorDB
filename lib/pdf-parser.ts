@@ -232,53 +232,70 @@ export class PDFParser {
     }
   }
 
-  chunkText(text: string, chunkSize = 500, overlap = 50): string[] {
+  chunkText(text: string, chunkSize = 1000, overlap = 100): string[] {
     if (!text || text.trim().length === 0) {
-      return []
+      return [];
     }
 
-    // Clean up the text first
-    const cleanText = text.replace(/\s+/g, " ").replace(/\n+/g, "\n").trim()
+    // Preserve page boundaries
+    const pageSections = text.split(/--- Page \d+ ---/);
+    const chunks: string[] = [];
 
-    const sentences = cleanText.split(/[.!?]+/).filter((s) => s.trim().length > 0)
-    const chunks: string[] = []
-    let currentChunk = ""
+    for (const section of pageSections) {
+      const cleanSection = section.trim();
+      if (!cleanSection) continue;
 
-    for (const sentence of sentences) {
-      const trimmedSentence = sentence.trim()
-      if (!trimmedSentence) continue
-
-      const potentialChunk = currentChunk + (currentChunk ? ". " : "") + trimmedSentence
-
-      if (potentialChunk.length <= chunkSize) {
-        currentChunk = potentialChunk
-      } else {
-        if (currentChunk) {
-          chunks.push(currentChunk + ".")
-        }
-        currentChunk = trimmedSentence
+      // For certificate content, we want to keep sections together
+      if (cleanSection.includes('certificate') || cleanSection.includes('awarded to')) {
+        chunks.push(cleanSection);
+        continue;
       }
-    }
 
-    if (currentChunk) {
-      chunks.push(currentChunk + ".")
+      // Process regular text with improved chunking
+      const words = cleanSection.split(/\s+/);
+      let currentChunk: string[] = [];
+      let currentLength = 0;
+
+      for (const word of words) {
+        const wordLength = word.length + 1; // +1 for space
+        
+        if (currentLength + wordLength > chunkSize && currentChunk.length > 0) {
+          chunks.push(currentChunk.join(' '));
+          currentChunk = [];
+          currentLength = 0;
+        }
+        
+        currentChunk.push(word);
+        currentLength += wordLength;
+      }
+
+      // Add the last chunk if there's anything left
+      if (currentChunk.length > 0) {
+        chunks.push(currentChunk.join(' '));
+      }
     }
 
     // Add overlap between chunks
-    const overlappedChunks: string[] = []
-    for (let i = 0; i < chunks.length; i++) {
-      let chunk = chunks[i]
-
-      // Add overlap from previous chunk
-      if (i > 0 && overlap > 0) {
-        const prevChunk = chunks[i - 1]
-        const overlapText = prevChunk.slice(-overlap)
-        chunk = overlapText + " " + chunk
+    if (overlap > 0 && chunks.length > 1) {
+      const overlappedChunks: string[] = [chunks[0]];
+      
+      for (let i = 1; i < chunks.length; i++) {
+        const prevChunk = chunks[i - 1];
+        const currentChunk = chunks[i];
+        
+        // Get the last 'overlap' characters from previous chunk
+        const overlapText = prevChunk
+          .split('\n')
+          .filter(Boolean)
+          .slice(-2) // Take last 2 lines for context
+          .join('\n');
+          
+        overlappedChunks.push(`${overlapText}\n${currentChunk}`);
       }
-
-      overlappedChunks.push(chunk)
+      
+      return overlappedChunks;
     }
 
-    return overlappedChunks.filter((chunk) => chunk.trim().length > 0)
+    return chunks.filter(chunk => chunk.trim().length > 0);
   }
 }
