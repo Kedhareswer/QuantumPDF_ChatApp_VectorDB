@@ -79,10 +79,10 @@ export class RAGEngine {
     try {
       if (config) {
               // RAGEngine: Initializing with new config
-        
-        // Create AI client with the provided configuration
-        this.aiClient = new AIClient(config)
-        this.currentConfig = config
+
+      // Create AI client with the provided configuration
+      this.aiClient = new AIClient(config)
+      this.currentConfig = config
       }
       
       if (!this.aiClient) {
@@ -186,9 +186,9 @@ export class RAGEngine {
    */
   async generateEmbedding(text: string): Promise<number[]> {
     try {
-      if (!this.isInitialized || !this.aiClient) {
-        throw new Error("RAG engine not initialized")
-      }
+    if (!this.isInitialized || !this.aiClient) {
+      throw new Error("RAG engine not initialized")
+    }
 
       if (!text || typeof text !== 'string' || text.trim().length === 0) {
         throw new Error("Invalid text input for embedding generation")

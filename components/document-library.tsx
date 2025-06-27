@@ -152,9 +152,9 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
       }
 
       const blob = new Blob([content], { type: mimeType })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
       a.download = filename
       document.body.appendChild(a)
       a.click()
@@ -266,10 +266,10 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
       const a = document.createElement('a')
       a.href = url
       a.download = `quantum-pdf-library-${new Date().toISOString().split('T')[0]}.md`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
 
       toast({
         title: "Library Exported",
@@ -434,7 +434,7 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
                   <div className="flex items-center justify-center mb-1">
                     <FileText className="w-4 h-4 text-blue-600 mr-1" />
                     <span className="text-xs font-bold text-blue-600 uppercase">DOCS</span>
-                  </div>
+                </div>
                   <div className="text-xl font-bold text-blue-700 text-center">{documents.length}</div>
                   <div className="text-xs text-blue-600 text-center">Files</div>
                 </div>
@@ -561,14 +561,14 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
                     {/* Enhanced Download Options */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-black text-black hover:bg-black hover:text-white btn-enhanced"
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-black text-black hover:bg-black hover:text-white btn-enhanced"
                           aria-label={`Download options for ${doc.name}`}
-                        >
-                          <Download className="w-4 h-4" />
-                        </Button>
+                    >
+                      <Download className="w-4 h-4" />
+                    </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuLabel>Export Options</DropdownMenuLabel>

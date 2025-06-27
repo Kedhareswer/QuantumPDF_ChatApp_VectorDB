@@ -89,7 +89,7 @@ export default function QuantumPDFChatbot() {
     const initializeRAG = async () => {
       try {
         if (aiConfig.apiKey && aiConfig.provider) {
-          setModelStatus("loading")
+      setModelStatus("loading")
           console.log("Initializing RAG engine with config:", {
             provider: aiConfig.provider,
             model: aiConfig.model,
@@ -104,11 +104,11 @@ export default function QuantumPDFChatbot() {
           console.log("RAG engine waiting for configuration")
         }
       } catch (error) {
-        console.error("Failed to initialize RAG engine:", error)
-        setModelStatus("error")
+          console.error("Failed to initialize RAG engine:", error)
+          setModelStatus("error")
         
-        addError({
-          type: "error",
+          addError({
+            type: "error",
           title: "RAG Engine Error",
           message: error instanceof Error ? error.message : "Failed to initialize RAG engine",
         })
@@ -385,48 +385,36 @@ export default function QuantumPDFChatbot() {
         {/* Error Handler */}
         <ErrorHandler errors={errors} onDismiss={removeError} />
 
-        {/* Enhanced mobile menu button */}
+        {/* Mobile menu button */}
         <Button
           variant="outline"
           size="sm"
-          className="fixed top-4 left-4 z-50 lg:hidden border-2 border-black bg-white hover:bg-black hover:text-white touch-target safe-area-top"
+          className="fixed top-4 left-4 z-50 lg:hidden border-2 border-black bg-white hover:bg-black hover:text-white"
           onClick={() => setSidebarOpen(!sidebarOpen)}
           aria-label="Toggle menu"
         >
-          {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {sidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
         </Button>
 
-        {/* Enhanced responsive sidebar */}
+        {/* Sidebar */}
         <div
           className={`
           fixed lg:relative inset-y-0 left-0 z-40 
-          ${sidebarCollapsed ? "w-16" : "w-full sm:w-80"} 
+          ${sidebarCollapsed ? "w-16" : "w-80"} 
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
           transition-all duration-300 ease-in-out
-          bg-white border-r-2 border-black safe-area-left
-          max-h-screen overflow-hidden
+          bg-white border-r-2 border-black
         `}
         >
-          {/* Enhanced sidebar header */}
-          <div className="mobile-container lg:p-6 border-b-2 border-black bg-black text-white safe-area-top">
+          {/* Sidebar Header */}
+          <div className="p-6 border-b-2 border-black bg-black text-white">
             <div className="flex items-center justify-between">
               {!sidebarCollapsed && (
                 <div className="space-y-1">
-                  <h1 className="font-bold text-lg lg:text-xl">QUANTUM PDF</h1>
-                  <p className="text-xs lg:text-sm opacity-90">AI Document Analysis</p>
+                  <h1 className="font-bold text-xl">QUANTUM PDF</h1>
+                  <p className="text-sm opacity-90">AI Document Analysis</p>
                 </div>
               )}
-              {/* Mobile close button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="lg:hidden text-white hover:bg-white/20 touch-target"
-                onClick={() => setSidebarOpen(false)}
-                aria-label="Close menu"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-              {/* Desktop collapse button */}
               <Button
                 variant="ghost"
                 size="sm"
@@ -443,93 +431,86 @@ export default function QuantumPDFChatbot() {
           <div className="flex-1 overflow-hidden">
             {!sidebarCollapsed ? (
               <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col">
-                <div className="mobile-tabs">
-                  <TabsList className="grid w-full grid-cols-5 mobile-container lg:m-4 border-2 border-black bg-white min-h-[48px]">
-                    <TabsTrigger
-                      value="chat"
-                      className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center justify-center space-x-1 touch-target text-xs lg:text-sm"
-                    >
-                      <MessageSquare className="w-4 h-4" />
-                      <span className="hidden sm:inline">Chat</span>
-                      {getTabBadgeCount("chat") !== null && getTabBadgeCount("chat")! > 0 && (
-                        <Badge variant="secondary" className="ml-1 text-xs hidden lg:inline-flex">
-                          {getTabBadgeCount("chat")}
-                        </Badge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="documents"
-                      className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center justify-center space-x-1 touch-target text-xs lg:text-sm"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span className="hidden sm:inline">Docs</span>
-                      {getTabBadgeCount("documents") !== null && getTabBadgeCount("documents")! > 0 && (
-                        <Badge variant="secondary" className="ml-1 text-xs hidden lg:inline-flex">
-                          {getTabBadgeCount("documents")}
-                        </Badge>
-                      )}
-                    </TabsTrigger>
-                    <TabsTrigger value="search" className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center justify-center touch-target text-xs lg:text-sm">
-                      <Search className="w-4 h-4" />
-                      <span className="hidden sm:inline">Search</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="settings" className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center justify-center touch-target text-xs lg:text-sm">
-                      <Settings className="w-4 h-4" />
-                      <span className="hidden sm:inline">Config</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="status" className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center justify-center touch-target text-xs lg:text-sm">
-                      <Activity className="w-4 h-4" />
-                      <span className="hidden sm:inline">Status</span>
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
+                <TabsList className="grid w-full grid-cols-5 m-4 border-2 border-black bg-white">
+                  <TabsTrigger
+                    value="chat"
+                    className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center space-x-1"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    {getTabBadgeCount("chat") !== null && getTabBadgeCount("chat")! > 0 && (
+                      <Badge variant="secondary" className="ml-1 text-xs">
+                        {getTabBadgeCount("chat")}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="documents"
+                    className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center space-x-1"
+                  >
+                    <FileText className="w-4 h-4" />
+                    {getTabBadgeCount("documents") !== null && getTabBadgeCount("documents")! > 0 && (
+                      <Badge variant="secondary" className="ml-1 text-xs">
+                        {getTabBadgeCount("documents")}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="search" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                    <Search className="w-4 h-4" />
+                  </TabsTrigger>
+                  <TabsTrigger value="settings" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                    <Settings className="w-4 h-4" />
+                  </TabsTrigger>
+                  <TabsTrigger value="status" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                    <Activity className="w-4 h-4" />
+                  </TabsTrigger>
+                </TabsList>
 
                 <div className="flex-1 overflow-hidden">
                   <TabsContent value="chat" className="h-full m-0 p-4 space-y-4">
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h2 className="font-bold text-lg">Chat Controls</h2>
-                          <QuickActions
-                            onClearChat={handleClearChat}
-                            onNewSession={handleNewSession}
-                            disabled={!isChatReady}
-                          />
-                        </div>
-
-                        <Card className="border-2 border-black shadow-none">
-                          <CardHeader className="border-b border-black">
-                            <CardTitle className="text-sm flex items-center space-x-2">
-                              <Brain className="w-4 h-4" />
-                              <span>CHAT STATUS</span>
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="p-4 space-y-3">
-                            <div className="flex items-center justify-between text-sm">
-                              <span>AI Model:</span>
-                              <Badge variant={modelStatus === "ready" ? "default" : "secondary"}>
-                                {modelStatus.toUpperCase()}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                              <span>Documents:</span>
-                              <span className="font-bold">{documents.length}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                              <span>Messages:</span>
-                              <span className="font-bold">{messages.length}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                              <span>Vector DB:</span>
-                              <Badge variant="outline" className="text-xs">
-                                {vectorDBConfig.provider.toUpperCase()}
-                              </Badge>
-                            </div>
-                          </CardContent>
-                        </Card>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h2 className="font-bold text-lg">Chat Controls</h2>
+                        <QuickActions
+                          onClearChat={handleClearChat}
+                          onNewSession={handleNewSession}
+                          disabled={!isChatReady}
+                        />
                       </div>
+
+                      <Card className="border-2 border-black shadow-none">
+                        <CardHeader className="border-b border-black">
+                          <CardTitle className="text-sm flex items-center space-x-2">
+                            <Brain className="w-4 h-4" />
+                            <span>CHAT STATUS</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span>AI Model:</span>
+                            <Badge variant={modelStatus === "ready" ? "default" : "secondary"}>
+                              {modelStatus.toUpperCase()}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Documents:</span>
+                            <span className="font-bold">{documents.length}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Messages:</span>
+                            <span className="font-bold">{messages.length}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Vector DB:</span>
+                            <Badge variant="outline" className="text-xs">
+                              {vectorDBConfig.provider.toUpperCase()}
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
                     )}
                   </TabsContent>
 
@@ -537,12 +518,12 @@ export default function QuantumPDFChatbot() {
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
-                      <div className="space-y-4">
-                        <h2 className="font-bold text-lg">Document Management</h2>
-                        <UnifiedPDFProcessor onDocumentProcessed={handleDocumentUpload} />
-                        <Separator className="bg-black" />
-                        <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />
-                      </div>
+                    <div className="space-y-4">
+                      <h2 className="font-bold text-lg">Document Management</h2>
+                      <UnifiedPDFProcessor onDocumentProcessed={handleDocumentUpload} />
+                      <Separator className="bg-black" />
+                      <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />
+                    </div>
                     )}
                   </TabsContent>
 
@@ -550,10 +531,10 @@ export default function QuantumPDFChatbot() {
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
-                      <div className="space-y-4">
-                        <h2 className="font-bold text-lg">Document Search</h2>
-                        <EnhancedSearch onSearch={handleSearch} documents={documents} />
-                      </div>
+                    <div className="space-y-4">
+                      <h2 className="font-bold text-lg">Document Search</h2>
+                      <EnhancedSearch onSearch={handleSearch} documents={documents} />
+                    </div>
                     )}
                   </TabsContent>
 
@@ -561,11 +542,11 @@ export default function QuantumPDFChatbot() {
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
-                      <UnifiedConfiguration
-                        onTestAI={handleTestAI}
-                        onTestVectorDB={handleTestVectorDB}
-                        onTestWandb={handleTestWandb}
-                      />
+                    <UnifiedConfiguration
+                      onTestAI={handleTestAI}
+                      onTestVectorDB={handleTestVectorDB}
+                      onTestWandb={handleTestWandb}
+                    />
                     )}
                   </TabsContent>
 
@@ -573,16 +554,16 @@ export default function QuantumPDFChatbot() {
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
-                      <div className="space-y-4">
-                        <h2 className="font-bold text-lg">System Monitor</h2>
-                        <SystemStatus
-                          modelStatus={modelStatus}
-                          apiConfig={aiConfig}
-                          documents={documents}
-                          messages={messages}
-                          ragEngine={ragEngine ? ragEngine.getStatus() : {}}
-                        />
-                      </div>
+                    <div className="space-y-4">
+                      <h2 className="font-bold text-lg">System Monitor</h2>
+                      <SystemStatus
+                        modelStatus={modelStatus}
+                        apiConfig={aiConfig}
+                        documents={documents}
+                        messages={messages}
+                        ragEngine={ragEngine ? ragEngine.getStatus() : {}}
+                      />
+                    </div>
                     )}
                   </TabsContent>
                 </div>

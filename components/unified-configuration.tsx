@@ -705,13 +705,13 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
                 {testingStatus.ai === "testing" ? (
                   <ConfigurationTestingSkeleton />
                 ) : (
-                  <Button
-                    onClick={handleTestAI}
+                <Button
+                  onClick={handleTestAI}
                     disabled={!aiConfig.apiKey.trim()}
-                    className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
-                  >
+                  className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
+                >
                     Test Connection
-                  </Button>
+                </Button>
                 )}
               </CardContent>
             </Card>
@@ -886,16 +886,16 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
               {testingStatus.vectordb === "testing" ? (
                 <VectorDatabaseLoadingSkeleton />
               ) : (
-                <Button
-                  onClick={handleTestVectorDB}
+              <Button
+                onClick={handleTestVectorDB}
                   disabled={
                     (VECTOR_DB_PROVIDERS[vectorDBConfig.provider as keyof typeof VECTOR_DB_PROVIDERS].requiresApiKey && !vectorDBConfig.apiKey?.trim()) ||
                     (VECTOR_DB_PROVIDERS[vectorDBConfig.provider as keyof typeof VECTOR_DB_PROVIDERS].requiresUrl && !vectorDBConfig.url?.trim())
                   }
-                  className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
-                >
+                className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
+              >
                   Test Connection
-                </Button>
+              </Button>
               )}
             </CardContent>
           </Card>
@@ -998,13 +998,13 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
                   {testingStatus.wandb === "testing" ? (
                     <WandbConfigurationLoadingSkeleton />
                   ) : (
-                    <Button
-                      onClick={handleTestWandb}
+                  <Button
+                    onClick={handleTestWandb}
                       disabled={!wandbConfig.enabled || !wandbConfig.apiKey.trim() || !wandbConfig.projectName.trim()}
-                      className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
-                    >
+                    className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
+                  >
                       Test Connection
-                    </Button>
+                  </Button>
                   )}
                 </>
               ) : (

@@ -46,7 +46,7 @@ export class AIClient {
     try {
       if (!text || typeof text !== 'string' || text.trim().length === 0) {
         throw new Error("Invalid text input for embedding generation")
-      }
+    }
 
       switch (this.config.provider) {
         case "huggingface":

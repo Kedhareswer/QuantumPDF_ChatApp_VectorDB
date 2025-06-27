@@ -55,15 +55,15 @@ export class BrowserOCRProcessor {
       }
     } catch (error) {
       console.error("OCR processing failed:", error)
-      
-      return {
+
+    return {
         text: "OCR processing failed. This might be due to:\n" +
               "• Poor image quality\n" +
               "• Unsupported text format\n" +
               "• Network connectivity issues\n" +
               "Please try with a clearer image or check your internet connection.",
-        confidence: 0,
-        language: "unknown",
+      confidence: 0,
+      language: "unknown",
       }
     }
   }
