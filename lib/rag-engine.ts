@@ -78,11 +78,7 @@ export class RAGEngine {
   async initialize(config?: AIConfig): Promise<void> {
     try {
       if (config) {
-        console.log("RAGEngine: Initializing with new config:", {
-          provider: config.provider,
-          model: config.model,
-          hasApiKey: !!config.apiKey,
-        })
+              // RAGEngine: Initializing with new config
         
         // Create AI client with the provided configuration
         this.aiClient = new AIClient(config)
@@ -198,14 +194,14 @@ export class RAGEngine {
         throw new Error("Invalid text input for embedding generation")
       }
 
-      console.log(`RAGEngine: Generating embedding for text: "${text.substring(0, 50)}..."`)
+      // Generating embedding for text
       const embedding = await this.aiClient.generateEmbedding(text)
       
       if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
         throw new Error("Invalid embedding returned from AI client")
       }
       
-      console.log(`RAGEngine: Successfully generated embedding with dimension: ${embedding.length}`)
+      // Successfully generated embedding
       return embedding
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown embedding error"
@@ -246,21 +242,21 @@ export class RAGEngine {
     }
 
     try {
-      console.log(`Processing document: ${file.name}`)
+      // Processing document
 
       // Extract text from PDF
       const pdfContent = await this.pdfParser.extractText(file)
 
       // Chunk the text
       const chunks = this.pdfParser.chunkText(pdfContent.text, 500, 50)
-      console.log(`Generated ${chunks.length} chunks`)
+      // Generated chunks
 
       if (chunks.length === 0) {
         throw new Error("No text chunks could be created from the document")
       }
 
       // Generate embeddings for all chunks
-      console.log("Generating embeddings...")
+      // Generating embeddings
       const embeddings = await this.aiClient.generateEmbeddings(chunks)
 
       if (!embeddings || !Array.isArray(embeddings) || embeddings.length !== chunks.length) {

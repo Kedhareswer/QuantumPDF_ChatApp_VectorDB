@@ -2,303 +2,741 @@
 
 # 🌌 QuantumPDF ChatApp
 
-[![GitHub Stars](https://img.shields.io/github/stars/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/fork)
-[![License](https://img.shields.io/github/license/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/commits/main)
-[![Open Issues](https://img.shields.io/github/issues/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
-[![Contributors](https://img.shields.io/github/contributors/Kedhareswer/QuantumPDF_ChatApp?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/graphs/contributors)
+[![Next.js](https://img.shields.io/badge/Next.js-15.2.4-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4.17-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 
-*Transform your PDFs into interactive knowledge bases with AI-powered conversations*
+[![License](https://img.shields.io/github/license/Kedhareswer/QuantumPDF_ChatApp?style=for-the-badge)](LICENSE)
+[![Issues](https://img.shields.io/github/issues/Kedhareswer/QuantumPDF_ChatApp?style=for-the-badge)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
+[![Stars](https://img.shields.io/github/stars/Kedhareswer/QuantumPDF_ChatApp?style=for-the-badge)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
 
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Documentation](#-documentation) • [Contributing](#-contributing)
+*Revolutionary AI-powered PDF document analysis with 18+ LLM providers and RAG technology*
+
+[🚀 Features](#-features) • [🛠 Installation](#-installation) • [⚙️ Configuration](#️-configuration) • [📖 Documentation](#-documentation) • [🤝 Contributing](#-contributing)
 
 </div>
 
-## 📑 Table of Contents
+---
 
-- [Overview](#-overview)
-- [Features](#-features)
-- [System Architecture](#-system-architecture)
-- [Technology Stack](#-technology-stack)
-- [Installation](#-installation)
-- [Usage Guide](#-usage-guide)
-- [Configuration](#%EF%B8%8F-configuration)
-- [Performance Optimization](#-performance-optimization)
-- [Troubleshooting](#-troubleshooting)
-- [API Reference](#-api-reference)
-- [Contributing](#-contributing)
-- [License](#-license)
-- [Support](#-support)
+## 📋 Table of Contents
+
+- [🎯 Overview](#-overview)
+- [🚀 Features](#-features)
+- [🏗 Architecture](#-architecture)
+- [🛠 Technology Stack](#-technology-stack)
+- [🔧 Installation](#-installation)
+- [⚙️ Configuration](#️-configuration)
+- [🎮 Usage Guide](#-usage-guide)
+- [🤖 AI Providers](#-ai-providers)
+- [🗄️ Vector Databases](#️-vector-databases)
+- [📊 Performance](#-performance)
+- [🆘 Troubleshooting](#-troubleshooting)
+- [🔧 API Reference](#-api-reference)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+
+---
 
 ## 🎯 Overview
 
-QuantumPDF ChatApp is an intelligent, open-source web application that revolutionizes PDF document interaction through advanced Large Language Models (LLMs). It transforms static PDF documents into dynamic, conversational knowledge bases that you can query naturally.
+**QuantumPDF ChatApp** is a cutting-edge, production-ready web application that transforms static PDF documents into intelligent, conversational knowledge bases. Built with modern technologies and powered by advanced AI, it enables natural language interactions with your documents through state-of-the-art RAG (Retrieval-Augmented Generation) technology.
 
-### Key Benefits
+### ✨ Key Highlights
 
-| Benefit | Description |
-|---------|-------------|
-| 🤖 AI-Powered Analysis | Interactive conversations with your PDFs using state-of-the-art LLMs |
-| 🔍 Smart Search | Advanced semantic search capabilities across multiple documents |
-| 🔐 Privacy-First | Option for local model deployment, keeping your documents secure |
-| 📊 Citation Support | Automated source tracking and citation for all responses |
-| ⚡ Real-time Processing | Quick document processing and response generation |
+| 🎯 **Core Value** | 📝 **Description** |
+|-------------------|--------------------|
+| **🧠 AI-First Design** | Built from the ground up with AI at its core, supporting 18+ LLM providers |
+| **🔒 Privacy-Focused** | Client-side processing options with local vector storage capabilities |
+| **⚡ Production-Ready** | Enterprise-grade architecture with comprehensive error handling |
+| **🎨 Modern UI/UX** | Beautiful, accessible interface with dark/light mode support |
+| **🔗 API-First** | RESTful APIs for seamless integration with existing workflows |
 
-## ✨ Features
+---
 
-### Core Capabilities
+## 🚀 Features
 
-| Feature Category | Components | Description |
-|-----------------|------------|-------------|
-| **Document Processing** | • Text Extraction<br>• Smart Chunking<br>• OCR Support<br>• Metadata Extraction | Advanced PDF processing using PyMuPDF with intelligent text chunking and OCR capabilities |
-| **Search & Retrieval** | • Semantic Search<br>• Vector Similarity<br>• Multi-document Support | FAISS-powered vector search with Sentence Transformers for accurate content retrieval |
-| **LLM Integration** | • Local Models<br>• Cloud APIs<br>• Custom Models | Flexible integration with various LLM providers and local model support |
-| **User Experience** | • Interactive Chat<br>• Source Citations<br>• Dark/Light Mode | Modern Next.js frontend with responsive design and customizable themes |
-
-## 🏗 System Architecture
+### 📄 Document Processing
 
 ```mermaid
-flowchart TD
-    subgraph Client[Client Side]
-        UI[User Interface]
-        Browser[Web Browser]
-    end
-
-    subgraph Server[Server Side]
-        API[API Gateway]
-        
-        subgraph "Document Processing"
-            DP1[PDF Upload & Validation]
-            DP2[Text Extraction]
-            DP3[Chunking & Indexing]
-        end
-        
-        subgraph "AI Processing"
-            AI1[Embedding Generation]
-            AI2[Vector Store]
-            AI3[LLM Integration]
-        end
-        
-        subgraph "Query Processing"
-            QP1[Query Understanding]
-            QP2[Context Retrieval]
-            QP3[Response Generation]
-        end
-        
-        DB[(Database)]
-    end
+flowchart LR
+    A[PDF Upload] --> B[Text Extraction]
+    B --> C[Smart Chunking]
+    C --> D[OCR Processing]
+    D --> E[Metadata Extraction]
+    E --> F[Ready for Chat]
     
-    UI -->|HTTP/HTTPS| API
-    API --> DP1
-    DP1 --> DP2 --> DP3
-    DP3 --> AI1 --> AI2
-    API --> QP1
-    QP1 --> QP2 --> AI2
-    QP2 --> QP3 --> AI3
-    AI3 --> API
-    DP3 --> DB
-    QP2 --> DB
+    style A fill:#e1f5fe
+    style F fill:#e8f5e8
 ```
 
-### Architecture Components
+| **Feature** | **Technology** | **Description** |
+|-------------|----------------|-----------------|
+| 📄 **Advanced PDF Processing** | PDF.js + Custom Parser | Supports text-based and image-based PDFs with intelligent text extraction |
+| 🔍 **OCR Integration** | Tesseract.js | Real-time optical character recognition for scanned documents |
+| ✂️ **Smart Chunking** | Advanced Algorithms | Intelligent text segmentation preserving context and meaning |
+| 📊 **Metadata Extraction** | Custom Engine | Automatic extraction of titles, authors, creation dates, and more |
+| 🔄 **Batch Processing** | Multi-file Support | Process multiple PDFs simultaneously with progress tracking |
 
-| Component | Technology | Description |
-|-----------|------------|-------------|
-| **Frontend** | Next.js, React, TypeScript | Interactive user interface with responsive design |
-| **API Gateway** | Next.js API Routes | Handles client requests and responses |
-| **Document Processing** | PyMuPDF, Unstructured | Extracts and processes text from PDFs |
-| **Vector Database** | FAISS, Chroma | Stores document embeddings for semantic search |
-| **LLM Integration** | LangChain, OpenAI/Gemini | Processes queries and generates responses |
-| **Caching** | Redis | Improves response times for frequent queries |
+### 🤖 AI & Machine Learning
+
+| **Capability** | **Implementation** | **Benefits** |
+|----------------|-------------------|--------------|
+| 🎯 **18+ AI Providers** | Unified API Interface | Choose from OpenAI, Anthropic, Google AI, and 15+ more providers |
+| 🧮 **Vector Embeddings** | Multiple Models | Support for OpenAI, Hugging Face, and custom embedding models |
+| 🔍 **Semantic Search** | RAG Engine | Find relevant content using meaning, not just keywords |
+| 💭 **Thinking Sections** | Collapsible UI | Transparent AI reasoning with expandable thought processes |
+| 📈 **Context Awareness** | Advanced Prompting | Maintains conversation context for coherent interactions |
+
+### 🎨 User Experience
+
+| **Feature** | **Description** | **Technology** |
+|-------------|-----------------|----------------|
+| 💬 **Interactive Chat** | Real-time conversations with your documents | WebSocket + Server-Sent Events |
+| 📝 **Source Citations** | Automatic citation generation with page references | Custom Citation Engine |
+| 🌙 **Dark/Light Mode** | System-aware theme switching | Tailwind CSS + Next-themes |
+| 📱 **Responsive Design** | Works perfectly on desktop, tablet, and mobile | Responsive Grid System |
+| ⚡ **Real-time Updates** | Live processing status and progress indicators | React State Management |
+
+---
+
+## 🏗 Architecture
+
+### System Overview
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        UI[React UI Components]
+        State[Zustand State Management]
+        Theme[Theme Provider]
+    end
+    
+    subgraph "API Layer"
+        API[Next.js API Routes]
+        Auth[Authentication]
+        Rate[Rate Limiting]
+    end
+    
+    subgraph "AI Processing Layer"
+        LLM[LLM Providers]
+        Embed[Embedding Generation]
+        RAG[RAG Engine]
+    end
+    
+    subgraph "Document Processing"
+        PDF[PDF Parser]
+        OCR[OCR Processor]
+        Chunk[Text Chunker]
+    end
+    
+    subgraph "Data Layer"
+        Vector[Vector Database]
+        Store[Document Store]
+        Cache[Response Cache]
+    end
+    
+    UI --> API
+    State --> UI
+    Theme --> UI
+    API --> LLM
+    API --> RAG
+    RAG --> Embed
+    RAG --> Vector
+    PDF --> Chunk
+    OCR --> Chunk
+    Chunk --> Embed
+    
+    style UI fill:#e3f2fd
+    style API fill:#f3e5f5
+    style LLM fill:#e8f5e8
+    style Vector fill:#fff3e0
+```
+
+### Component Architecture
+
+```mermaid
+classDiagram
+    class ChatInterface {
+        +messages: Message[]
+        +sendMessage()
+        +clearChat()
+        +renderThinking()
+    }
+    
+    class DocumentLibrary {
+        +documents: Document[]
+        +uploadDocument()
+        +removeDocument()
+        +exportDocument()
+    }
+    
+    class RAGEngine {
+        +processDocument()
+        +generateEmbedding()
+        +query()
+        +findRelevantChunks()
+    }
+    
+    class AIClient {
+        +generateText()
+        +generateEmbedding()
+        +testConnection()
+        +18 Providers
+    }
+    
+    class VectorDatabase {
+        +addDocuments()
+        +search()
+        +delete()
+        +4 Providers
+    }
+    
+    ChatInterface --> RAGEngine
+    DocumentLibrary --> RAGEngine
+    RAGEngine --> AIClient
+    RAGEngine --> VectorDatabase
+```
+
+---
 
 ## 🛠 Technology Stack
 
-### Core Technologies
+### Frontend Technologies
 
-| Layer | Technologies | Version | Purpose |
-|-------|-------------|---------|----------|
-| **Frontend** | ![TypeScript](https://img.shields.io/badge/TypeScript-4.9.5-3178C6?style=flat-square&logo=typescript&logoColor=white) ![Next.js](https://img.shields.io/badge/Next.js-13.4.0-000000?style=flat-square&logo=next.js&logoColor=white) ![React](https://img.shields.io/badge/React-18.2.0-61DAFB?style=flat-square&logo=react&logoColor=black) | v18+ | Interactive UI with server-side rendering |
-| **Backend** | ![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-0.95.0-009688?style=flat-square&logo=fastapi&logoColor=white) | 3.9+ | High-performance API and business logic |
-| **Vector Database** | ![FAISS](https://img.shields.io/badge/FAISS-1.7.3-FF6B6B?style=flat-square) ![Chroma](https://img.shields.io/badge/Chroma-0.4.0-4CAF50?style=flat-square) | Latest | Efficient similarity search and storage |
-| **AI/ML** | ![PyTorch](https://img.shields.io/badge/PyTorch-2.0.0-EE4C2C?style=flat-square&logo=pytorch&logoColor=white) ![Transformers](https://img.shields.io/badge/Transformers-4.28.0-FFD700?style=flat-square) | Latest | Model inference and embeddings |
-| **Deployment** | ![Docker](https://img.shields.io/badge/Docker-24.0-2496ED?style=flat-square&logo=docker&logoColor=white) ![Kubernetes](https://img.shields.io/badge/Kubernetes-1.26-326CE5?style=flat-square&logo=kubernetes&logoColor=white) | - | Containerization and orchestration |
+| **Category** | **Technology** | **Version** | **Purpose** |
+|--------------|----------------|-------------|-------------|
+| **Framework** | ![Next.js](https://img.shields.io/badge/Next.js-15.2.4-000000?style=flat-square&logo=next.js) | 15.2.4 | Full-stack React framework with SSR |
+| **Language** | ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat-square&logo=typescript) | 5.0+ | Type-safe development |
+| **UI Library** | ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react) | 19.0 | Component-based UI development |
+| **Styling** | ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4.17-38B2AC?style=flat-square&logo=tailwind-css) | 3.4.17 | Utility-first CSS framework |
+| **Components** | ![Radix UI](https://img.shields.io/badge/Radix_UI-Latest-000000?style=flat-square) | Latest | Accessible component primitives |
+| **State** | ![Zustand](https://img.shields.io/badge/Zustand-Latest-FF6B6B?style=flat-square) | Latest | Lightweight state management |
 
-### Key Dependencies
+### Core Dependencies
 
-```yaml
-# Core Backend
-langchain: ^0.0.200  # LLM orchestration
-pymupdf: ^1.22.0     # PDF processing
-sentence-transformers: ^2.2.2  # Embeddings
-faiss-cpu: ^1.7.4    # Vector similarity search
-
-# Frontend
-next: 13.4.0
-react: 18.2.0
-typescript: 4.9.5
-@radix-ui/react-dialog: ^1.0.4
-
-# Development
-pytest: ^7.3.1
-black: ^23.3.0
-mypy: ^1.3.0
+```json
+{
+  "production": {
+    "next": "15.2.4",
+    "react": "^19",
+    "typescript": "^5",
+    "zustand": "latest",
+    "pdfjs-dist": "latest",
+    "tesseract.js": "^5.0.5",
+    "lucide-react": "^0.454.0"
+  },
+  "development": {
+    "tailwindcss": "^3.4.17",
+    "postcss": "^8.5",
+    "@types/node": "^22",
+    "@types/react": "^19"
+  }
+}
 ```
 
-## 📦 Installation
+### Architecture Patterns
+
+| **Pattern** | **Implementation** | **Benefits** |
+|-------------|-------------------|--------------|
+| **Component Composition** | Radix UI + Custom Components | Reusable, accessible, maintainable |
+| **State Management** | Zustand with Persistence | Simple, performant, type-safe |
+| **API Design** | RESTful + Server Actions | Clean separation, better DX |
+| **Error Boundaries** | React Error Boundaries | Graceful error handling |
+| **Code Splitting** | Next.js Dynamic Imports | Optimal bundle sizes |
+
+---
+
+## 🔧 Installation
 
 ### Prerequisites
 
-| Requirement | Version | Description | Recommended |
-|------------|---------|-------------|-------------|
-| Python | ≥ 3.9 | Backend services | 3.10+ |
-| Node.js | ≥ 18 | Frontend development | 18 LTS |
-| RAM | ≥ 8GB | 16GB+ recommended for local LLMs | 32GB |
-| Storage | 10GB+ | For models and dependencies | SSD recommended |
-| GPU (Optional) | CUDA 11.8 | For accelerated processing | NVIDIA RTX 30xx+ |
+| **Requirement** | **Minimum** | **Recommended** | **Notes** |
+|-----------------|-------------|-----------------|-----------|
+| ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=node.js) | 18.0 | 20 LTS | For Next.js and package management |
+| ![RAM](https://img.shields.io/badge/RAM-4GB-FF6B6B?style=flat-square) | 4GB | 8GB+ | For smooth development experience |
+| ![Storage](https://img.shields.io/badge/Storage-2GB-4CAF50?style=flat-square) | 2GB | 5GB+ | For dependencies and models |
+| ![Browser](https://img.shields.io/badge/Browser-Modern-2196F3?style=flat-square) | Chrome 90+ | Latest | For WebAssembly support |
 
-### Quick Start Guide
+### Quick Start
 
-1. **Clone and setup repository**
-   ```bash
-   # Clone with submodules
-   git clone --recurse-submodules https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
-   cd QuantumPDF_ChatApp
-   ```
+#### 1. Clone Repository
+```bash
+git clone https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
+cd QuantumPDF_ChatApp
+```
 
-2. **Setup Python environment**
-   ```bash
-   # Create and activate virtual environment
-   python -m venv .venv
-   # Windows
-   .\.venv\Scripts\activate
-   # Unix/macOS
-   source .venv/bin/activate
-   
-   # Install Python dependencies
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
+#### 2. Install Dependencies
+```bash
+# Using npm (recommended)
+npm install
 
-3. **Setup Node.js environment**
-   ```bash
-   # Install Node.js dependencies
-   npm install
-   
-   # Copy environment variables
-   cp .env.example .env.local
-   # Edit .env.local with your API keys
-   ```
+# Or using yarn
+yarn install
 
-4. **Start the application**
-   ```bash
-   # Terminal 1: Start backend
-   uvicorn app.main:app --reload
-   
-   # Terminal 2: Start frontend
-   npm run dev
-   ```
+# Or using pnpm
+pnpm install
+```
 
-5. **Access the application**
-   Open [http://localhost:3000](http://localhost:3000) in your browser
+#### 3. Environment Setup
+```bash
+# Copy environment template
+cp .env.example .env.local
 
+# Edit with your API keys
+nano .env.local
+```
 
-## 🎮 Usage Guide
+#### 4. Start Development Server
+```bash
+npm run dev
+```
 
-### Basic Operations
+#### 5. Open Application
+Navigate to [http://localhost:3000](http://localhost:3000) 🎉
 
-| Operation | Command/Action | Description |
-|-----------|---------------|-------------|
-| Start Application | `http://localhost:3000` | Access the web interface |
-| Upload Documents | Drag & Drop / Click Upload | Support for single/multiple PDFs |
-| Query Documents | Type in chat interface | Natural language questions |
-| View Sources | Click on citations | See source context |
+### Production Deployment
 
-### Advanced Features
+#### Docker Deployment
+```dockerfile
+# Dockerfile example
+FROM node:20-alpine AS base
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
 
-| Feature | Configuration | Use Case |
-|---------|--------------|-----------|
-| Custom Models | Edit `app.py` | Integration of specialized LLMs |
-| Batch Processing | Upload multiple PDFs | Compare across documents |
-| Export Results | Download button | Save conversations and citations |
+COPY . .
+RUN npm run build
+
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+#### Vercel Deployment
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel --prod
+```
+
+---
 
 ## ⚙️ Configuration
 
 ### Environment Variables
 
-```env
-# API Keys
-OPENAI_API_KEY=your_openai_key
-GEMINI_API_KEY=your_gemini_key
-AIML_API_KEY=your_aiml_key
+| **Variable** | **Required** | **Description** | **Example** |
+|--------------|--------------|-----------------|-------------|
+| `OPENAI_API_KEY` | Optional | OpenAI API key for GPT models | `sk-...` |
+| `ANTHROPIC_API_KEY` | Optional | Anthropic API key for Claude models | `ant-...` |
+| `GOOGLE_AI_API_KEY` | Optional | Google AI API key for Gemini models | `AI...` |
+| `HUGGINGFACE_API_KEY` | Optional | Hugging Face API key | `hf_...` |
+| `WANDB_API_KEY` | Optional | Weights & Biases for experiment tracking | `...` |
+| `NODE_ENV` | Auto | Environment mode | `development` |
 
-# Optional Configuration
-WANDB_API_KEY=your_wandb_key
-MAX_TOKENS=500
-CHUNK_OVERLAP=50
+### Application Configuration
+
+```typescript
+// Configuration schema
+interface AppConfig {
+  ai: {
+    provider: AIProvider;
+    model: string;
+    apiKey: string;
+    baseUrl?: string;
+    temperature?: number;
+  };
+  vectorDb: {
+    provider: 'pinecone' | 'weaviate' | 'chroma' | 'local';
+    config: VectorDBConfig;
+  };
+  document: {
+    maxFileSize: number;
+    allowedTypes: string[];
+    chunkSize: number;
+    chunkOverlap: number;
+  };
+}
 ```
 
-### Model Configuration
+### Provider-Specific Settings
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Chunk Size | 500 tokens | Text segment size for processing |
-| Overlap | 50 tokens | Overlap between chunks |
-| Memory Size | 10 turns | Conversation history length |
-| Embedding Model | all-MiniLM-L6-v2 | Default embedding model |
+| **Provider** | **Models Available** | **Special Configuration** |
+|--------------|---------------------|---------------------------|
+| **OpenAI** | GPT-4, GPT-3.5-turbo, text-embedding-3-* | API key required |
+| **Anthropic** | Claude-3.5-sonnet, Claude-3-haiku | API key + proper headers |
+| **Google AI** | Gemini-1.5-pro, Gemini-1.5-flash | API key + project ID |
+| **Groq** | Llama-3.1, Mixtral | API key for fast inference |
+| **Local** | Ollama models | Local installation required |
 
-## ⚡ Performance Optimization
+---
 
-### Hardware Recommendations
+## 🎮 Usage Guide
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| RAM | 8GB | 16GB+ |
-| CPU | 4 cores | 8+ cores |
-| GPU | Optional | CUDA-enabled |
-| Storage | 10GB | 20GB+ SSD |
+### Basic Workflow
 
-### Optimization Tips
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant UI as Frontend
+    participant API as API Layer
+    participant RAG as RAG Engine
+    participant AI as AI Provider
 
-- Enable GPU acceleration for local models
-- Implement caching for frequent queries
-- Optimize chunk sizes based on document type
-- Use batch processing for multiple documents
+    U->>UI: Upload PDF
+    UI->>API: POST /api/pdf/upload
+    API->>RAG: Process document
+    RAG->>RAG: Extract & chunk text
+    RAG->>AI: Generate embeddings
+    AI-->>RAG: Return embeddings
+    RAG-->>API: Document ready
+    API-->>UI: Upload success
+    UI-->>U: Show document in library
+
+    U->>UI: Ask question
+    UI->>API: POST /api/chat
+    API->>RAG: Query with question
+    RAG->>RAG: Find relevant chunks
+    RAG->>AI: Generate response
+    AI-->>RAG: Return answer
+    RAG-->>API: Response with sources
+    API-->>UI: Stream response
+    UI-->>U: Display answer + citations
+```
+
+### Feature Usage
+
+#### Document Management
+```typescript
+// Upload documents
+const uploadDocument = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const response = await fetch('/api/pdf/upload', {
+    method: 'POST',
+    body: formData
+  });
+  
+  return response.json();
+};
+
+// Query documents
+const queryDocuments = async (question: string) => {
+  const response = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: question })
+  });
+  
+  return response.json();
+};
+```
+
+#### Advanced Features
+- **Bulk Export**: Export all documents as JSON or Markdown
+- **Search within Documents**: Semantic search across your document library
+- **Citation Tracking**: Automatic source attribution for all responses
+- **Conversation History**: Persistent chat history with context
+
+---
+
+## 🤖 AI Providers
+
+### Supported Providers (18+)
+
+| **Provider** | **Status** | **Models** | **Features** | **Setup** |
+|--------------|------------|------------|--------------|-----------|
+| ![OpenAI](https://img.shields.io/badge/OpenAI-✅-00A67E?style=flat-square) | Production | GPT-4, GPT-3.5, Embeddings | Text + Embeddings | API Key |
+| ![Anthropic](https://img.shields.io/badge/Anthropic-✅-D2691E?style=flat-square) | Production | Claude-3.5-Sonnet, Claude-3-Haiku | Advanced reasoning | API Key |
+| ![Google AI](https://img.shields.io/badge/Google_AI-✅-4285F4?style=flat-square) | Production | Gemini-1.5-Pro, Gemini-1.5-Flash | Multimodal capabilities | API Key |
+| ![Groq](https://img.shields.io/badge/Groq-✅-F55036?style=flat-square) | Production | Llama-3.1, Mixtral-8x7B | Ultra-fast inference | API Key |
+| ![Fireworks AI](https://img.shields.io/badge/Fireworks-✅-FF4500?style=flat-square) | Production | Llama-2, CodeLlama | Open source models | API Key |
+| ![Cerebras](https://img.shields.io/badge/Cerebras-✅-00B4D8?style=flat-square) | Production | Llama-3.1 | High-performance inference | API Key |
+| ![OpenRouter](https://img.shields.io/badge/OpenRouter-✅-8A2BE2?style=flat-square) | Production | 100+ Models | Model aggregation | API Key |
+| ![AI/ML API](https://img.shields.io/badge/AIML_API-✅-FF6B6B?style=flat-square) | Production | Multiple providers | Cost-effective access | API Key |
+| ![Hugging Face](https://img.shields.io/badge/Hugging_Face-✅-FFD700?style=flat-square) | Production | Open source models | Free tier available | API Key |
+| ![DeepInfra](https://img.shields.io/badge/DeepInfra-✅-4CAF50?style=flat-square) | Production | Llama, Mistral, etc. | Affordable inference | API Key |
+| ![Replicate](https://img.shields.io/badge/Replicate-✅-000000?style=flat-square) | Production | Community models | Easy deployment | API Key |
+| ![Anyscale](https://img.shields.io/badge/Anyscale-✅-FF5722?style=flat-square) | Production | Ray-powered models | Scalable inference | API Key |
+| ![DeepSeek](https://img.shields.io/badge/DeepSeek-✅-2196F3?style=flat-square) | Production | DeepSeek-Coder, Chat | Specialized models | API Key |
+| ![Vertex AI](https://img.shields.io/badge/Vertex_AI-✅-4285F4?style=flat-square) | Production | Google Cloud models | Enterprise features | GCP Setup |
+| ![Mistral](https://img.shields.io/badge/Mistral-✅-FF7F00?style=flat-square) | Production | Mistral-7B, Mixtral | European AI | API Key |
+| ![Perplexity](https://img.shields.io/badge/Perplexity-✅-1E88E5?style=flat-square) | Production | Search-augmented LLMs | Real-time data | API Key |
+| ![xAI (Grok)](https://img.shields.io/badge/xAI-✅-000000?style=flat-square) | Production | Grok models | Elon Musk's AI | API Key |
+| ![Alibaba Cloud](https://img.shields.io/badge/Alibaba-✅-FF6A00?style=flat-square) | Production | Qwen models | Chinese market focus | API Key |
+| ![MiniMax](https://img.shields.io/badge/MiniMax-✅-E91E63?style=flat-square) | Production | Chinese LLMs | Local compliance | API Key |
+
+### Provider Comparison
+
+```mermaid
+quadrantChart
+    title AI Provider Performance Matrix
+    x-axis Low Cost --> High Cost
+    y-axis Low Performance --> High Performance
+    
+    quadrant-1 Premium Performance
+    quadrant-2 Best Value
+    quadrant-3 Budget Options
+    quadrant-4 Enterprise Solutions
+    
+    OpenAI: [0.8, 0.9]
+    Anthropic: [0.85, 0.95]
+    Google AI: [0.7, 0.85]
+    Groq: [0.6, 0.8]
+    Fireworks: [0.4, 0.7]
+    HuggingFace: [0.2, 0.6]
+    OpenRouter: [0.5, 0.75]
+    Cerebras: [0.65, 0.82]
+```
+
+---
+
+## 🗄️ Vector Databases
+
+### Supported Vector Stores
+
+| **Provider** | **Type** | **Best For** | **Setup Complexity** | **Performance** |
+|--------------|----------|--------------|----------------------|-----------------|
+| ![Pinecone](https://img.shields.io/badge/Pinecone-✅-00D4AA?style=flat-square) | Cloud | Production apps | Medium | ⭐⭐⭐⭐⭐ |
+| ![Weaviate](https://img.shields.io/badge/Weaviate-✅-FF6B6B?style=flat-square) | Cloud/Self-hosted | Enterprise | High | ⭐⭐⭐⭐⭐ |
+| ![Chroma](https://img.shields.io/badge/Chroma-✅-4CAF50?style=flat-square) | Self-hosted | Development | Low | ⭐⭐⭐⭐ |
+| ![Local](https://img.shields.io/badge/Local-✅-9E9E9E?style=flat-square) | Browser | Privacy-first | None | ⭐⭐⭐ |
+
+### Vector Database Configuration
+
+```typescript
+interface VectorDBConfig {
+  pinecone?: {
+    apiKey: string;
+    environment: string;
+    indexName: string;
+  };
+  weaviate?: {
+    url: string;
+    apiKey?: string;
+    className: string;
+  };
+  chroma?: {
+    url: string;
+    collectionName: string;
+  };
+  local?: {
+    maxDocuments: number;
+    persistToStorage: boolean;
+  };
+}
+```
+
+---
+
+## 📊 Performance
+
+### Benchmarks
+
+| **Metric** | **Measurement** | **Target** | **Status** |
+|------------|-----------------|------------|------------|
+| **Document Processing** | 1MB PDF | < 5 seconds | ✅ |
+| **Query Response Time** | Simple query | < 2 seconds | ✅ |
+| **Embedding Generation** | 1000 tokens | < 1 second | ✅ |
+| **UI Responsiveness** | First load | < 3 seconds | ✅ |
+| **Memory Usage** | Runtime | < 500MB | ✅ |
+
+### Performance Optimization
+
+```typescript
+// Optimization techniques implemented
+const optimizations = {
+  "Client-side": [
+    "Code splitting with Next.js",
+    "Component lazy loading",
+    "Image optimization",
+    "Service worker caching"
+  ],
+  "Server-side": [
+    "API route optimization",
+    "Response compression",
+    "Database query optimization",
+    "Edge caching"
+  ],
+  "AI Processing": [
+    "Embedding caching",
+    "Batch processing",
+    "Model selection optimization",
+    "Context length management"
+  ]
+};
+```
+
+---
 
 ## 🆘 Troubleshooting
 
-| Issue | Possible Cause | Solution |
-|-------|---------------|----------|
-| PDF Upload Fails | File size/format | Check size limits, file format |
-| Slow Processing | Resource constraints | Adjust chunk size, enable GPU |
-| API Errors | Invalid keys/limits | Verify API keys, check quotas |
-| Memory Issues | Large documents | Adjust batch size, clear cache |
+### Common Issues
+
+| **Issue** | **Symptoms** | **Solution** | **Prevention** |
+|-----------|--------------|--------------|----------------|
+| **PDF Upload Fails** | Error during upload | Check file size < 50MB, valid PDF format | Use text-based PDFs when possible |
+| **AI Provider Errors** | 401/403 responses | Verify API keys, check quotas | Monitor usage limits |
+| **Slow Performance** | Long response times | Check internet connection, try smaller chunks | Optimize chunk sizes |
+| **OCR Not Working** | Scanned PDFs not processed | Ensure Tesseract.js loaded properly | Check browser compatibility |
+| **Memory Issues** | Browser crashes | Clear cache, reduce concurrent operations | Close unused tabs |
+
+### Debug Mode
+
+Enable detailed logging:
+
+```typescript
+// In your .env.local
+DEBUG=true
+VERBOSE_LOGGING=true
+
+// Or programmatically
+localStorage.setItem('quantum-pdf-debug', 'true');
+```
+
+### Support Channels
+
+| **Channel** | **Response Time** | **Best For** |
+|-------------|-------------------|--------------|
+| [GitHub Issues](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues) | 24-48 hours | Bug reports, feature requests |
+| [Discussions](https://github.com/Kedhareswer/QuantumPDF_ChatApp/discussions) | Community | General questions, ideas |
+| [Wiki](https://github.com/Kedhareswer/QuantumPDF_ChatApp/wiki) | Immediate | Documentation, guides |
+
+---
+
+## 🔧 API Reference
+
+### Core Endpoints
+
+| **Endpoint** | **Method** | **Description** | **Parameters** |
+|--------------|------------|-----------------|----------------|
+| `/api/pdf/extract` | POST | Extract text from PDF | `file: File` |
+| `/api/chat` | POST | Query documents | `message: string, history?: Message[]` |
+| `/api/vector-db` | POST | Add to vector database | `documents: Document[]` |
+| `/api/huggingface/embedding` | POST | Generate embeddings | `texts: string[]` |
+| `/api/test/ai` | GET | Test AI provider | `provider: string` |
+| `/api/ping` | GET/POST | Health check | None |
+
+### Request/Response Examples
+
+#### Chat API
+```typescript
+// Request
+POST /api/chat
+{
+  "message": "What are the main findings in the research papers?",
+  "history": [
+    {"role": "user", "content": "Previous question"},
+    {"role": "assistant", "content": "Previous response"}
+  ]
+}
+
+// Response
+{
+  "response": "Based on the research papers, the main findings are...",
+  "sources": [
+    "Document 1 (page 5)",
+    "Document 2 (page 12)"
+  ],
+  "metadata": {
+    "responseTime": 1.2,
+    "tokensUsed": 450,
+    "relevanceScore": 0.89
+  }
+}
+```
+
+---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please check our [Contributing Guidelines](CONTRIBUTING.md) for details on:
+We welcome contributions! Here's how to get started:
 
-- Code of Conduct
-- Pull Request Process
-- Development Setup
-- Coding Standards
+### Development Setup
+
+```bash
+# 1. Fork and clone
+git clone https://github.com/YOUR_USERNAME/QuantumPDF_ChatApp.git
+cd QuantumPDF_ChatApp
+
+# 2. Install dependencies
+npm install
+
+# 3. Create feature branch
+git checkout -b feature/your-feature-name
+
+# 4. Start development
+npm run dev
+```
+
+### Contribution Guidelines
+
+| **Type** | **Description** | **Process** |
+|----------|-----------------|-------------|
+| 🐛 **Bug Fixes** | Fix existing issues | Issue → Branch → PR → Review |
+| ✨ **Features** | Add new functionality | Discussion → Design → Implementation |
+| 📚 **Documentation** | Improve docs | Direct PR for small changes |
+| 🎨 **UI/UX** | Design improvements | Screenshots required in PR |
+| ⚡ **Performance** | Optimization work | Benchmarks required |
+
+### Code Standards
+
+```typescript
+// TypeScript configuration
+{
+  "strict": true,
+  "noImplicitAny": true,
+  "noImplicitReturns": true,
+  "noUnusedLocals": true
+}
+
+// ESLint + Prettier for consistent formatting
+// Conventional commits for clear history
+// Component testing with Jest + Testing Library
+```
+
+---
 
 ## 📄 License
 
-This project is licensed under the [GNU GPL v3.0](LICENSE).
+This project is licensed under the **GNU General Public License v3.0**.
 
-## 💬 Support
+### License Summary
 
-- [GitHub Discussions](https://github.com/Kedhareswer/QuantumPDF_ChatApp/discussions)
-- [Issue Tracker](https://github.com/Kedhareswer/QuantumPDF_ChatApp/issues)
-- [Documentation](https://github.com/Kedhareswer/QuantumPDF_ChatApp/wiki)
+| **Permissions** | **Conditions** | **Limitations** |
+|-----------------|----------------|-----------------|
+| ✅ Commercial use | 📋 License and copyright notice | ❌ Liability |
+| ✅ Modification | 📋 State changes | ❌ Warranty |
+| ✅ Distribution | 📋 Disclose source | |
+| ✅ Patent use | 📋 Same license | |
+| ✅ Private use | | |
 
 ---
 
 <div align="center">
 
-Made with ❤️ by Kedhareswer
+## 🌟 Star History
 
-[![Star History](https://img.shields.io/badge/dynamic/json?color=blue&label=Stars&query=stargazers_count&url=https://api.github.com/repos/Kedhareswer/QuantumPDF_ChatApp)](https://github.com/Kedhareswer/QuantumPDF_ChatApp/stargazers)
+[![Star History Chart](https://api.star-history.com/svg?repos=Kedhareswer/QuantumPDF_ChatApp&type=Date)](https://star-history.com/#Kedhareswer/QuantumPDF_ChatApp&Date)
+
+---
+
+### 🙏 Acknowledgments
+
+Built with ❤️ by [Kedhareswer](https://github.com/Kedhareswer)
+
+**Special Thanks:**
+- OpenAI, Anthropic, Google AI for providing excellent LLM APIs
+- Vercel for Next.js and deployment platform  
+- The open-source community for amazing tools and libraries
+
+---
+
+[![Made with TypeScript](https://img.shields.io/badge/Made%20with-TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Powered by Next.js](https://img.shields.io/badge/Powered%20by-Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![Built with Tailwind CSS](https://img.shields.io/badge/Built%20with-Tailwind%20CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 
 </div>

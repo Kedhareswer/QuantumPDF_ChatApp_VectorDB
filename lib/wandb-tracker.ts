@@ -18,7 +18,7 @@ export class BrowserWandbTracker {
   async init(config: WandbConfig): Promise<void> {
     this.config = config
     this.isInitialized = true
-    console.log("W&B tracker initialized (browser mode)", config)
+    // W&B tracker initialized in browser mode
   }
 
   async log(metrics: WandbMetrics): Promise<void> {
@@ -27,7 +27,7 @@ export class BrowserWandbTracker {
       return
     }
 
-    console.log("W&B metrics (browser mode):", metrics)
+    // W&B metrics logged in browser mode
 
     // In a real implementation, this would send data to W&B API
     // For now, we just log to console
@@ -36,7 +36,7 @@ export class BrowserWandbTracker {
   async finish(): Promise<void> {
     if (!this.isInitialized) return
 
-    console.log("W&B run finished (browser mode)")
+    // W&B run finished in browser mode
     this.isInitialized = false
     this.config = null
   }
@@ -86,7 +86,7 @@ export class WandbTracker {
 
   async initialize(config?: WandbClientConfig) {
     try {
-      console.log("Initializing Wandb tracking...")
+      // Initializing Wandb tracking
 
       // Use provided config or try environment variables
       if (config && config.enabled) {

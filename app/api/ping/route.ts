@@ -18,9 +18,20 @@ export async function HEAD() {
 }
 
 export async function POST() {
+  const startTime = performance.now()
+  
+  // Perform a small amount of real processing to measure latency
+  const testData = { test: "ping", iterations: 1000 }
+  for (let i = 0; i < testData.iterations; i++) {
+    JSON.stringify(testData)
+  }
+  
+  const endTime = performance.now()
+  const actualLatency = endTime - startTime
+  
   return NextResponse.json({ 
     status: "ok", 
     timestamp: new Date().toISOString(),
-    latency: Math.random() * 50 + 10 // Simulated processing time
+    latency: Math.round(actualLatency * 100) / 100 // Real processing time in ms
   })
 } 

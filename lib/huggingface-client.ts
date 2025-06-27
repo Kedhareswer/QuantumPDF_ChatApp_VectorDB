@@ -40,12 +40,8 @@ export class BrowserHuggingFaceClient {
       return Array.isArray(embeddings[0]) ? embeddings : [embeddings]
     } catch (error) {
       console.error("Embedding generation failed:", error)
-      // Return dummy embeddings as fallback
-      return texts.map(() =>
-        Array(384)
-          .fill(0)
-          .map(() => Math.random()),
-      )
+      // Return deterministic hash-based embeddings as fallback
+      return texts.map((text) => this.generateHashBasedEmbedding(text))
     }
   }
 
@@ -93,5 +89,46 @@ export class BrowserHuggingFaceClient {
     } catch {
       return false
     }
+  }
+
+  private generateHashBasedEmbedding(text: string): number[] {
+    // Generate deterministic embedding based on text content
+    const dimension = 384 // Standard dimension for sentence-transformers/all-MiniLM-L6-v2
+    const embedding = new Array(dimension).fill(0)
+
+    // Simple but deterministic hash-based embedding
+    for (let i = 0; i < text.length; i++) {
+      const charCode = text.charCodeAt(i)
+      const index1 = charCode % dimension
+      const index2 = (charCode * 3) % dimension
+      const index3 = (charCode * 7) % dimension
+      
+      embedding[index1] += charCode * 0.1
+      embedding[index2] += charCode * 0.05
+      embedding[index3] += charCode * 0.02
+    }
+
+    // Add word-level features
+    const words = text.toLowerCase().split(/\s+/)
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i]
+      const wordHash = this.simpleHash(word)
+      const wordIndex = wordHash % dimension
+      embedding[wordIndex] += word.length * 0.3
+    }
+
+    // Normalize the vector
+    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0))
+    return magnitude > 0 ? embedding.map(val => val / magnitude) : embedding
+  }
+
+  private simpleHash(str: string): number {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // Convert to 32-bit integer
+    }
+    return Math.abs(hash)
   }
 }
