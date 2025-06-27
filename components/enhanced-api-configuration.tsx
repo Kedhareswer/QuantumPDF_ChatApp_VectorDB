@@ -86,18 +86,7 @@ const PROVIDER_INFO = {
     embeddingSupport: false,
     disabled: false,
   },
-  cohere: {
-    name: "Cohere",
-    description: "Enterprise-grade models with embeddings",
-    models: ["command", "command-light", "command-nightly", "command-r"],
-    defaultModel: "command",
-    baseUrl: "https://api.cohere.ai/v1",
-    features: ["Enterprise Grade", "Embeddings", "Multilingual"],
-    limitations: ["Paid Service", "Limited Models", "API Costs"],
-    signupUrl: "https://dashboard.cohere.com/api-keys",
-    embeddingSupport: true,
-    disabled: false,
-  },
+
   deepinfra: {
     name: "DeepInfra",
     description: "Serverless open-source models",
@@ -170,18 +159,7 @@ const PROVIDER_INFO = {
     embeddingSupport: false,
     disabled: false,
   },
-  together: {
-    name: "Together AI",
-    description: "Fast open-source model inference",
-    models: ["togethercomputer/llama-3-70b-instruct", "togethercomputer/falcon-40b-instruct"],
-    defaultModel: "togethercomputer/llama-3-70b-instruct",
-    baseUrl: "https://api.together.xyz/v1",
-    features: ["Fast Inference", "Open Source Models", "Model Variety"],
-    limitations: ["No Embeddings", "Limited Features", "API Costs"],
-    signupUrl: "https://api.together.xyz/settings/api-keys",
-    embeddingSupport: false,
-    disabled: false,
-  },
+
   xai: {
     name: "xAI (Grok)",
     description: "Real-time knowledge models",
@@ -229,14 +207,12 @@ interface AIConfig {
     | "aiml"
     | "groq"
     | "openrouter"
-    | "cohere"
     | "deepinfra"
     | "deepseek"
     | "googleai"
     | "vertex"
     | "mistral"
     | "perplexity"
-    | "together"
     | "xai"
     | "alibaba"
     | "minimax"

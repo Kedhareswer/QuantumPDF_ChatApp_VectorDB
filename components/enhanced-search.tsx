@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Search, Filter, FileText, Clock, Target, Zap } from "lucide-react"
+import { EnhancedSearchLoadingSkeleton, SearchResultsSkeleton } from "@/components/skeleton-loaders"
 
 interface SearchResult {
   id: string
@@ -115,6 +116,7 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
                 onKeyPress={handleKeyPress}
                 placeholder="Search through your documents..."
                 className="border-2 border-black pr-10"
+                disabled={isSearching}
               />
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             </div>
@@ -122,6 +124,7 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
               onClick={() => setShowFilters(!showFilters)}
               variant="outline"
               className="border-2 border-black hover:bg-black hover:text-white"
+              disabled={isSearching}
             >
               <Filter className="w-4 h-4" />
             </Button>
@@ -143,6 +146,7 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
                   <Select
                     value={filters.searchMode}
                     onValueChange={(value: any) => setFilters({ ...filters, searchMode: value })}
+                    disabled={isSearching}
                   >
                     <SelectTrigger className="border-2 border-black">
                       <SelectValue />
@@ -179,6 +183,7 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
                     min={5}
                     step={5}
                     className="w-full"
+                    disabled={isSearching}
                   />
                 </div>
               </div>
@@ -194,6 +199,7 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
                   min={0}
                   step={0.1}
                   className="w-full"
+                  disabled={isSearching}
                 />
               </div>
 
@@ -205,8 +211,9 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
                       <Badge
                         key={doc.id}
                         variant={filters.documentTypes.includes(doc.id) ? "default" : "outline"}
-                        className="cursor-pointer"
+                        className={`cursor-pointer ${isSearching ? 'opacity-50 pointer-events-none' : ''}`}
                         onClick={() => {
+                          if (isSearching) return
                           const newTypes = filters.documentTypes.includes(doc.id)
                             ? filters.documentTypes.filter((id) => id !== doc.id)
                             : [...filters.documentTypes, doc.id]
@@ -224,8 +231,13 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
         </CardContent>
       </Card>
 
+      {/* Search Loading State */}
+      {isSearching && (
+        <EnhancedSearchLoadingSkeleton />
+      )}
+
       {/* Search Results */}
-      {results.length > 0 && (
+      {!isSearching && results.length > 0 && (
         <Card className="border-2 border-black shadow-none">
           <CardHeader className="border-b border-black">
             <CardTitle className="text-sm flex items-center justify-between">
@@ -267,7 +279,7 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
       )}
 
       {/* No Results */}
-      {query && !isSearching && results.length === 0 && (
+      {!isSearching && query && results.length === 0 && (
         <Card className="border-2 border-black shadow-none">
           <CardContent className="p-8 text-center">
             <Search className="w-12 h-12 mx-auto mb-3 text-gray-400" />
@@ -278,7 +290,7 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
       )}
 
       {/* Search Tips */}
-      {!query && (
+      {!query && !isSearching && (
         <div className="text-xs text-gray-500 space-y-1">
           <p className="flex items-center">
             <Target className="w-3 h-3 mr-1 text-blue-500" />

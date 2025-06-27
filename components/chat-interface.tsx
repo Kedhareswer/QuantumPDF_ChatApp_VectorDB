@@ -18,12 +18,17 @@ import {
   RotateCcw,
   Download,
   Share,
+  ChevronDown,
+  ChevronRight,
+  Eye,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { QuickActions } from "@/components/quick-actions"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 interface Message {
   id: string
@@ -53,6 +58,144 @@ const SUGGESTED_QUESTIONS = [
   "What are the most important conclusions?",
   "How do the documents relate to each other?",
 ]
+
+// Component to parse and render message content with thinking sections
+function MessageContent({ content }: { content: string }) {
+  const [expandedThinking, setExpandedThinking] = useState<{[key: string]: boolean}>({})
+
+  // Parse content to extract thinking sections
+  const parseContent = (text: string) => {
+    const parts = []
+    let currentIndex = 0
+    let thinkingCounter = 0
+
+    // Replace newlines with a placeholder to simulate the 's' flag behavior
+    const processedText = text.replace(/\n/g, '\n')
+    
+    // Regex to match <think> or <thinking> tags (compatible with older JS)
+    const thinkingRegex = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/g
+    let match
+
+    while ((match = thinkingRegex.exec(processedText)) !== null) {
+      // Add text before thinking section
+      if (match.index > currentIndex) {
+        const beforeText = processedText.slice(currentIndex, match.index).trim()
+        if (beforeText) {
+          parts.push({
+            type: 'text',
+            content: beforeText,
+            id: `text-${parts.length}`
+          })
+        }
+      }
+
+      // Add thinking section
+      const thinkingContent = match[1].trim()
+      if (thinkingContent) {
+        thinkingCounter++
+        parts.push({
+          type: 'thinking',
+          content: thinkingContent,
+          id: `thinking-${thinkingCounter}`
+        })
+      }
+
+      currentIndex = match.index + match[0].length
+    }
+
+    // Add remaining text after last thinking section
+    if (currentIndex < processedText.length) {
+      const remainingText = processedText.slice(currentIndex).trim()
+      if (remainingText) {
+        parts.push({
+          type: 'text',
+          content: remainingText,
+          id: `text-${parts.length}`
+        })
+      }
+    }
+
+    // If no thinking sections found, return original text
+    if (parts.length === 0) {
+      parts.push({
+        type: 'text',
+        content: text,
+        id: 'text-0'
+      })
+    }
+
+    return parts
+  }
+
+  const toggleThinking = (id: string) => {
+    setExpandedThinking(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }))
+  }
+
+  const parts = parseContent(content)
+
+  return (
+    <div className="space-y-3">
+      {parts.map((part) => {
+        if (part.type === 'thinking') {
+          const isExpanded = expandedThinking[part.id] || false
+          
+          return (
+            <Collapsible
+              key={part.id}
+              open={isExpanded}
+              onOpenChange={() => toggleThinking(part.id)}
+            >
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-between text-left h-7 px-2 py-1 text-xs bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800 font-medium"
+                >
+                  <div className="flex items-center space-x-1.5">
+                    <Brain className="w-3 h-3" />
+                    <span>Thinking</span>
+                    <Badge variant="outline" className="text-xs px-1 py-0 h-3.5 border-amber-300 text-amber-700">
+                      {part.content.length > 1000 ? `${Math.round(part.content.length / 100) / 10}k` : `${part.content.length}c`}
+                    </Badge>
+                  </div>
+                  {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                </Button>
+              </CollapsibleTrigger>
+              
+              <CollapsibleContent>
+                <Card className="mt-2 border border-amber-200 bg-amber-50/50">
+                  <CardContent className="p-3">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Eye className="w-3 h-3 text-amber-600" />
+                      <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                        Internal Reasoning
+                      </span>
+                    </div>
+                    <div className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed bg-white/60 p-3 rounded border border-amber-200/50 font-mono">
+                      {part.content}
+                    </div>
+                  </CardContent>
+                </Card>
+              </CollapsibleContent>
+            </Collapsible>
+          )
+        } else {
+          return (
+            <div
+              key={part.id}
+              className="whitespace-pre-wrap leading-relaxed text-base"
+            >
+              {part.content}
+            </div>
+          )
+        }
+      })}
+    </div>
+  )
+}
 
 export function ChatInterface({ 
   messages, 
@@ -129,48 +272,11 @@ export function ChatInterface({
       <div className="border-b border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Chat</h2>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClearChat}
-              disabled={disabled || messages.length === 0}
-              title="Clear Chat"
-              className="text-gray-500 hover:text-black"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onNewSession}
-              disabled={disabled}
-              title="New Session"
-              className="text-gray-500 hover:text-black"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {}}
-              disabled={disabled}
-              title="Export Chat"
-              className="text-gray-500 hover:text-black"
-            >
-              <Download className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {}}
-              disabled={disabled}
-              title="Share"
-              className="text-gray-500 hover:text-black"
-            >
-              <Share className="w-4 h-4" />
-            </Button>
-          </div>
+          <QuickActions
+            onClearChat={onClearChat}
+            onNewSession={onNewSession}
+            disabled={disabled}
+          />
         </div>
       </div>
       
@@ -279,7 +385,9 @@ export function ChatInterface({
                     className={`message-bubble ${message.role === "user" ? "message-bubble-user" : "message-bubble-assistant"} group`}
                   >
                     <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1 whitespace-pre-wrap leading-relaxed text-base">{message.content}</div>
+                      <div className="flex-1">
+                        <MessageContent content={message.content} />
+                      </div>
 
                       {/* Message Actions */}
                       <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">

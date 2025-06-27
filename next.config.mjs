@@ -10,10 +10,12 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Fix: Move serverComponentsExternalPackages to root level as serverExternalPackages
+  serverExternalPackages: ['onnxruntime-node', 'chromadb', '@huggingface/transformers'],
   // Combine all experimental features into one property
   experimental: {
-    serverComponentsExternalPackages: ['onnxruntime-node', 'chromadb', '@huggingface/transformers'],
-    serverActions: true,
+    // Fix: Remove serverComponentsExternalPackages from experimental
+    // Fix: Remove serverActions boolean - it's enabled by default in Next.js 15
   },
   // Configure page extensions
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],

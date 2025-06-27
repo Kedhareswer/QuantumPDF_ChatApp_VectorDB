@@ -24,27 +24,29 @@ interface Document {
   metadata?: any
 }
 
+export type AIProvider =
+  | "huggingface"
+  | "openai"
+  | "anthropic"
+  | "aiml"
+  | "groq"
+  | "openrouter"
+  | "deepinfra"
+  | "deepseek"
+  | "googleai"
+  | "vertex"
+  | "mistral"
+  | "perplexity"
+  | "xai"
+  | "alibaba"
+  | "minimax"
+  | "fireworks"
+  | "cerebras"
+  | "replicate"
+  | "anyscale"
+
 interface AIConfig {
-  provider:
-    | "openai"
-    | "anthropic"
-    | "groq"
-    | "cohere"
-    | "huggingface"
-    | "aiml"
-    | "openrouter"
-    | "deepinfra"
-    | "deepseek"
-    | "googleai"
-    | "vertex"
-    | "mistral"
-    | "perplexity"
-    | "together"
-    | "xai"
-    | "fireworks"
-    | "replicate"
-    | "anyscale"
-    | "cerebras"
+  provider: AIProvider
   apiKey: string
   model: string
   baseUrl?: string
@@ -168,7 +170,26 @@ export const useAppStore = create<AppState>()(
 
       clearDocuments: () => set({ documents: [] }),
 
-      setAIConfig: (config) => set({ aiConfig: config }),
+      setAIConfig: (config) => {
+        // Validate provider and fallback to openai if invalid
+        const validProviders: AIProvider[] = [
+          "huggingface", "openai", "anthropic", "aiml", "groq", "openrouter",
+          "deepinfra", "deepseek", "googleai", "vertex", "mistral", "perplexity",
+          "xai", "alibaba", "minimax", "fireworks", "cerebras", "replicate", "anyscale"
+        ];
+        
+        if (!validProviders.includes(config.provider)) {
+          console.warn(`Invalid provider "${config.provider}", falling back to "openai"`);
+          config = {
+            ...config,
+            provider: "openai",
+            model: "gpt-4o-mini",
+            baseUrl: "https://api.openai.com/v1"
+          };
+        }
+        
+        set({ aiConfig: config });
+      },
       setVectorDBConfig: (config) => set({ vectorDBConfig: config }),
       setWandbConfig: (config) => set({ wandbConfig: config }),
       setIsProcessing: (processing) => set({ isProcessing: processing }),
@@ -205,6 +226,31 @@ export const useAppStore = create<AppState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         activeTab: state.activeTab,
       }),
+      // Add version and migration logic
+      version: 1,
+      migrate: (persistedState: any, version: number) => {
+        if (version === 0) {
+          // Migration from version 0 to 1: fix invalid providers
+          if (persistedState.aiConfig) {
+            const validProviders = [
+              "huggingface", "openai", "anthropic", "aiml", "groq", "openrouter",
+              "deepinfra", "deepseek", "googleai", "vertex", "mistral", "perplexity",
+              "xai", "alibaba", "minimax", "fireworks", "cerebras", "replicate", "anyscale"
+            ];
+            
+            if (!validProviders.includes(persistedState.aiConfig.provider)) {
+              console.warn(`Migrating invalid provider "${persistedState.aiConfig.provider}" to "openai"`);
+              persistedState.aiConfig = {
+                ...persistedState.aiConfig,
+                provider: "openai",
+                model: "gpt-4o-mini",
+                baseUrl: "https://api.openai.com/v1"
+              };
+            }
+          }
+        }
+        return persistedState;
+      },
     },
   ),
 )

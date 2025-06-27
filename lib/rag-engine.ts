@@ -46,18 +46,18 @@ interface AIConfig {
     | "aiml"
     | "groq"
     | "openrouter"
-    | "cohere"
     | "deepinfra"
     | "deepseek"
     | "googleai"
     | "vertex"
     | "mistral"
     | "perplexity"
-    | "together"
     | "xai"
+    | "alibaba"
+    | "minimax"
     | "fireworks"
-    | "replicate"
     | "cerebras"
+    | "replicate"
     | "anyscale"
   apiKey: string
   model: string
@@ -75,51 +75,90 @@ export class RAGEngine {
     this.pdfParser = new PDFParser()
   }
 
-  async initialize(config: AIConfig) {
+  async initialize(config?: AIConfig): Promise<void> {
     try {
-      console.log("Initializing RAG Engine with config:", {
-        provider: config.provider,
-        model: config.model,
-        hasApiKey: !!config.apiKey,
-      })
-
-      // Create AI client with the provided configuration
-      this.aiClient = new AIClient(config)
-      this.currentConfig = config
-
-      // Test the connection with better error handling
-      console.log("RAGEngine: Attempting to test AI provider connection via AIClient...")
-      let connectionTest = false
-      try {
-        connectionTest = await this.aiClient.testConnection()
-      } catch (connError) {
-        console.warn("Connection test failed, but continuing initialization:", connError)
+      if (config) {
+        console.log("RAGEngine: Initializing with new config:", {
+          provider: config.provider,
+          model: config.model,
+          hasApiKey: !!config.apiKey,
+        })
+        
+        // Create AI client with the provided configuration
+        this.aiClient = new AIClient(config)
+        this.currentConfig = config
       }
-
+      
+      if (!this.aiClient) {
+        throw new Error("AI client not available - configuration required")
+      }
+      
+      console.log(`RAGEngine: Initializing with AI provider`)
+      
+      // Test AI client connection first
+      console.log("RAGEngine: Testing AI provider connection...")
+      const connectionTest = await this.aiClient.testConnection()
       if (!connectionTest) {
-        console.warn("Connection test failed, but continuing with initialization")
+        console.warn("RAGEngine: AI provider connection test failed, but continuing initialization")
+        // Don't throw here - allow initialization to continue with potential fallback
+      } else {
+        console.log("RAGEngine: AI provider connection test successful")
       }
 
-      // Test embedding generation with fallback
-      let testEmbedding: number[] = []
+      // Test embedding generation with error handling
+      console.log("RAGEngine: Testing embedding generation...")
       try {
-        testEmbedding = await this.aiClient.generateEmbedding("test connection")
-      } catch (embError) {
-        console.warn("Test embedding failed, using fallback:", embError)
-        // Use a simple fallback embedding if the real one fails
-        testEmbedding = new Array(384).fill(0).map((_, i) => (i % 2 === 0 ? 0.1 : -0.1))
+        const testEmbedding = await this.aiClient.generateEmbedding("test connection")
+        if (!testEmbedding || !Array.isArray(testEmbedding) || testEmbedding.length === 0) {
+          throw new Error("Invalid embedding response during initialization")
+        }
+        console.log(`RAGEngine: Embedding test successful, dimension: ${testEmbedding.length}`)
+      } catch (embeddingError) {
+        const errorMessage = embeddingError instanceof Error ? embeddingError.message : "Unknown embedding error"
+        console.error(`RAGEngine: Embedding generation failed during initialization: ${errorMessage}`)
+        
+        // For Cohere and other providers that might have embedding issues, 
+        // we can still continue if text generation works
+        if (errorMessage.includes("embedding")) {
+          console.warn("RAGEngine: Continuing initialization despite embedding issues - will use fallback embeddings")
+        } else {
+          throw embeddingError // Re-throw non-embedding specific errors
+        }
       }
 
-      if (!testEmbedding || !Array.isArray(testEmbedding) || testEmbedding.length === 0) {
-        console.warn("Invalid test embedding, using fallback")
-        testEmbedding = new Array(384).fill(0).map((_, i) => (i % 2 === 0 ? 0.1 : -0.1))
+      // Test text generation as a final check
+      console.log("RAGEngine: Testing text generation...")
+      try {
+        const testResponse = await this.aiClient.generateText([
+          { role: "user", content: "Hello, this is a connectivity test." }
+        ])
+        if (!testResponse || typeof testResponse !== 'string') {
+          throw new Error("Invalid text generation response during initialization")
+        }
+        console.log("RAGEngine: Text generation test successful")
+      } catch (textError) {
+        const errorMessage = textError instanceof Error ? textError.message : "Unknown text generation error"
+        console.error(`RAGEngine: Text generation failed during initialization: ${errorMessage}`)
+        throw textError // Text generation is essential, so fail initialization
       }
 
+      console.log("RAGEngine: Initialization completed successfully")
       this.isInitialized = true
-      console.log("RAG Engine initialized successfully with embedding dimension:", testEmbedding.length)
     } catch (error) {
-      console.error("Failed to initialize RAG Engine:", error)
-      throw new Error(`RAG Engine initialization failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+      const errorMessage = error instanceof Error ? error.message : "Unknown initialization error"
+      console.error(`RAGEngine: Initialization failed: ${errorMessage}`)
+      
+      // Provide specific guidance based on error type
+      if (errorMessage.includes("API key") || errorMessage.includes("401") || errorMessage.includes("Unauthorized")) {
+        console.error("RAGEngine: Check your AI provider API key configuration")
+      } else if (errorMessage.includes("model") || errorMessage.includes("404")) {
+        console.error("RAGEngine: Check your AI model configuration")
+      } else if (errorMessage.includes("rate limit") || errorMessage.includes("429")) {
+        console.error("RAGEngine: API rate limit exceeded - try again later")
+      }
+      
+      this.isInitialized = false
+      throw new Error(`RAG Engine initialization failed: ${errorMessage}`)
     }
   }
 
@@ -129,11 +168,11 @@ export class RAGEngine {
       await this.initialize(config)
 
       // Re-generate embeddings for existing documents if provider changed
-      if (this.documents.length > 0) {
+      if (this.documents.length > 0 && this.aiClient) {
         console.log("Re-generating embeddings for existing documents...")
         for (const document of this.documents) {
           if (document.chunks && document.chunks.length > 0) {
-            document.embeddings = await this.aiClient!.generateEmbeddings(document.chunks)
+            document.embeddings = await this.aiClient.generateEmbeddings(document.chunks)
           }
         }
         console.log("Embeddings updated for all documents")
@@ -150,18 +189,55 @@ export class RAGEngine {
    * @returns Embedding as a number array
    */
   async generateEmbedding(text: string): Promise<number[]> {
-    if (!this.isInitialized || !this.aiClient) {
-      throw new Error("RAG engine not initialized")
-    }
-
     try {
+      if (!this.isInitialized || !this.aiClient) {
+        throw new Error("RAG engine not initialized")
+      }
+
+      if (!text || typeof text !== 'string' || text.trim().length === 0) {
+        throw new Error("Invalid text input for embedding generation")
+      }
+
+      console.log(`RAGEngine: Generating embedding for text: "${text.substring(0, 50)}..."`)
       const embedding = await this.aiClient.generateEmbedding(text)
+      
+      if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+        throw new Error("Invalid embedding returned from AI client")
+      }
+      
+      console.log(`RAGEngine: Successfully generated embedding with dimension: ${embedding.length}`)
       return embedding
     } catch (error) {
-      console.error("Failed to generate embedding:", error)
-      // Return a fallback embedding
-      return new Array(384).fill(0).map((_, i) => (i % 2 === 0 ? 0.1 : -0.1))
+      const errorMessage = error instanceof Error ? error.message : "Unknown embedding error"
+      console.error(`RAGEngine: Embedding generation failed: ${errorMessage}`)
+      
+      // For critical embedding failures, provide fallback
+      if (errorMessage.includes("API")) {
+        console.warn("RAGEngine: Using fallback embedding due to provider error")
+        // Generate a simple fallback embedding
+        return this.generateFallbackEmbedding(text)
+      }
+      
+      throw error
     }
+  }
+
+  private generateFallbackEmbedding(text: string): number[] {
+    console.warn("RAGEngine: Generating fallback embedding")
+    
+    // Simple hash-based embedding for fallback
+    const dimension = 1024
+    const embedding = new Array(dimension).fill(0)
+    
+    for (let i = 0; i < text.length; i++) {
+      const charCode = text.charCodeAt(i)
+      const index = charCode % dimension
+      embedding[index] += charCode * 0.1
+    }
+    
+    // Normalize
+    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0))
+    return magnitude > 0 ? embedding.map(val => val / magnitude) : embedding
   }
 
   async processDocument(file: File): Promise<Document> {
@@ -274,6 +350,11 @@ export class RAGEngine {
 
       if (!Array.isArray(this.documents) || this.documents.length === 0) {
         console.error("No documents available");
+        return [];
+      }
+
+      if (!this.aiClient) {
+        console.error("AI client not available");
         return [];
       }
 

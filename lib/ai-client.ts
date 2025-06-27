@@ -9,14 +9,12 @@ interface AIConfig {
     | "aiml"
     | "groq"
     | "openrouter"
-    | "cohere"
     | "deepinfra"
     | "deepseek"
     | "googleai"
     | "vertex"
     | "mistral"
     | "perplexity"
-    | "together"
     | "xai"
     | "alibaba"
     | "minimax"
@@ -45,13 +43,11 @@ export class AIClient {
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
-    if (!text || typeof text !== "string" || text.trim().length === 0) {
-      throw new Error("Invalid text input for embedding generation: Content must be a non-empty string.")
-    }
-
-    console.log(`AIClient: Generating text embedding directly using provider '${this.config.provider}'.`)
-
     try {
+      if (!text || typeof text !== 'string' || text.trim().length === 0) {
+        throw new Error("Invalid text input for embedding generation")
+      }
+
       switch (this.config.provider) {
         case "huggingface":
           return await this.generateHuggingFaceEmbedding(text)
@@ -59,31 +55,18 @@ export class AIClient {
           return await this.generateOpenAIEmbedding(text)
         case "aiml":
           return await this.generateAIMLEmbedding(text)
-        case "cohere":
-          return await this.generateCohereEmbedding(text)
-        case "vertex":
-          return await this.generateVertexEmbedding(text)
+        case "googleai":
+          return await this.generateGoogleAIEmbedding(text)
         case "fireworks":
           return await this.generateFireworksEmbedding(text)
         case "deepinfra":
           return await this.generateDeepInfraEmbedding(text)
-        case "together":
-          return await this.generateTogetherEmbedding(text)
-        case "googleai":
-          return await this.generateGoogleAIEmbedding(text)
-        // Add other direct providers here if they support embeddings
         default:
-          console.warn(
-            `AIClient: Embedding generation not supported for direct provider: ${this.config.provider}. Using hash-fallback.`,
-          )
+          console.warn(`Embedding generation not supported for provider: ${this.config.provider}, using fallback`)
           return this.generateFallbackEmbedding(text)
       }
-    } catch (directError) {
-      console.error(
-        `AIClient: Error in direct text embedding with provider ${this.config.provider}:`,
-        directError instanceof Error ? directError.message : String(directError),
-      )
-      console.log("AIClient: Attempting final hash-fallback for text...")
+    } catch (error) {
+      console.error("Error generating embedding:", error)
       return this.generateFallbackEmbedding(text)
     }
   }
@@ -314,100 +297,6 @@ export class AIClient {
     }
   }
 
-  // Fixed Cohere embedding with proper model selection
-  private async generateCohereEmbedding(text: string): Promise<number[]> {
-    const baseUrl = this.config.baseUrl || "https://api.cohere.ai/v1"
-    console.log(`AIClient: [Direct Text] Making Cohere API request to: ${baseUrl}/embed`)
-
-    try {
-      // Fix: Use proper embedding model for Cohere
-      let embeddingModel = this.config.model
-
-      // If the configured model is a text generation model (like command-r),
-      // switch to an appropriate embedding model
-      const textGenModels = ["command", "command-r", "command-r-plus", "command-light", "command-nightly"]
-      const isTextGenModel = textGenModels.some((model) => embeddingModel.toLowerCase().includes(model))
-
-      if (isTextGenModel) {
-        console.warn(`Cohere model '${embeddingModel}' is for text generation, switching to embedding model`)
-        embeddingModel = "embed-english-v3.0" // Default to English embedding model
-      }
-
-      // Ensure we're using a valid embedding model
-      const validEmbeddingModels = [
-        "embed-english-v3.0",
-        "embed-multilingual-v3.0",
-        "embed-english-light-v3.0",
-        "embed-multilingual-light-v3.0",
-        "embed-english-v2.0",
-        "embed-english-light-v2.0",
-        "embed-multilingual-v2.0",
-      ]
-
-      if (!validEmbeddingModels.includes(embeddingModel)) {
-        console.warn(`Unknown Cohere embedding model '${embeddingModel}', using default`)
-        embeddingModel = "embed-english-v3.0"
-      }
-
-      console.log(`Using Cohere embedding model: ${embeddingModel}`)
-
-      const response = await fetch(`${baseUrl}/embed`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          texts: [text],
-          model: embeddingModel,
-          input_type: "search_document",
-          embedding_types: ["float"],
-        }),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-        try {
-          const errorData = JSON.parse(errorText)
-          if (errorData.message) errorMessage = errorData.message
-          else if (errorData.error) errorMessage = errorData.error
-        } catch (parseError) {
-          console.warn("Could not parse Cohere error response as JSON")
-        }
-        throw new Error(`Cohere API error: ${errorMessage}`)
-      }
-
-      const result = await response.json()
-      if (!result.embeddings || !Array.isArray(result.embeddings) || result.embeddings.length === 0) {
-        throw new Error("Invalid embedding data from Cohere API")
-      }
-
-      // Cohere returns embeddings in different formats, handle both
-      const embedding = result.embeddings[0]
-      if (Array.isArray(embedding)) {
-        return embedding
-      } else if (embedding && Array.isArray(embedding.values)) {
-        return embedding.values
-      } else {
-        throw new Error("Unexpected embedding format from Cohere API")
-      }
-    } catch (error) {
-      console.error(`Cohere embedding generation failed: ${error instanceof Error ? error.message : "Unknown error"}`)
-      console.log("Using fallback embedding for Cohere")
-      return this.generateFallbackEmbedding(text)
-    }
-  }
-
-  private async generateVertexEmbedding(text: string): Promise<number[]> {
-    // This would require specific Google Cloud SDK or REST calls.
-    // For now, it uses the simpleGenerateEmbedding placeholder.
-    console.log("AIClient: [Direct Text] Vertex embedding (simplified/placeholder) for: ", text.substring(0, 30))
-    // In a real scenario, check this.config.apiKey (service account key) and this.config.model (Vertex AI model ID)
-    // and make appropriate calls to Google Vertex AI embedding endpoint.
-    return this.simpleGenerateEmbedding("vertex", text)
-  }
-
   // New embedding methods for additional providers
   private async generateFireworksEmbedding(text: string): Promise<number[]> {
     const baseUrl = this.config.baseUrl || "https://api.fireworks.ai/inference/v1"
@@ -493,47 +382,6 @@ export class AIClient {
     }
   }
 
-  private async generateTogetherEmbedding(text: string): Promise<number[]> {
-    const baseUrl = this.config.baseUrl || "https://api.together.xyz/v1"
-    console.log(`AIClient: [Direct Text] Making Together API request to: ${baseUrl}/embeddings`)
-
-    try {
-      // Use appropriate embedding model for Together
-      let embeddingModel = this.config.model
-
-      if (!embeddingModel.includes("embedding")) {
-        embeddingModel = "togethercomputer/m2-bert-80M-8k-retrieval"
-      }
-
-      const response = await fetch(`${baseUrl}/embeddings`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: embeddingModel,
-          input: text,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Together API error: ${response.status} ${errorText}`)
-      }
-
-      const result = await response.json()
-      if (!result.data || !Array.isArray(result.data) || result.data.length === 0) {
-        throw new Error("Invalid embedding data from Together API")
-      }
-
-      return result.data[0].embedding
-    } catch (error) {
-      console.error(`Together embedding generation failed: ${error instanceof Error ? error.message : String(error)}`)
-      return this.generateFallbackEmbedding(text)
-    }
-  }
-
   private async generateGoogleAIEmbedding(text: string): Promise<number[]> {
     const baseUrl = this.config.baseUrl || "https://generativelanguage.googleapis.com/v1beta"
     console.log(`AIClient: [Direct Text] Making Google AI API request to: ${baseUrl}`)
@@ -599,8 +447,6 @@ export class AIClient {
           return await this.generateGroqText(messages)
         case "openrouter":
           return await this.generateOpenRouterText(messages)
-        case "cohere":
-          return await this.generateCohereText(messages)
         case "deepinfra":
           return await this.generateDeepInfraText(messages)
         case "deepseek":
@@ -613,8 +459,6 @@ export class AIClient {
           return await this.generateMistralText(messages)
         case "perplexity":
           return await this.generatePerplexityText(messages)
-        case "together":
-          return await this.generateTogetherText(messages)
         case "xai":
           return await this.generateXAIText(messages)
         case "alibaba":
@@ -652,16 +496,12 @@ export class AIClient {
           return await this.testAIMLConnection()
         case "groq":
           return await this.testGroqConnection()
-        case "cohere":
-          return await this.testCohereConnection()
         case "fireworks":
           return await this.testFireworksConnection()
         case "cerebras":
           return await this.testCerebrasConnection()
         case "deepinfra":
           return await this.testDeepInfraConnection()
-        case "together":
-          return await this.testTogetherConnection()
         case "googleai":
           return await this.testGoogleAIConnection()
         case "replicate":
@@ -698,27 +538,51 @@ export class AIClient {
     console.warn("Using fallback embedding generation")
     try {
       if (!text || typeof text !== 'string' || text.trim().length === 0) {
-        throw new Error("Invalid input text for fallback embedding");
+        console.warn("Invalid input text for fallback embedding, using default")
+        text = "default text"
       }
       
-      const dimension = 384;
+      // Use consistent dimension for fallback embeddings
+      const dimension = 1024; // Common embedding dimension
       const embedding = new Array<number>(dimension).fill(0);
       
-      // Simple hash-based embedding for fallback
-      for (let i = 0; i < text.length; i++) {
-        const charCode = text.charCodeAt(i);
+      // Improved hash-based embedding for fallback
+      const cleanText = text.toLowerCase().trim()
+      for (let i = 0; i < cleanText.length; i++) {
+        const charCode = cleanText.charCodeAt(i);
         const index = charCode % dimension;
-        embedding[index] += charCode / 128;
+        // Use multiple hash functions for better distribution
+        embedding[index] += (charCode * 0.1);
+        embedding[(charCode * 3) % dimension] += (charCode * 0.05);
+        embedding[(charCode * 7) % dimension] += (charCode * 0.02);
       }
       
+      // Add some randomness based on text content
+      for (let i = 0; i < dimension; i += 10) {
+        const seed = this.simpleHash(text + i.toString());
+        embedding[i] += (seed % 100) * 0.001;
+      }
+      
+      // Normalize the vector to unit length
       const magnitude = Math.sqrt(embedding.reduce((sum: number, val: number) => sum + val * val, 0));
-      return magnitude > 0 
-        ? embedding.map((val: number) => val / magnitude)
-        : embedding;
+      if (magnitude > 0) {
+        const normalized = embedding.map((val: number) => val / magnitude);
+        console.log(`Generated fallback embedding with dimension: ${normalized.length}`);
+        return normalized;
+      } else {
+        // If magnitude is 0, create a small random vector
+        console.warn("Zero magnitude in fallback embedding, generating random vector");
+        const random = new Array(dimension).fill(0).map(() => (Math.random() - 0.5) * 0.1);
+        const randomMagnitude = Math.sqrt(random.reduce((sum: number, val: number) => sum + val * val, 0));
+        return random.map((val: number) => val / randomMagnitude);
+      }
     } catch (error) {
       console.error("Error in fallback embedding generation:", error);
-      // Return a zero vector of the expected dimension
-      return new Array(384).fill(0);
+      // Return a minimal valid embedding vector
+      const dimension = 1024;
+      const minimal = new Array(dimension).fill(0);
+      minimal[0] = 1.0; // Set first element to 1 for a valid unit vector
+      return minimal;
     }
   }
 
@@ -956,48 +820,6 @@ export class AIClient {
     }
   }
 
-  // Fixed Cohere text generation to use proper models
-  private async generateCohereText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://api.cohere.ai/v1"
-
-    // Ensure we're using a text generation model for Cohere
-    let textModel = this.config.model
-    const embeddingModels = ["embed-english", "embed-multilingual"]
-    const isEmbeddingModel = embeddingModels.some((model) => textModel.toLowerCase().includes(model))
-
-    if (isEmbeddingModel) {
-      console.warn(`Cohere model '${textModel}' is for embeddings, switching to text generation model`)
-      textModel = "command-r" // Default to command-r for text generation
-    }
-
-    // Convert messages to Cohere format
-    const prompt = messages.map((msg) => `${msg.role}: ${msg.content}`).join("\n") + "\nassistant:"
-
-    const response = await fetch(`${baseUrl}/generate`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: textModel,
-        prompt: prompt,
-        max_tokens: 500,
-        temperature: 0.7,
-        stop_sequences: ["\nuser:", "\nhuman:"],
-      }),
-    })
-    if (!response.ok) throw new Error(`Cohere API error: ${response.statusText}`)
-    const result = await response.json()
-    return result.generations[0].text.trim()
-  }
-
-  private async testCohereConnection(): Promise<boolean> {
-    try {
-      await this.generateCohereEmbedding("test connection")
-      return true
-    } catch {
-      return false
-    }
-  }
-
   // New provider implementations
   private async generateFireworksText(messages: ChatMessage[]): Promise<string> {
     try {
@@ -1145,66 +967,234 @@ export class AIClient {
     }
   }
 
-  // Simplified implementations for other providers
-  private async testOpenRouterConnection(): Promise<boolean> {
-    return this.simpleTestConnection("openrouter")
-  }
+  // Proper implementations for providers that were using placeholders
   private async generateOpenRouterText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("openrouter", messages)
+    const baseUrl = this.config.baseUrl || "https://openrouter.ai/api/v1"
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { 
+        Authorization: `Bearer ${this.config.apiKey}`, 
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://quantumpdf-chatapp.com",
+        "X-Title": "QuantumPDF ChatApp"
+      },
+      body: JSON.stringify({ 
+        model: this.config.model, 
+        messages: messages, 
+        max_tokens: 500, 
+        temperature: 0.7 
+      }),
+    })
+    if (!response.ok) throw new Error(`OpenRouter API error: ${response.statusText}`)
+    const result = await response.json()
+    return result.choices[0].message.content
   }
-  private async testDeepInfraConnection(): Promise<boolean> {
-    return this.simpleTestConnection("deepinfra")
+
+  private async testOpenRouterConnection(): Promise<boolean> {
+    try {
+      await this.generateOpenRouterText([{ role: "user", content: "test" }])
+      return true
+    } catch {
+      return false
+    }
   }
+
   private async generateDeepInfraText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("deepinfra", messages)
+    const baseUrl = this.config.baseUrl || "https://api.deepinfra.com/v1/openai"
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+    })
+    if (!response.ok) throw new Error(`DeepInfra API error: ${response.statusText}`)
+    const result = await response.json()
+    return result.choices[0].message.content
   }
-  private async testDeepSeekConnection(): Promise<boolean> {
-    return this.simpleTestConnection("deepseek")
+
+  private async testDeepInfraConnection(): Promise<boolean> {
+    try {
+      await this.generateDeepInfraText([{ role: "user", content: "test" }])
+      return true
+    } catch {
+      return false
+    }
   }
+
   private async generateDeepSeekText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("deepseek", messages)
+    const baseUrl = this.config.baseUrl || "https://api.deepseek.com/v1"
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+    })
+    if (!response.ok) throw new Error(`DeepSeek API error: ${response.statusText}`)
+    const result = await response.json()
+    return result.choices[0].message.content
   }
-  private async testVertexConnection(): Promise<boolean> {
-    return this.simpleTestConnection("vertex")
+
+  private async testDeepSeekConnection(): Promise<boolean> {
+    try {
+      await this.generateDeepSeekText([{ role: "user", content: "test" }])
+      return true
+    } catch {
+      return false
+    }
   }
+
   private async generateVertexText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("vertex", messages)
+    const baseUrl = this.config.baseUrl || "https://us-central1-aiplatform.googleapis.com/v1"
+    // Note: Vertex AI requires more complex authentication, this is a simplified version
+    const response = await fetch(`${baseUrl}/projects/YOUR_PROJECT/locations/us-central1/publishers/google/models/${this.config.model}:generateContent`, {
+      method: "POST",
+      headers: { 
+        Authorization: `Bearer ${this.config.apiKey}`, 
+        "Content-Type": "application/json" 
+      },
+      body: JSON.stringify({
+        contents: messages.map(msg => ({
+          role: msg.role === "assistant" ? "model" : "user",
+          parts: [{ text: msg.content }]
+        }))
+      }),
+    })
+    if (!response.ok) throw new Error(`Vertex AI API error: ${response.statusText}`)
+    const result = await response.json()
+    return result.candidates[0].content.parts[0].text
   }
-  private async testMistralConnection(): Promise<boolean> {
-    return this.simpleTestConnection("mistral")
+
+  private async testVertexConnection(): Promise<boolean> {
+    try {
+      await this.generateVertexText([{ role: "user", content: "test" }])
+      return true
+    } catch {
+      return false
+    }
   }
+
   private async generateMistralText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("mistral", messages)
+    const baseUrl = this.config.baseUrl || "https://api.mistral.ai/v1"
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+    })
+    if (!response.ok) throw new Error(`Mistral API error: ${response.statusText}`)
+    const result = await response.json()
+    return result.choices[0].message.content
   }
-  private async testPerplexityConnection(): Promise<boolean> {
-    return this.simpleTestConnection("perplexity")
+
+  private async testMistralConnection(): Promise<boolean> {
+    try {
+      await this.generateMistralText([{ role: "user", content: "test" }])
+      return true
+    } catch {
+      return false
+    }
   }
+
   private async generatePerplexityText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("perplexity", messages)
+    const baseUrl = this.config.baseUrl || "https://api.perplexity.ai"
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+    })
+    if (!response.ok) throw new Error(`Perplexity API error: ${response.statusText}`)
+    const result = await response.json()
+    return result.choices[0].message.content
   }
-  private async testTogetherConnection(): Promise<boolean> {
-    return this.simpleTestConnection("together")
+
+  private async testPerplexityConnection(): Promise<boolean> {
+    try {
+      await this.generatePerplexityText([{ role: "user", content: "test" }])
+      return true
+    } catch {
+      return false
+    }
   }
-  private async generateTogetherText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("together", messages)
-  }
-  private async testXAIConnection(): Promise<boolean> {
-    return this.simpleTestConnection("xai")
-  }
+
   private async generateXAIText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("xai", messages)
+    const baseUrl = this.config.baseUrl || "https://api.x.ai/v1"
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+    })
+    if (!response.ok) throw new Error(`xAI API error: ${response.statusText}`)
+    const result = await response.json()
+    return result.choices[0].message.content
   }
-  private async testAlibabaConnection(): Promise<boolean> {
-    return this.simpleTestConnection("alibaba")
+
+  private async testXAIConnection(): Promise<boolean> {
+    try {
+      await this.generateXAIText([{ role: "user", content: "test" }])
+      return true
+    } catch {
+      return false
+    }
   }
+
   private async generateAlibabaText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("alibaba", messages)
+    const baseUrl = this.config.baseUrl || "https://dashscope.aliyuncs.com/api/v1"
+    const response = await fetch(`${baseUrl}/services/aigc/text-generation/generation`, {
+      method: "POST",
+      headers: { 
+        Authorization: `Bearer ${this.config.apiKey}`, 
+        "Content-Type": "application/json",
+        "X-DashScope-SSE": "disable"
+      },
+      body: JSON.stringify({
+        model: this.config.model,
+        input: {
+          messages: messages
+        },
+        parameters: {
+          max_tokens: 500,
+          temperature: 0.7
+        }
+      }),
+    })
+    if (!response.ok) throw new Error(`Alibaba API error: ${response.statusText}`)
+    const result = await response.json()
+    return result.output.text
   }
-  private async testMiniMaxConnection(): Promise<boolean> {
-    return this.simpleTestConnection("minimax")
+
+  private async testAlibabaConnection(): Promise<boolean> {
+    try {
+      await this.generateAlibabaText([{ role: "user", content: "test" }])
+      return true
+    } catch {
+      return false
+    }
   }
+
   private async generateMiniMaxText(messages: ChatMessage[]): Promise<string> {
-    return this.simpleGenerateText("minimax", messages)
+    const baseUrl = this.config.baseUrl || "https://api.minimax.chat/v1"
+    const response = await fetch(`${baseUrl}/text/chatcompletion_v2`, {
+      method: "POST",
+      headers: { 
+        Authorization: `Bearer ${this.config.apiKey}`, 
+        "Content-Type": "application/json" 
+      },
+      body: JSON.stringify({
+        model: this.config.model,
+        messages: messages,
+        max_tokens: 500,
+        temperature: 0.7
+      }),
+    })
+    if (!response.ok) throw new Error(`MiniMax API error: ${response.statusText}`)
+    const result = await response.json()
+    return result.choices[0].message.content
+  }
+
+  private async testMiniMaxConnection(): Promise<boolean> {
+    try {
+      await this.generateMiniMaxText([{ role: "user", content: "test" }])
+      return true
+    } catch {
+      return false
+    }
   }
 
   private async simpleTestConnection(provider: string): Promise<boolean> {
@@ -1216,10 +1206,12 @@ export class AIClient {
     }
   }
   private async simpleGenerateText(provider: string, messages: ChatMessage[]): Promise<string> {
-    console.log(`Generating text with ${provider} (simplified)`)
+    console.log(`Generating text with ${provider} (simplified fallback)`)
     if (!this.config.apiKey) throw new Error(`${provider} API key not provided`)
-    const userMessage = messages.find((m) => m.role === "user")?.content || "No user message"
-    return `Placeholder response from ${provider} for: "${userMessage.substring(0, 50)}..."`
+    
+    // This is a fallback for providers that don't have proper implementation yet
+    // In production, all providers should have proper API implementations
+    throw new Error(`${provider} provider requires proper API implementation. Please contact support.`)
   }
   private async simpleGenerateEmbedding(provider: string, text: string): Promise<number[]> {
     try {
