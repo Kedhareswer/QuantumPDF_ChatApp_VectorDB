@@ -304,99 +304,112 @@ Powered by QuantumPDF ChatApp`
     }
   }
 
+  const handleShareChat = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'QuantumPDF Chat',
+          text: 'Check out this AI-powered PDF chat application',
+          url: window.location.href,
+        })
+      } else {
+        // Fallback to clipboard
+        await navigator.clipboard.writeText(window.location.href)
+        toast({
+          title: "Link Copied",
+          description: "Chat link has been copied to clipboard",
+        })
+      }
+    } catch (error) {
+      console.error('Error sharing:', error)
+    }
+  }
+
   if (isExporting || isSharing) {
     return <QuickActionsLoadingSkeleton />
   }
 
   return (
     <div className="flex items-center space-x-2">
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={onClearChat}
-        disabled={disabled}
-        className="border-black text-black hover:bg-black hover:text-white"
-        title="Clear Chat History"
-      >
-        <Trash2 className="w-4 h-4" />
-      </Button>
+      {/* Mobile: Single dropdown with all actions */}
+      <div className="lg:hidden">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-2 border-gray-300 hover:border-black touch-target"
+              disabled={disabled}
+            >
+              Actions
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={onClearChat} disabled={disabled}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Clear Chat
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onNewSession} disabled={disabled}>
+              <RotateCcw className="w-4 h-4 mr-2" />
+              New Session
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => handleExportChat('json')} disabled={disabled}>
+              <Download className="w-4 h-4 mr-2" />
+              Export Chat
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleShareChat}>
+              <Share className="w-4 h-4 mr-2" />
+              Share
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={onNewSession}
-        disabled={disabled}
-        className="border-black text-black hover:bg-black hover:text-white"
-        title="New Session"
-      >
-        <RotateCcw className="w-4 h-4" />
-      </Button>
-
-      {/* Export Dropdown */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-      <Button
-        size="sm"
-        variant="outline"
-            disabled={disabled || !messages.length}
-        className="border-black text-black hover:bg-black hover:text-white"
-        title="Export Chat"
-      >
-        <Download className="w-4 h-4" />
-      </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuLabel>Export Format</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => handleExportChat('json')}>
-            <FileText className="w-4 h-4 mr-2" />
-            JSON Data
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleExportChat('markdown')}>
-            <FileText className="w-4 h-4 mr-2" />
-            Markdown
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleExportChat('txt')}>
-            <FileText className="w-4 h-4 mr-2" />
-            Plain Text
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleExportChat('pdf')}>
-            <FileText className="w-4 h-4 mr-2" />
-            PDF (Print)
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      {/* Share Dropdown */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-      <Button
-        size="sm"
-        variant="outline"
-            disabled={disabled || !messages.length}
-        className="border-black text-black hover:bg-black hover:text-white"
-        title="Share Session"
-      >
-        <Share className="w-4 h-4" />
-      </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuLabel>Share Options</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => handleShareSession('clipboard')}>
-            <Link2 className="w-4 h-4 mr-2" />
-            Copy to Clipboard
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleShareSession('email')}>
-            <Mail className="w-4 h-4 mr-2" />
-            Share via Email
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleShareSession('link')}>
-            <Share className="w-4 h-4 mr-2" />
-            Create Share Link
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* Desktop: Individual buttons */}
+      <div className="hidden lg:flex items-center space-x-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onClearChat}
+          disabled={disabled}
+          className="border-2 border-gray-300 hover:border-black text-xs"
+        >
+          <Trash2 className="w-3 h-3 mr-1" />
+          Clear
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onNewSession}
+          disabled={disabled}
+          className="border-2 border-gray-300 hover:border-black text-xs"
+        >
+          <RotateCcw className="w-3 h-3 mr-1" />
+          New
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-2 border-gray-300 hover:border-black text-xs"
+            >
+              More
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => handleExportChat('json')} disabled={disabled}>
+              <Download className="w-4 h-4 mr-2" />
+              Export Chat
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleShareChat}>
+              <Share className="w-4 h-4 mr-2" />
+              Share
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   )
 }

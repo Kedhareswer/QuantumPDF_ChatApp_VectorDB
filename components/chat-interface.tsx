@@ -268,15 +268,17 @@ export function ChatInterface({
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Chat Header with Controls */}
-      <div className="border-b border-gray-200 p-4">
+      {/* Enhanced mobile-friendly chat header */}
+      <div className="border-b border-gray-200 mobile-container safe-area-top">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Chat</h2>
-          <QuickActions
-            onClearChat={onClearChat}
-            onNewSession={onNewSession}
-            disabled={disabled}
-          />
+          <h2 className="text-lg lg:text-xl font-semibold">Chat</h2>
+          <div className="desktop-only">
+            <QuickActions
+              onClearChat={onClearChat}
+              onNewSession={onNewSession}
+              disabled={disabled}
+            />
+          </div>
         </div>
       </div>
       
@@ -285,19 +287,19 @@ export function ChatInterface({
         Skip to chat messages
       </a>
 
-      {/* Messages Area */}
-      <ScrollArea className="flex-1 px-4 sm:px-6 lg:px-8" ref={scrollAreaRef}>
-        <div id="chat-messages" className="max-w-4xl mx-auto py-6 space-content-lg">
+      {/* Enhanced messages area with mobile optimization */}
+      <ScrollArea className="flex-1 mobile-container lg:px-8" ref={scrollAreaRef}>
+        <div id="chat-messages" className="max-w-4xl mx-auto py-4 lg:py-6 space-content-lg">
           {messages.length === 0 ? (
-            <div className="flex items-center justify-center min-h-[60vh]">
-              <div className="text-center space-y-8 max-w-2xl px-4">
-                <div className="w-24 h-24 border-4 border-black mx-auto flex items-center justify-center bg-gray-50 card-enhanced">
-                  <Brain className="w-12 h-12" />
+            <div className="flex items-center justify-center min-h-[50vh] lg:min-h-[60vh]">
+              <div className="text-center space-y-6 lg:space-y-8 max-w-2xl px-4">
+                <div className="w-16 h-16 lg:w-24 lg:h-24 border-4 border-black mx-auto flex items-center justify-center bg-gray-50 card-enhanced">
+                  <Brain className="w-8 h-8 lg:w-12 lg:h-12" />
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3 lg:space-y-4">
                   <h1 className="text-hierarchy-1">QUANTUM PDF READY</h1>
-                  <p className="text-lg text-gray-600 leading-relaxed">
+                  <p className="text-base lg:text-lg text-gray-600 leading-relaxed">
                     {disabled
                       ? "Upload PDF documents and configure your AI provider to start chatting"
                       : "Ask questions about your uploaded documents"}
@@ -305,20 +307,20 @@ export function ChatInterface({
                 </div>
 
                 {!disabled && (
-                  <div className="space-y-6">
+                  <div className="space-y-4 lg:space-y-6">
                     <h2 className="text-hierarchy-3 text-gray-800">SUGGESTED QUESTIONS:</h2>
-                    <div className="grid gap-3 max-w-xl mx-auto">
+                    <div className="grid gap-2 lg:gap-3 max-w-xl mx-auto">
                       {SUGGESTED_QUESTIONS.map((question, index) => (
                         <button
                           key={index}
                           onClick={() => handleSuggestedQuestion(question)}
-                          className="p-4 text-left border-2 border-gray-300 hover:border-black hover:bg-gray-50 transition-all duration-200 text-sm group btn-enhanced"
+                          className="p-3 lg:p-4 text-left border-2 border-gray-300 hover:border-black hover:bg-gray-50 transition-all duration-200 text-sm group btn-enhanced touch-target"
                           disabled={isProcessing}
                           aria-label={`Ask: ${question}`}
                         >
-                          <div className="flex items-start space-x-3">
-                            <Sparkles className="w-4 h-4 mt-0.5 text-gray-500 group-hover:text-black transition-colors" />
-                            <span className="leading-relaxed">{question}</span>
+                          <div className="flex items-start space-x-2 lg:space-x-3">
+                            <Sparkles className="w-4 h-4 mt-0.5 text-gray-500 group-hover:text-black transition-colors flex-shrink-0" />
+                            <span className="leading-relaxed text-left">{question}</span>
                           </div>
                         </button>
                       ))}
@@ -326,44 +328,44 @@ export function ChatInterface({
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-8 text-sm text-gray-500">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6 pt-6 lg:pt-8 text-sm text-gray-500">
                   <div className="text-center space-y-2">
-                    <MessageSquare className="w-8 h-8 mx-auto" />
+                    <MessageSquare className="w-6 h-6 lg:w-8 lg:h-8 mx-auto" />
                     <p className="font-medium">Multi-document chat</p>
                   </div>
                   <div className="text-center space-y-2">
-                    <Brain className="w-8 h-8 mx-auto" />
+                    <Brain className="w-6 h-6 lg:w-8 lg:h-8 mx-auto" />
                     <p className="font-medium">AI-powered analysis</p>
                   </div>
                   <div className="text-center space-y-2">
-                    <FileText className="w-8 h-8 mx-auto" />
+                    <FileText className="w-6 h-6 lg:w-8 lg:h-8 mx-auto" />
                     <p className="font-medium">Source citations</p>
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="space-y-8">
+            <div className="space-y-6 lg:space-y-8">
               {messages.map((message) => (
-                <div key={message.id} className="space-y-4" role="article" aria-label={`${message.role} message`}>
-                  {/* Message Header */}
+                <div key={message.id} className="space-y-3 lg:space-y-4" role="article" aria-label={`${message.role} message`}>
+                  {/* Enhanced message header */}
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2 lg:space-x-4">
                       <Badge
                         variant="outline"
-                        className={`border-2 font-bold px-3 py-1 ${
+                        className={`border-2 font-bold px-2 py-1 lg:px-3 lg:py-1 text-xs lg:text-sm ${
                           message.role === "user" ? "border-black bg-black text-white" : "border-gray-400 text-gray-700"
                         }`}
                       >
                         {message.role === "user" ? "USER" : "ASSISTANT"}
                       </Badge>
-                      <time className="text-sm text-gray-500 font-mono" dateTime={message.timestamp.toISOString()}>
+                      <time className="text-xs lg:text-sm text-gray-500 font-mono" dateTime={message.timestamp.toISOString()}>
                         {formatTimestamp(message.timestamp)}
                       </time>
                     </div>
 
                     {message.metadata && (
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-2 lg:space-x-3">
                         {message.metadata.responseTime && (
                           <Badge variant="outline" className="text-xs border-gray-300">
                             <Clock className="w-3 h-3 mr-1" />
@@ -380,32 +382,32 @@ export function ChatInterface({
                     )}
                   </div>
 
-                  {/* Message Content */}
+                  {/* Enhanced message content */}
                   <div
                     className={`message-bubble ${message.role === "user" ? "message-bubble-user" : "message-bubble-assistant"} group`}
                   >
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1">
+                    <div className="flex justify-between items-start gap-2 lg:gap-4">
+                      <div className="flex-1 min-w-0">
                         <MessageContent content={message.content} />
                       </div>
 
-                      {/* Message Actions */}
-                      <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Enhanced message actions for mobile */}
+                      <div className="flex items-start space-x-1 lg:space-x-2 opacity-70 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex-shrink-0">
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => copyToClipboard(message.content)}
-                          className={`h-8 w-8 p-0 ${message.role === "user" ? "text-white hover:bg-white/20" : "text-gray-600 hover:bg-gray-100"}`}
+                          className={`h-8 w-8 p-0 touch-target ${message.role === "user" ? "text-white hover:bg-white/20" : "text-gray-600 hover:bg-gray-100"}`}
                           aria-label="Copy message"
                         >
                           <Copy className="w-4 h-4" />
                         </Button>
                         {message.role === "assistant" && (
-                          <>
+                          <div className="hidden lg:flex space-x-1">
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
+                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100 touch-target"
                               aria-label="Thumbs up"
                             >
                               <ThumbsUp className="w-4 h-4" />
@@ -413,28 +415,28 @@ export function ChatInterface({
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
+                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100 touch-target"
                               aria-label="Thumbs down"
                             >
                               <ThumbsDown className="w-4 h-4" />
                             </Button>
-                          </>
+                          </div>
                         )}
                       </div>
                     </div>
 
                     {message.sources && message.sources.length > 0 && (
-                      <Card className="mt-6 border border-gray-200 bg-gray-50">
-                        <CardContent className="p-4">
-                          <div className="flex items-center space-x-2 mb-4">
+                      <Card className="mt-4 lg:mt-6 border border-gray-200 bg-gray-50">
+                        <CardContent className="p-3 lg:p-4">
+                          <div className="flex items-center space-x-2 mb-3 lg:mb-4">
                             <FileText className="w-4 h-4 text-gray-600" />
                             <span className="text-sm font-bold text-gray-700">SOURCES ({message.sources.length})</span>
                           </div>
-                          <div className="space-y-3">
+                          <div className="space-y-2 lg:space-y-3">
                             {message.sources.map((source, index) => (
                               <div
                                 key={index}
-                                className="text-sm bg-white p-3 border border-gray-200 font-mono rounded-sm"
+                                className="text-sm bg-white p-2 lg:p-3 border border-gray-200 font-mono rounded-sm break-words"
                               >
                                 <span className="text-gray-600 font-bold">#{index + 1}</span> {source}
                               </div>
@@ -448,19 +450,19 @@ export function ChatInterface({
               ))}
 
               {isProcessing && (
-                <div className="space-y-4" role="status" aria-live="polite" aria-label="AI is processing your request">
-                  <div className="flex items-center space-x-4">
-                    <Badge variant="outline" className="border-gray-400 text-gray-700 font-bold px-3 py-1">
+                <div className="space-y-3 lg:space-y-4" role="status" aria-live="polite" aria-label="AI is processing your request">
+                  <div className="flex items-center space-x-2 lg:space-x-4">
+                    <Badge variant="outline" className="border-gray-400 text-gray-700 font-bold px-2 py-1 lg:px-3 lg:py-1 text-xs lg:text-sm">
                       ASSISTANT
                     </Badge>
-                    <time className="text-sm text-gray-500 font-mono">{formatTimestamp(new Date())}</time>
+                    <time className="text-xs lg:text-sm text-gray-500 font-mono">{formatTimestamp(new Date())}</time>
                   </div>
                   <div className="message-bubble message-bubble-assistant">
-                    <div className="flex items-center space-x-4">
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                      <span className="text-base">Analyzing documents and generating response...</span>
+                    <div className="flex items-center space-x-3 lg:space-x-4">
+                      <Loader2 className="w-5 h-5 lg:w-6 lg:h-6 animate-spin flex-shrink-0" />
+                      <span className="text-sm lg:text-base">Analyzing documents and generating response...</span>
                     </div>
-                    <div className="mt-4 text-sm text-gray-500 space-y-2">
+                    <div className="mt-3 lg:mt-4 text-xs lg:text-sm text-gray-500 space-y-2">
                       <div className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
                         <span>Searching relevant content</span>
@@ -490,11 +492,20 @@ export function ChatInterface({
         </div>
       </ScrollArea>
 
-      {/* Input Area */}
-      <div className="border-t-2 border-black bg-white">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <form onSubmit={handleSubmit} className="space-y-4 form-enhanced">
-            <div className="flex space-x-4">
+      {/* Enhanced mobile-optimized input area */}
+      <div className="border-t-2 border-black bg-white safe-area-bottom">
+        <div className="max-w-4xl mx-auto mobile-container lg:px-8 py-3 lg:py-6">
+          {/* Mobile action buttons */}
+          <div className="mobile-only mb-3">
+            <QuickActions
+              onClearChat={onClearChat}
+              onNewSession={onNewSession}
+              disabled={disabled}
+            />
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-3 lg:space-y-4 form-enhanced">
+            <div className="flex space-x-3 lg:space-x-4">
               <div className="flex-1">
                 <label htmlFor="chat-input" className="sr-only">
                   Ask a question about your documents
@@ -507,35 +518,49 @@ export function ChatInterface({
                   onKeyDown={handleKeyDown}
                   placeholder={
                     disabled
-                      ? "Configure AI provider and upload documents to start chatting..."
-                      : "Ask a question about your documents... (Shift+Enter for new line)"
+                      ? "Upload documents and configure AI to start chatting..."
+                      : "Ask a question about your documents..."
                   }
-                  disabled={disabled || isProcessing}
-                  className="min-h-[3rem] max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed"
+                  className="resize-none border-2 border-black focus:ring-0 focus:border-black min-h-[44px] lg:min-h-[52px] text-base lg:text-sm"
                   rows={1}
+                  disabled={disabled || isProcessing}
+                  maxLength={2000}
                 />
               </div>
+              
               <Button
                 type="submit"
-                disabled={disabled || isProcessing || !input.trim()}
-                className="border-2 border-black bg-black text-white hover:bg-white hover:text-black px-6 h-12 btn-enhanced self-end"
+                disabled={!input.trim() || isProcessing || disabled}
+                className="bg-black text-white hover:bg-gray-800 border-2 border-black touch-target min-w-[44px] lg:min-w-[52px] h-[44px] lg:h-[52px] px-3 lg:px-4"
                 aria-label="Send message"
               >
-                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                {isProcessing ? (
+                  <Loader2 className="w-4 h-4 lg:w-5 lg:h-5 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 lg:w-5 lg:h-5" />
+                )}
               </Button>
             </div>
 
-            {!disabled && (
-              <div className="text-center text-sm text-gray-500 space-y-1">
-                <p>
-                  <span className="font-bold">TIP:</span> Ask specific questions about your documents for better results
-                </p>
-                <p className="text-xs">
-                  Use <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs">Shift+Enter</kbd>{" "}
-                  for new lines
-                </p>
+            {/* Enhanced status info */}
+            <div className="flex items-center justify-between text-xs lg:text-sm text-gray-500">
+              <div className="flex items-center space-x-3 lg:space-x-4">
+                <span>
+                  {input.length}/2000 characters
+                </span>
+                {!disabled && (
+                  <span className="text-green-600 font-medium">
+                    Ready to chat
+                  </span>
+                )}
               </div>
-            )}
+              
+              <div className="hidden lg:flex items-center space-x-2 text-xs text-gray-400">
+                <span>Press</span>
+                <kbd className="px-1.5 py-0.5 text-xs border border-gray-300 rounded bg-gray-100">Enter</kbd>
+                <span>to send</span>
+              </div>
+            </div>
           </form>
         </div>
       </div>
