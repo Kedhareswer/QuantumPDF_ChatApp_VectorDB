@@ -11,6 +11,24 @@ interface Message {
     responseTime?: number
     relevanceScore?: number
     retrievedChunks?: number
+    qualityMetrics?: {
+      accuracyScore: number
+      completenessScore: number
+      clarityScore: number
+      confidenceScore: number
+      finalRating: number
+    }
+    tokenUsage?: {
+      contextTokens: number
+      reasoningTokens: number
+      responseTokens: number
+      totalTokens: number
+    }
+    reasoning?: {
+      initialThoughts: string
+      criticalReview: string
+      finalRefinement: string
+    }
   }
 }
 

@@ -21,6 +21,9 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  Zap,
+  Settings,
+  HelpCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -29,6 +32,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { QuickActions } from "@/components/quick-actions"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface Message {
   id: string
@@ -40,12 +47,33 @@ interface Message {
     responseTime?: number
     relevanceScore?: number
     retrievedChunks?: number
+    qualityMetrics?: {
+      accuracyScore: number
+      completenessScore: number
+      clarityScore: number
+      confidenceScore: number
+      finalRating: number
+    }
+    tokenUsage?: {
+      contextTokens: number
+      reasoningTokens: number
+      responseTokens: number
+      totalTokens: number
+    }
+    reasoning?: {
+      initialThoughts: string
+      criticalReview: string
+      finalRefinement: string
+    }
   }
 }
 
 interface ChatInterfaceProps {
   messages: Message[]
-  onSendMessage: (content: string) => void
+  onSendMessage: (content: string, options?: {
+    showThinking?: boolean,
+    complexityLevel?: 'simple' | 'normal' | 'complex'
+  }) => void
   onClearChat: () => void
   onNewSession: () => void
   isProcessing: boolean
@@ -207,6 +235,11 @@ export function ChatInterface({
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("")
   const [isExpanded, setIsExpanded] = useState(false)
+  const [showAdvancedControls, setShowAdvancedControls] = useState(false)
+  const [enhancedOptions, setEnhancedOptions] = useState({
+    showThinking: false,
+    complexityLevel: 'auto' as 'auto' | 'simple' | 'normal' | 'complex'
+  })
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -225,7 +258,14 @@ export function ChatInterface({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (input.trim() && !isProcessing && !disabled) {
-      onSendMessage(input.trim())
+      const options = enhancedOptions.complexityLevel === 'auto' 
+        ? { showThinking: enhancedOptions.showThinking }
+        : { 
+            showThinking: enhancedOptions.showThinking,
+            complexityLevel: enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex'
+          }
+      
+      onSendMessage(input.trim(), options)
       setInput("")
       setIsExpanded(false)
     }
@@ -240,7 +280,14 @@ export function ChatInterface({
 
   const handleSuggestedQuestion = (question: string) => {
     if (!isProcessing && !disabled) {
-      onSendMessage(question)
+      const options = enhancedOptions.complexityLevel === 'auto' 
+        ? { showThinking: enhancedOptions.showThinking }
+        : { 
+            showThinking: enhancedOptions.showThinking,
+            complexityLevel: enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex'
+          }
+      
+      onSendMessage(question, options)
     }
   }
 
@@ -272,12 +319,108 @@ export function ChatInterface({
       <div className="border-b border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Chat</h2>
-          <QuickActions
-            onClearChat={onClearChat}
-            onNewSession={onNewSession}
+          <div className="flex items-center space-x-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAdvancedControls(!showAdvancedControls)}
+                    className={showAdvancedControls ? "bg-purple-50 text-purple-700" : ""}
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Enhanced AI Controls</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <QuickActions
+              onClearChat={onClearChat}
+              onNewSession={onNewSession}
               disabled={disabled}
-          />
+            />
+          </div>
         </div>
+        
+        {/* Enhanced Controls */}
+        {showAdvancedControls && (
+          <Card className="mt-3 border border-purple-200 bg-purple-50/50">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-purple-800 flex items-center">
+                  <Brain className="w-4 h-4 mr-1" />
+                  Enhanced AI Settings
+                </h3>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-4 h-4 text-purple-600" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-sm">
+                        <strong>Thinking Mode:</strong> Shows AI's reasoning process<br/>
+                        <strong>Complexity:</strong> Controls analysis depth<br/>
+                        • Simple: Fast, direct answers<br/>
+                        • Normal: Balanced analysis<br/>
+                        • Complex: Deep reasoning with validation
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="thinking-mode"
+                    checked={enhancedOptions.showThinking}
+                    onCheckedChange={(checked) => 
+                      setEnhancedOptions(prev => ({ ...prev, showThinking: checked }))
+                    }
+                  />
+                  <Label htmlFor="thinking-mode" className="text-sm">
+                    Show Thinking Process
+                  </Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Label htmlFor="complexity-level" className="text-sm whitespace-nowrap">
+                    Analysis Level:
+                  </Label>
+                  <Select
+                    value={enhancedOptions.complexityLevel}
+                    onValueChange={(value) => 
+                      setEnhancedOptions(prev => ({ 
+                        ...prev, 
+                        complexityLevel: value as 'auto' | 'simple' | 'normal' | 'complex'
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto-detect</SelectItem>
+                      <SelectItem value="simple">Simple</SelectItem>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="complex">Complex</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              {enhancedOptions.showThinking && (
+                <div className="mt-2 text-xs text-purple-700 bg-purple-100 p-2 rounded">
+                  <Brain className="w-3 h-3 inline mr-1" />
+                  Thinking mode enabled - AI will show its reasoning process
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
       
       {/* Skip to content link for accessibility */}
@@ -363,7 +506,7 @@ export function ChatInterface({
                     </div>
 
                     {message.metadata && (
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-3 flex-wrap gap-2">
                         {message.metadata.responseTime && (
                           <Badge variant="outline" className="text-xs border-gray-300">
                             <Clock className="w-3 h-3 mr-1" />
@@ -374,6 +517,53 @@ export function ChatInterface({
                           <Badge variant="outline" className="text-xs border-gray-300">
                             <Target className="w-3 h-3 mr-1" />
                             {(message.metadata.relevanceScore * 100).toFixed(1)}%
+                          </Badge>
+                        )}
+                        {message.metadata.qualityMetrics && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs cursor-help ${
+                                    message.metadata.qualityMetrics.finalRating >= 85 
+                                      ? 'border-green-500 text-green-700 bg-green-50' 
+                                      : message.metadata.qualityMetrics.finalRating >= 70
+                                      ? 'border-yellow-500 text-yellow-700 bg-yellow-50'
+                                      : 'border-red-500 text-red-700 bg-red-50'
+                                  }`}
+                                >
+                                  <Sparkles className="w-3 h-3 mr-1" />
+                                  Q: {message.metadata.qualityMetrics.finalRating.toFixed(0)}%
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <div className="text-sm space-y-1">
+                                  <div className="font-semibold mb-2">Response Quality Breakdown:</div>
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div>Accuracy: {message.metadata.qualityMetrics.accuracyScore}%</div>
+                                    <div>Completeness: {message.metadata.qualityMetrics.completenessScore}%</div>
+                                    <div>Clarity: {message.metadata.qualityMetrics.clarityScore}%</div>
+                                    <div>Confidence: {message.metadata.qualityMetrics.confidenceScore}%</div>
+                                  </div>
+                                  <div className="text-xs text-gray-600 mt-2">
+                                    Overall Rating: {message.metadata.qualityMetrics.finalRating.toFixed(1)}%
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {message.metadata.tokenUsage && (
+                          <Badge variant="outline" className="text-xs border-gray-300">
+                            <Zap className="w-3 h-3 mr-1" />
+                            {message.metadata.tokenUsage.totalTokens}t
+                          </Badge>
+                        )}
+                        {message.metadata.reasoning && (
+                          <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 bg-purple-50">
+                            <Brain className="w-3 h-3 mr-1" />
+                            Enhanced
                           </Badge>
                         )}
                       </div>

@@ -14,6 +14,50 @@ export interface RAGResponse {
   confidence: number
 }
 
+// Enhanced interfaces for self-reflective system
+interface EnhancedQueryResponse {
+  answer: string
+  sources: string[]
+  relevanceScore: number
+  retrievedChunks: Array<{
+    content: string
+    source: string
+    similarity: number
+  }>
+  reasoning?: {
+    initialThoughts: string
+    criticalReview: string
+    finalRefinement: string
+  }
+  qualityMetrics: {
+    accuracyScore: number
+    completenessScore: number
+    clarityScore: number
+    confidenceScore: number
+    finalRating: number
+  }
+  tokenUsage: {
+    contextTokens: number
+    reasoningTokens: number
+    responseTokens: number
+    totalTokens: number
+  }
+}
+
+interface ProcessingPhase {
+  name: string
+  tokenBudget: number
+  completed: boolean
+  result?: any
+}
+
+interface QualityGate {
+  name: string
+  passed: boolean
+  issues: string[]
+  confidence: number
+}
+
 import { AIClient } from "./ai-client"
 import { PDFParser } from "./pdf-parser"
 
@@ -70,6 +114,8 @@ export class RAGEngine {
   private pdfParser: PDFParser
   private isInitialized = false
   private currentConfig: AIConfig | null = null
+  private tokenBudget = 4000 // Default token budget
+  private showThinking = false // Option to show/hide thinking process
 
   constructor() {
     this.pdfParser = new PDFParser()
@@ -417,21 +463,42 @@ export class RAGEngine {
     }
   }
 
-  async query(question: string): Promise<QueryResponse> {
-    console.log("RAG query started:", question);
+  async query(question: string, options?: { 
+    showThinking?: boolean, 
+    tokenBudget?: number,
+    complexityLevel?: 'simple' | 'normal' | 'complex'
+  }): Promise<EnhancedQueryResponse> {
+    console.log("Enhanced RAG query started:", question);
+
+    // Initialize processing options
+    const showThinking = options?.showThinking ?? false
+    const tokenBudget = options?.tokenBudget ?? 4000
+    const complexityLevel = options?.complexityLevel ?? 'normal'
 
     // Create default response structure
-    const defaultResponse: QueryResponse = {
+    const defaultResponse: EnhancedQueryResponse = {
       answer: "I apologize, but I couldn't process your question properly.",
       sources: [],
       relevanceScore: 0,
       retrievedChunks: [],
+      qualityMetrics: {
+        accuracyScore: 0,
+        completenessScore: 0,
+        clarityScore: 0,
+        confidenceScore: 0,
+        finalRating: 0
+      },
+      tokenUsage: {
+        contextTokens: 0,
+        reasoningTokens: 0,
+        responseTokens: 0,
+        totalTokens: 0
+      }
     };
 
     try {
       // Validate system state
       if (!this.isInitialized || !this.aiClient) {
-        console.error("RAG engine not initialized");
         return {
           ...defaultResponse,
           answer: "The system is not properly initialized. Please configure your AI provider and try again.",
@@ -440,91 +507,405 @@ export class RAGEngine {
 
       // Validate input
       if (!question || typeof question !== "string" || question.trim().length === 0) {
-        console.error("Invalid question provided");
         return {
           ...defaultResponse,
           answer: "Please provide a valid question.",
         };
       }
 
-      // Check if this is a certificate-related query
-      const isCertificateQuery = /(name|award|certificate|recipient|awarded to)/i.test(question);
-      
-      // Generate embedding for the question
-      const questionEmbedding = await this.aiClient.generateEmbedding(question);
-      if (!questionEmbedding || !Array.isArray(questionEmbedding) || questionEmbedding.length === 0) {
-        throw new Error("Failed to generate question embedding");
-      }
+      // Determine processing approach based on complexity
+      return await this.processQueryEnhanced(question, tokenBudget, complexityLevel, showThinking)
 
-      // Find relevant chunks - use more chunks for certificate queries
-      const chunkLimit = isCertificateQuery ? 10 : 5;
-      let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit);
-
-      if (relevantChunks.length === 0) {
-        return {
-          ...defaultResponse,
-          answer: "I couldn't find any relevant information to answer your question.",
-        };
-      }
-
-      // For certificate queries, prioritize chunks with certificate-related content
-      if (isCertificateQuery) {
-        relevantChunks = relevantChunks.sort((a, b) => {
-          const aIsCert = /(certificate|award|awarded to)/i.test(a.content);
-          const bIsCert = /(certificate|award|awarded to)/i.test(b.content);
-          
-          if (aIsCert && !bIsCert) return -1;
-          if (!aIsCert && bIsCert) return 1;
-          return b.similarity - a.similarity; // Fall back to similarity if both are certs or both are not
-        });
-      }
-
-      // Prepare context with special handling for certificate content
-      const context = relevantChunks.map(chunk => chunk.content).join("\n\n");
-      
-      // Create a more focused prompt for certificate queries
-      const systemPrompt = isCertificateQuery 
-        ? `You are an assistant that extracts information from certificates. Focus on the following details:
-           - Names of recipients
-           - Award/certificate types
-           - Dates
-           - Issuing organizations
-           - Any other relevant details
-           
-           If the information is not present in the context, clearly state that.`
-        : "You are a helpful assistant that answers questions based on the provided context. If the context doesn't contain relevant information, say so clearly.";
-
-      // Generate answer using AI
-      const messages = [
-        { role: "system" as const, content: systemPrompt },
-        { 
-          role: "user" as const, 
-          content: `Context: ${context}\n\nQuestion: ${question}\n\nAnswer:` 
-        },
-      ];
-
-      const answer = await this.aiClient.generateText(messages);
-
-      // Calculate relevance score
-      const relevanceScore = this.calculateRelevanceScore(relevantChunks);
-
-      // Prepare sources
-      const sources = Array.from(
-        new Set(relevantChunks.map(chunk => chunk.source))
-      ).filter(Boolean) as string[];
-
-      return {
-        answer: answer.trim(),
-        sources,
-        relevanceScore,
-        retrievedChunks: relevantChunks,
-      };
     } catch (error) {
-      console.error("Error in RAG query:", error);
+      console.error("Error in enhanced RAG query:", error);
       return {
         ...defaultResponse,
         answer: "I encountered an error while processing your request. Please try again later.",
       };
+    }
+  }
+
+  private async processQueryEnhanced(
+    question: string, 
+    tokenBudget: number, 
+    complexityLevel: string,
+    showThinking: boolean
+  ): Promise<EnhancedQueryResponse> {
+    
+    // Phase-based token allocation
+    const tokenAllocation = this.calculateTokenAllocation(tokenBudget, complexityLevel)
+    
+    // Phase 1: Context Analysis and Initial Response
+    const phase1Result = await this.phase1_ContextAnalysis(question, tokenAllocation.context)
+    
+    // Phase 2: Self-Critique and Validation (only for normal/complex queries)
+    const phase2Result = complexityLevel === 'simple' 
+      ? null 
+      : await this.phase2_SelfCritique(phase1Result, tokenAllocation.critique)
+    
+    // Phase 3: Refinement and Final Response
+    const phase3Result = await this.phase3_Refinement(
+      phase1Result, 
+      phase2Result, 
+      tokenAllocation.refinement,
+      showThinking
+    )
+
+    return phase3Result
+  }
+
+  private calculateTokenAllocation(budget: number, complexity: string) {
+    const allocations = {
+      'simple': { context: 0.6, critique: 0.0, refinement: 0.4 },
+      'normal': { context: 0.4, critique: 0.3, refinement: 0.3 },
+      'complex': { context: 0.3, critique: 0.4, refinement: 0.3 }
+    }
+    
+    const allocation = allocations[complexity as keyof typeof allocations]
+    
+    return {
+      context: Math.floor(budget * allocation.context),
+      critique: Math.floor(budget * allocation.critique), 
+      refinement: Math.floor(budget * allocation.refinement)
+    }
+  }
+
+  private async phase1_ContextAnalysis(question: string, tokenBudget: number) {
+    console.log("Phase 1: Context Analysis and Initial Response")
+    
+    // Generate embedding for the question
+    const questionEmbedding = await this.aiClient!.generateEmbedding(question);
+    
+    // Analyze question type for optimal chunk selection
+    const questionType = this.analyzeQuestionType(question)
+    const chunkLimit = this.getOptimalChunkLimit(questionType)
+    
+    // Find relevant chunks
+    let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit);
+    
+    if (relevantChunks.length === 0) {
+      return {
+        question,
+        relevantChunks: [],
+        context: "",
+        initialResponse: "I couldn't find any relevant information to answer your question.",
+        questionType,
+        tokensUsed: 0
+      }
+    }
+
+    // Optimize chunks for token budget
+    const optimizedChunks = this.optimizeChunksForTokens(relevantChunks, tokenBudget * 0.7)
+    const context = optimizedChunks.map(chunk => chunk.content).join("\n\n");
+    
+    // Generate initial response with enhanced prompt
+    const systemPrompt = this.createEnhancedSystemPrompt(questionType)
+    const userPrompt = this.createPhase1UserPrompt(question, context)
+    
+    const messages = [
+      { role: "system" as const, content: systemPrompt },
+      { role: "user" as const, content: userPrompt }
+    ];
+
+    const initialResponse = await this.aiClient!.generateText(messages);
+
+    return {
+      question,
+      relevantChunks: optimizedChunks,
+      context,
+      initialResponse: initialResponse.trim(),
+      questionType,
+      tokensUsed: this.estimateTokens(systemPrompt + userPrompt + initialResponse)
+    }
+  }
+
+  private async phase2_SelfCritique(phase1Result: any, tokenBudget: number) {
+    console.log("Phase 2: Self-Critique and Validation")
+    
+    const critiquePrompt = this.createCritiquePrompt(phase1Result)
+    
+    const messages = [
+      { 
+        role: "system" as const, 
+        content: "You are an AI critic. Review the response for accuracy, completeness, and source attribution. Use this format: ✓=verified, ?=uncertain, !=conflict, ∅=missing" 
+      },
+      { role: "user" as const, content: critiquePrompt }
+    ];
+
+    const critiqueResponse = await this.aiClient!.generateText(messages);
+    
+    // Parse critique response for issues
+    const issues = this.parseCritiqueResponse(critiqueResponse)
+    
+    return {
+      critiqueText: critiqueResponse.trim(),
+      identifiedIssues: issues,
+      tokensUsed: this.estimateTokens(critiquePrompt + critiqueResponse)
+    }
+  }
+
+  private async phase3_Refinement(
+    phase1Result: any, 
+    phase2Result: any, 
+    tokenBudget: number,
+    showThinking: boolean
+  ): Promise<EnhancedQueryResponse> {
+    console.log("Phase 3: Refinement and Final Response")
+    
+    let refinementPrompt: string
+    let finalResponse: string
+    
+    if (phase2Result) {
+      // Complex processing with refinement
+      refinementPrompt = this.createRefinementPrompt(phase1Result, phase2Result)
+      
+      const messages = [
+        { 
+          role: "system" as const, 
+          content: "Create the final, polished response incorporating the critique. Be factual, well-structured, and properly cited." 
+        },
+        { role: "user" as const, content: refinementPrompt }
+      ];
+
+      finalResponse = await this.aiClient!.generateText(messages);
+    } else {
+      // Simple processing - use initial response
+      finalResponse = phase1Result.initialResponse
+    }
+
+    // Calculate quality metrics
+    const qualityMetrics = this.calculateQualityMetrics(
+      phase1Result, 
+      phase2Result, 
+      finalResponse
+    )
+
+    // Prepare final response
+    let answer = finalResponse.trim()
+    
+    // Add thinking process if requested
+    if (showThinking && phase2Result) {
+      answer = `<thinking>
+Initial Analysis: ${phase1Result.initialResponse}
+
+Critical Review: ${phase2Result.critiqueText}
+
+Final Refinement: Applied improvements based on critique
+</thinking>
+
+${finalResponse.trim()}`
+    }
+
+    // Calculate token usage
+    const tokenUsage = {
+      contextTokens: phase1Result.tokensUsed,
+      reasoningTokens: phase2Result?.tokensUsed || 0,
+      responseTokens: this.estimateTokens(finalResponse),
+      totalTokens: phase1Result.tokensUsed + (phase2Result?.tokensUsed || 0) + this.estimateTokens(finalResponse)
+    }
+
+    // Prepare sources
+    const sources = Array.from(
+      new Set(phase1Result.relevantChunks.map((chunk: any) => chunk.source))
+    ).filter(Boolean) as string[];
+
+    return {
+      answer,
+      sources,
+      relevanceScore: this.calculateRelevanceScore(phase1Result.relevantChunks),
+      retrievedChunks: phase1Result.relevantChunks,
+      reasoning: phase2Result ? {
+        initialThoughts: phase1Result.initialResponse,
+        criticalReview: phase2Result.critiqueText,
+        finalRefinement: "Applied critique-based improvements"
+      } : undefined,
+      qualityMetrics,
+      tokenUsage
+    }
+  }
+
+  private analyzeQuestionType(question: string): string {
+    const questionLower = question.toLowerCase()
+    
+    if (/(what are|list|summary|key points|main|overview)/i.test(question)) {
+      return 'summary'
+    } else if (/(how|why|explain|analyze|compare)/i.test(question)) {
+      return 'analysis'
+    } else if (/(when|date|time|timeline)/i.test(question)) {
+      return 'timeline'
+    } else if (/(number|amount|cost|price|data|statistics)/i.test(question)) {
+      return 'data'
+    } else if (/(process|steps|procedure|method)/i.test(question)) {
+      return 'process'
+    } else if (/(difference|versus|vs|compared to)/i.test(question)) {
+      return 'comparison'
+    }
+    
+    return 'general'
+  }
+
+  private getOptimalChunkLimit(questionType: string): number {
+    const limits = {
+      'summary': 8,
+      'analysis': 6, 
+      'timeline': 10,
+      'data': 5,
+      'process': 7,
+      'comparison': 8,
+      'general': 5
+    }
+    
+    return limits[questionType as keyof typeof limits] || 5
+  }
+
+  private optimizeChunksForTokens(chunks: any[], tokenBudget: number) {
+    let totalTokens = 0
+    const optimizedChunks = []
+    
+    for (const chunk of chunks) {
+      const chunkTokens = this.estimateTokens(chunk.content)
+      if (totalTokens + chunkTokens <= tokenBudget) {
+        optimizedChunks.push(chunk)
+        totalTokens += chunkTokens
+      } else {
+        break
+      }
+    }
+    
+    return optimizedChunks
+  }
+
+  private createEnhancedSystemPrompt(questionType: string): string {
+    const basePrompt = `You are an expert document analyst. Your responses must be:
+1. FACTUALLY GROUNDED: Use ONLY information from provided context
+2. WELL-STRUCTURED: Use appropriate formatting (tables, lists, headers)  
+3. THOROUGHLY CITED: Reference specific sources
+4. ERROR-AWARE: Flag inconsistencies or unclear information
+
+QUALITY CHECKS:
+- Mark uncertain info: [UNCLEAR FROM SOURCES]
+- Flag conflicts: [CONFLICTING: Source A vs Source B]
+- Use exact quotes: [QUOTE: "text" - Document X]
+- Rate confidence: [HIGH/MEDIUM/LOW CONFIDENCE]
+
+NEVER add information not in the provided context.`
+
+    const typeSpecificPrompts = {
+      'summary': '\nRESPONSE FORMAT: Executive summary with numbered key points and source table.',
+      'analysis': '\nRESPONSE FORMAT: Structured analysis with reasoning, evidence, and conclusions.',
+      'timeline': '\nRESPONSE FORMAT: Chronological table with dates, events, and sources.',
+      'data': '\nRESPONSE FORMAT: Data table with numbers, units, and source verification.',
+      'process': '\nRESPONSE FORMAT: Numbered steps with detailed procedures and requirements.',
+      'comparison': '\nRESPONSE FORMAT: Comparison table showing similarities and differences.',
+      'general': '\nRESPONSE FORMAT: Clear, structured response with proper headings.'
+    }
+
+    return basePrompt + (typeSpecificPrompts[questionType as keyof typeof typeSpecificPrompts] || typeSpecificPrompts.general)
+  }
+
+  private createPhase1UserPrompt(question: string, context: string): string {
+    return `CONTEXT FROM DOCUMENTS:
+${context}
+
+QUESTION: ${question}
+
+Provide a comprehensive, well-structured response based on the context above. Use tables for numerical data, lists for key points, and clear headings for organization.`
+  }
+
+  private createCritiquePrompt(phase1Result: any): string {
+    return `REVIEW THIS RESPONSE FOR QUALITY:
+
+QUESTION: ${phase1Result.question}
+
+RESPONSE: ${phase1Result.initialResponse}
+
+AVAILABLE CONTEXT: ${phase1Result.context.substring(0, 500)}...
+
+CRITIQUE CHECKLIST:
+✓ Factual accuracy - Are all claims supported by context?
+✓ Completeness - Are all question aspects addressed?
+✓ Source attribution - Are claims properly cited?
+✓ Structure - Is the format appropriate?
+✓ Consistency - Any internal contradictions?
+
+Identify issues using: ✓=verified, ?=uncertain, !=conflict, ∅=missing
+Be specific about what needs improvement.`
+  }
+
+  private createRefinementPrompt(phase1Result: any, phase2Result: any): string {
+    return `REFINE THIS RESPONSE BASED ON CRITIQUE:
+
+ORIGINAL QUESTION: ${phase1Result.question}
+
+INITIAL RESPONSE: ${phase1Result.initialResponse}
+
+CRITIQUE FINDINGS: ${phase2Result.critiqueText}
+
+CONTEXT: ${phase1Result.context}
+
+Create an improved final response that addresses the identified issues while maintaining factual accuracy and proper structure.`
+  }
+
+  private parseCritiqueResponse(critique: string): string[] {
+    const issues = []
+    
+    if (critique.includes('?')) {
+      issues.push('Uncertain information identified')
+    }
+    if (critique.includes('!')) {
+      issues.push('Conflicting information found')  
+    }
+    if (critique.includes('∅')) {
+      issues.push('Missing information noted')
+    }
+    if (critique.toLowerCase().includes('unsupported')) {
+      issues.push('Unsupported claims detected')
+    }
+    if (critique.toLowerCase().includes('incomplete')) {
+      issues.push('Incomplete coverage identified')
+    }
+    
+    return issues
+  }
+
+  private calculateQualityMetrics(phase1Result: any, phase2Result: any, finalResponse: string) {
+    // Basic quality scoring based on available information
+    const hasSourceAttribution = finalResponse.includes('[') || finalResponse.includes('Document') || finalResponse.includes('Source')
+    const hasClearStructure = finalResponse.includes('\n\n') || finalResponse.includes('##') || finalResponse.includes('1.')
+    const usesContext = phase1Result.relevantChunks.length > 0
+    const critiquePassed = !phase2Result || phase2Result.identifiedIssues.length === 0
+    
+    const accuracyScore = (hasSourceAttribution && usesContext && critiquePassed) ? 90 : 70
+    const completenessScore = phase1Result.relevantChunks.length >= 3 ? 85 : 65
+    const clarityScore = hasClearStructure ? 80 : 60  
+    const confidenceScore = phase1Result.relevantChunks.length > 0 ? 
+      Math.min(95, phase1Result.relevantChunks[0].similarity * 100) : 50
+    
+    const finalRating = (accuracyScore + completenessScore + clarityScore + confidenceScore) / 4
+    
+    return {
+      accuracyScore,
+      completenessScore,
+      clarityScore,
+      confidenceScore,
+      finalRating
+    }
+  }
+
+  private estimateTokens(text: string): number {
+    // Rough estimation: ~4 characters per token
+    return Math.ceil(text.length / 4)
+  }
+
+  // Update the original query method signature for backward compatibility
+  async querySimple(question: string): Promise<QueryResponse> {
+    const enhancedResponse = await this.query(question, { complexityLevel: 'simple' })
+    
+    return {
+      answer: enhancedResponse.answer,
+      sources: enhancedResponse.sources,
+      relevanceScore: enhancedResponse.relevanceScore,
+      retrievedChunks: enhancedResponse.retrievedChunks
     }
   }
 

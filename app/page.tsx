@@ -133,7 +133,10 @@ export default function QuantumPDFChatbot() {
     })
   }, [vectorDBConfig, addError])
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, options?: {
+    showThinking?: boolean,
+    complexityLevel?: 'simple' | 'normal' | 'complex'
+  }) => {
     if (!documents.length) {
       addError({
         type: "warning",
@@ -155,7 +158,17 @@ export default function QuantumPDFChatbot() {
     setIsProcessing(true)
 
     try {
-      const response = await ragEngine.query(content)
+      // Determine complexity based on question characteristics
+      const detectedComplexity = options?.complexityLevel || detectQuestionComplexity(content)
+      const showThinking = options?.showThinking || detectedComplexity === 'complex'
+
+      console.log(`Processing query with complexity: ${detectedComplexity}, thinking: ${showThinking}`)
+
+      const response = await ragEngine.query(content, {
+        showThinking,
+        complexityLevel: detectedComplexity,
+        tokenBudget: 4000
+      })
 
       const assistantMessage = {
         id: (Date.now() + 1).toString(),
@@ -164,13 +177,32 @@ export default function QuantumPDFChatbot() {
         timestamp: new Date(),
         sources: response.sources,
         metadata: {
-          responseTime: 1500,
+          responseTime: response.tokenUsage.totalTokens * 2, // Rough estimate based on tokens
           relevanceScore: response.relevanceScore,
           retrievedChunks: response.retrievedChunks.length,
+          qualityMetrics: response.qualityMetrics,
+          tokenUsage: response.tokenUsage,
+          reasoning: response.reasoning
         },
       }
 
       addMessage(assistantMessage)
+
+      // Show quality metrics as info if they're particularly good or bad
+      if (response.qualityMetrics.finalRating >= 85) {
+        addError({
+          type: "success",
+          title: "High Quality Response",
+          message: `Response quality: ${response.qualityMetrics.finalRating.toFixed(1)}% - Enhanced analysis completed`,
+        })
+      } else if (response.qualityMetrics.finalRating < 60) {
+        addError({
+          type: "warning",
+          title: "Response Quality Notice",
+          message: `Response quality: ${response.qualityMetrics.finalRating.toFixed(1)}% - Consider rephrasing your question for better results`,
+        })
+      }
+
     } catch (error) {
       console.error("Error sending message:", error)
 
@@ -190,6 +222,26 @@ export default function QuantumPDFChatbot() {
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  // Helper function to detect question complexity
+  const detectQuestionComplexity = (question: string): 'simple' | 'normal' | 'complex' => {
+    const questionLower = question.toLowerCase()
+    
+    // Simple questions - direct factual queries
+    if (/(what is|when|where|who|date|name|title)/i.test(question) && question.length < 50) {
+      return 'simple'
+    }
+    
+    // Complex questions - analysis, comparison, synthesis
+    if (/(analyze|compare|evaluate|synthesize|implications|relationships|comprehensive|detailed analysis)/i.test(question) || 
+        question.length > 150 ||
+        (question.match(/\?/g) || []).length > 1) {
+      return 'complex'
+    }
+    
+    // Default to normal for everything else
+    return 'normal'
   }
 
   const handleDocumentUpload = async (document: any) => {
