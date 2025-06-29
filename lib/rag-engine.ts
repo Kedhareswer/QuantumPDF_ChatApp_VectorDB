@@ -868,7 +868,7 @@ export class RAGEngine {
       const messages = [
         { 
           role: "system" as const, 
-          content: "Create the final, polished response incorporating the critique. Be factual, well-structured, and properly cited." 
+          content: "You are a professional document analyst. Create polished, clean responses without meta-commentary, confidence ratings, or system artifacts. Focus on direct, helpful answers using proper markdown formatting." 
         },
         { role: "user" as const, content: refinementPrompt }
       ];
@@ -878,6 +878,9 @@ export class RAGEngine {
       // Simple processing - use initial response
       finalResponse = phase1Result.initialResponse
     }
+
+    // Clean up the response - remove any artifacts
+    finalResponse = this.cleanResponse(finalResponse)
 
     // Calculate quality metrics
     const qualityMetrics = this.calculateQualityMetrics(
@@ -889,17 +892,25 @@ export class RAGEngine {
     // Prepare final response
     let answer = finalResponse.trim()
     
-    // Add thinking process if requested
+    // Add thinking process if requested (but keep it clean)
     if (showThinking && phase2Result) {
-      answer = `<thinking>
-Initial Analysis: ${phase1Result.initialResponse}
+      const thinkingSection = `## 🤔 AI Reasoning Process
 
-Critical Review: ${phase2Result.critiqueText}
+### Initial Analysis
+${phase1Result.initialResponse.substring(0, 200)}${phase1Result.initialResponse.length > 200 ? '...' : ''}
 
-Final Refinement: Applied improvements based on critique
-</thinking>
+### Critical Review
+${phase2Result.critiqueText.substring(0, 200)}${phase2Result.critiqueText.length > 200 ? '...' : ''}
 
-${finalResponse.trim()}`
+### Final Enhancement
+Applied improvements based on critical review to ensure accuracy and clarity.
+
+---
+
+## Response
+
+`
+      answer = thinkingSection + finalResponse.trim()
     }
 
     // Calculate token usage
@@ -923,11 +934,38 @@ ${finalResponse.trim()}`
       reasoning: phase2Result ? {
         initialThoughts: phase1Result.initialResponse,
         criticalReview: phase2Result.critiqueText,
-        finalRefinement: "Applied critique-based improvements"
+        finalRefinement: "Enhanced response based on critical analysis"
       } : undefined,
       qualityMetrics,
       tokenUsage
     }
+  }
+
+  private cleanResponse(response: string): string {
+    // Remove common artifacts and unwanted elements
+    let cleaned = response
+      .replace(/\*\*Confidence:\s*(HIGH|MEDIUM|LOW)\*\*/gi, '')
+      .replace(/Confidence:\s*(HIGH|MEDIUM|LOW)/gi, '')
+      .replace(/\*\*Rating\*\*/gi, '')
+      .replace(/Rating:/gi, '')
+      .replace(/This revised response addresses.*?by:/gi, '')
+      .replace(/The above.*?claims made\./gi, '')
+      .replace(/\n\s*\n\s*\n/g, '\n\n') // Remove excessive line breaks
+      .trim()
+
+    // Remove any trailing meta-commentary patterns
+    const metaPatterns = [
+      /This response addresses.*$/gmi,
+      /The above analysis.*$/gmi,
+      /This revised.*$/gmi,
+      /Note:.*$/gmi
+    ]
+
+    metaPatterns.forEach(pattern => {
+      cleaned = cleaned.replace(pattern, '')
+    })
+
+    return cleaned.trim()
   }
 
   private analyzeQuestionType(question: string): string {
@@ -982,74 +1020,83 @@ ${finalResponse.trim()}`
   }
 
   private createEnhancedSystemPrompt(questionType: string): string {
-    const basePrompt = `You are an expert document analyst. Your responses must be:
-1. FACTUALLY GROUNDED: Use ONLY information from provided context
-2. WELL-STRUCTURED: Use appropriate formatting (tables, lists, headers)  
-3. THOROUGHLY CITED: Reference specific sources
-4. ERROR-AWARE: Flag inconsistencies or unclear information
+    const basePrompt = `You are an expert document analyst providing precise, well-formatted responses.
 
-QUALITY CHECKS:
-- Mark uncertain info: [UNCLEAR FROM SOURCES]
-- Flag conflicts: [CONFLICTING: Source A vs Source B]
-- Use exact quotes: [QUOTE: "text" - Document X]
-- Rate confidence: [HIGH/MEDIUM/LOW CONFIDENCE]
+CORE REQUIREMENTS:
+• Use ONLY information from the provided context
+• Create clean, professional formatting using proper markdown
+• Cite sources clearly and consistently
+• Never add meta-commentary, confidence ratings, or system notes
+• Focus on answering the user's question directly
 
-NEVER add information not in the provided context.`
+FORMATTING STANDARDS:
+• Use ## for main headings, ### for subheadings
+• Create proper tables with | separators
+• Use bullet points (•) for lists
+• Bold key terms with **text**
+• Use > for important quotes
+• Ensure all markdown renders cleanly
+
+CONTENT RULES:
+• Answer directly without preambles
+• No "according to the documents" unless natural
+• No confidence ratings or meta-analysis
+• No commentary on response quality
+• Focus on factual information from sources`
 
     const typeSpecificPrompts = {
-      'summary': '\nRESPONSE FORMAT: Executive summary with numbered key points and source table.',
-      'analysis': '\nRESPONSE FORMAT: Structured analysis with reasoning, evidence, and conclusions.',
-      'timeline': '\nRESPONSE FORMAT: Chronological table with dates, events, and sources.',
-      'data': '\nRESPONSE FORMAT: Data table with numbers, units, and source verification.',
-      'process': '\nRESPONSE FORMAT: Numbered steps with detailed procedures and requirements.',
-      'comparison': '\nRESPONSE FORMAT: Comparison table showing similarities and differences.',
-      'general': '\nRESPONSE FORMAT: Clear, structured response with proper headings.'
+      'summary': '\n\nFORMAT: Start with brief overview, then organized sections with clear headings and bullet points.',
+      'analysis': '\n\nFORMAT: Structured analysis with clear reasoning, evidence sections, and logical conclusions.',
+      'timeline': '\n\nFORMAT: Chronological presentation with dates, events, and source references in table format.',
+      'data': '\n\nFORMAT: Present numerical data in well-formatted tables with clear headers and units.',
+      'process': '\n\nFORMAT: Step-by-step procedure with numbered steps and clear instructions.',
+      'comparison': '\n\nFORMAT: Side-by-side comparison table showing key differences and similarities.',
+      'general': '\n\nFORMAT: Clear, direct response with appropriate headings and organized information.'
     }
 
     return basePrompt + (typeSpecificPrompts[questionType as keyof typeof typeSpecificPrompts] || typeSpecificPrompts.general)
   }
 
   private createPhase1UserPrompt(question: string, context: string): string {
-    return `CONTEXT FROM DOCUMENTS:
+    return `CONTEXT:
 ${context}
 
 QUESTION: ${question}
 
-Provide a comprehensive, well-structured response based on the context above. Use tables for numerical data, lists for key points, and clear headings for organization.`
+Provide a direct, well-formatted response based on the context above. Use clean markdown formatting and focus on answering the question comprehensively.`
   }
 
   private createCritiquePrompt(phase1Result: any): string {
-    return `REVIEW THIS RESPONSE FOR QUALITY:
+    return `REVIEW THIS RESPONSE:
 
 QUESTION: ${phase1Result.question}
-
 RESPONSE: ${phase1Result.initialResponse}
 
-AVAILABLE CONTEXT: ${phase1Result.context.substring(0, 500)}...
+Check for:
+• Factual accuracy against context
+• Complete coverage of question
+• Clear source attribution  
+• Clean formatting
+• Direct answering without fluff
 
-CRITIQUE CHECKLIST:
-✓ Factual accuracy - Are all claims supported by context?
-✓ Completeness - Are all question aspects addressed?
-✓ Source attribution - Are claims properly cited?
-✓ Structure - Is the format appropriate?
-✓ Consistency - Any internal contradictions?
-
-Identify issues using: ✓=verified, ?=uncertain, !=conflict, ∅=missing
-Be specific about what needs improvement.`
+Identify specific improvements needed. Be concise.`
   }
 
   private createRefinementPrompt(phase1Result: any, phase2Result: any): string {
-    return `REFINE THIS RESPONSE BASED ON CRITIQUE:
-
-ORIGINAL QUESTION: ${phase1Result.question}
+    return `ORIGINAL QUESTION: ${phase1Result.question}
 
 INITIAL RESPONSE: ${phase1Result.initialResponse}
 
-CRITIQUE FINDINGS: ${phase2Result.critiqueText}
+IMPROVEMENTS NEEDED: ${phase2Result.critiqueText}
 
-CONTEXT: ${phase1Result.context}
+Create a refined, final response that:
+• Addresses the identified issues
+• Maintains clean, professional formatting
+• Provides direct answers without meta-commentary
+• Uses proper markdown that renders cleanly
+• Eliminates any artifacts or confidence ratings
 
-Create an improved final response that addresses the identified issues while maintaining factual accuracy and proper structure.`
+Provide ONLY the final response - no explanations about changes made.`
   }
 
   private parseCritiqueResponse(critique: string): string[] {
