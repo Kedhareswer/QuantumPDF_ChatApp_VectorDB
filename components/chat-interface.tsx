@@ -291,8 +291,8 @@ function MessageContent({ content }: { content: string }) {
                   ),
                   hr: () => <hr className="my-6 border-t-2 border-gray-200" />,
                 } as Components}
-              >
-                {part.content}
+            >
+              {part.content}
               </ReactMarkdown>
             </div>
           )
@@ -493,12 +493,12 @@ ${diagnostics.documents.length === 0
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <QuickActions
-              onClearChat={onClearChat}
-              onNewSession={onNewSession}
+          <QuickActions
+            onClearChat={onClearChat}
+            onNewSession={onNewSession}
               disabled={disabled}
-            />
-          </div>
+          />
+        </div>
         </div>
         
         {/* Enhanced Controls */}

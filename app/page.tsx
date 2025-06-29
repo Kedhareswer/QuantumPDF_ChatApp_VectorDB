@@ -26,9 +26,7 @@ import {
   Database,
 } from "lucide-react"
 
-import { ChatInterface } from "@/components/chat-interface"
-import { DocumentLibrary } from "@/components/document-library"
-import { UnifiedConfiguration } from "@/components/unified-configuration"
+import { ChatInterfaceRouter, DocumentLibraryRouter, UnifiedConfigurationRouter, DeviceDebugInfo } from "@/components/device-router"
 import { SystemStatus } from "@/components/system-status"
 import { QuickActions } from "@/components/quick-actions"
 import { UnifiedPDFProcessor } from "@/components/unified-pdf-processor"
@@ -627,7 +625,11 @@ export default function QuantumPDFChatbot() {
                       <h2 className="font-bold text-lg">Document Management</h2>
                       <UnifiedPDFProcessor onDocumentProcessed={handleDocumentUpload} />
                       <Separator className="bg-black" />
-                      <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />
+                      <DocumentLibraryRouter 
+                        documents={documents} 
+                        onRemoveDocument={handleRemoveDocument}
+                        isLoading={false}
+                      />
                     </div>
                     )}
                   </TabsContent>
@@ -647,7 +649,7 @@ export default function QuantumPDFChatbot() {
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
-                    <UnifiedConfiguration
+                    <UnifiedConfigurationRouter
                       onTestAI={handleTestAI}
                       onTestVectorDB={handleTestVectorDB}
                       onTestWandb={handleTestWandb}
@@ -767,7 +769,7 @@ export default function QuantumPDFChatbot() {
           </header>
 
           <div className="flex-1 bg-white">
-            <ChatInterface
+            <ChatInterfaceRouter
               messages={messages}
               onSendMessage={handleSendMessage}
               onClearChat={handleClearChat}
@@ -778,6 +780,9 @@ export default function QuantumPDFChatbot() {
             />
           </div>
         </main>
+
+        {/* Device Debug Info for Development */}
+        <DeviceDebugInfo />
       </div>
     </ErrorBoundary>
   )
