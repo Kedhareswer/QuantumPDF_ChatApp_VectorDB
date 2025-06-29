@@ -26,7 +26,9 @@ import {
   Database,
 } from "lucide-react"
 
-import { ChatInterfaceRouter, DocumentLibraryRouter, UnifiedConfigurationRouter, DeviceDebugInfo } from "@/components/device-router"
+import { ChatInterface } from "@/components/chat-interface"
+import { DocumentLibrary } from "@/components/document-library"
+import { UnifiedConfiguration } from "@/components/unified-configuration"
 import { SystemStatus } from "@/components/system-status"
 import { QuickActions } from "@/components/quick-actions"
 import { UnifiedPDFProcessor } from "@/components/unified-pdf-processor"
@@ -39,7 +41,7 @@ import { VectorDatabaseClient } from "@/lib/vector-database-client"
 import { LoadingIndicator } from "@/components/loading-indicator"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
-import { TabContentLoadingSkeleton } from "@/components/skeleton-loaders"
+import { TabContentLoadingSkeleton, ChatInterfaceSkeleton } from "@/components/skeleton-loaders"
 
 export default function QuantumPDFChatbot() {
   const {
@@ -571,7 +573,9 @@ export default function QuantumPDFChatbot() {
                 <div className="flex-1 overflow-hidden">
                   <TabsContent value="chat" className="h-full m-0 p-4 space-y-4">
                     {isTabLoading ? (
-                      <TabContentLoadingSkeleton />
+                      <div className="p-4">
+                        <ChatInterfaceSkeleton />
+                      </div>
                     ) : (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
@@ -625,11 +629,7 @@ export default function QuantumPDFChatbot() {
                       <h2 className="font-bold text-lg">Document Management</h2>
                       <UnifiedPDFProcessor onDocumentProcessed={handleDocumentUpload} />
                       <Separator className="bg-black" />
-                      <DocumentLibraryRouter 
-                        documents={documents} 
-                        onRemoveDocument={handleRemoveDocument}
-                        isLoading={false}
-                      />
+                      <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />
                     </div>
                     )}
                   </TabsContent>
@@ -649,7 +649,7 @@ export default function QuantumPDFChatbot() {
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
-                    <UnifiedConfigurationRouter
+                    <UnifiedConfiguration
                       onTestAI={handleTestAI}
                       onTestVectorDB={handleTestVectorDB}
                       onTestWandb={handleTestWandb}
@@ -769,7 +769,7 @@ export default function QuantumPDFChatbot() {
           </header>
 
           <div className="flex-1 bg-white">
-            <ChatInterfaceRouter
+            <ChatInterface
               messages={messages}
               onSendMessage={handleSendMessage}
               onClearChat={handleClearChat}
@@ -780,9 +780,6 @@ export default function QuantumPDFChatbot() {
             />
           </div>
         </main>
-
-        {/* Device Debug Info for Development */}
-        <DeviceDebugInfo />
       </div>
     </ErrorBoundary>
   )

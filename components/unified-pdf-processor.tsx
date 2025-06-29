@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, FileText, Upload, X, CheckCircle, AlertTriangle, RefreshCw, Info, Loader2 } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { EnhancedPDFProcessor, type ProcessingProgress } from "@/lib/enhanced-pdf-processor"
-import { PDFProcessorSkeleton } from "@/components/skeleton-loaders"
+import { PDFProcessorSkeleton, DocumentCardSkeleton } from "@/components/skeleton-loaders"
 import { PDFClientWrapper } from "@/components/pdf-client-wrapper"
 
 interface UnifiedPDFProcessorProps {

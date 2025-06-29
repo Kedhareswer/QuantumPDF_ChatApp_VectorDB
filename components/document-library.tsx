@@ -16,7 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel
 } from "@/components/ui/dropdown-menu"
-import { DocumentLibrarySkeleton, BulkExportLoadingSkeleton } from "@/components/skeleton-loaders"
+import { DocumentLibrarySkeleton, BulkExportLoadingSkeleton, DocumentCardSkeleton } from "@/components/skeleton-loaders"
 import { useToast } from "@/hooks/use-toast"
 
 interface Document {
@@ -44,7 +44,7 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
 
   // Show skeleton during loading
   if (isLoading) {
-    return <DocumentLibrarySkeleton />
+    return <DocumentLibrarySkeleton hasDocuments={documents.length > 0} isProcessing={false} />
   }
 
   // Show bulk export loading

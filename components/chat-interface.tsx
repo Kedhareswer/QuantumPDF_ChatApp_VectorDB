@@ -39,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { EnhancedChatProcessingSkeleton, ChatTypingIndicator } from "@/components/skeleton-loaders"
 
 interface Message {
   id: string
@@ -819,42 +820,7 @@ ${diagnostics.documents.length === 0
                 </div>
               ))}
 
-              {isProcessing && (
-                <div className="space-y-4" role="status" aria-live="polite" aria-label="AI is processing your request">
-                  <div className="flex items-center space-x-4">
-                    <Badge variant="outline" className="border-gray-400 text-gray-700 font-bold px-3 py-1">
-                      ASSISTANT
-                    </Badge>
-                    <time className="text-sm text-gray-500 font-mono">{formatTimestamp(new Date())}</time>
-                  </div>
-                  <div className="message-bubble message-bubble-assistant">
-                    <div className="flex items-center space-x-4">
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                      <span className="text-base">Analyzing documents and generating response...</span>
-                    </div>
-                    <div className="mt-4 text-sm text-gray-500 space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-                        <span>Searching relevant content</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <div
-                          className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"
-                          style={{ animationDelay: "0.2s" }}
-                        ></div>
-                        <span>Generating embeddings</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <div
-                          className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"
-                          style={{ animationDelay: "0.4s" }}
-                        ></div>
-                        <span>Processing with AI model</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {isProcessing && <EnhancedChatProcessingSkeleton phase="retrieving" />}
 
               <div ref={messagesEndRef} />
             </div>
