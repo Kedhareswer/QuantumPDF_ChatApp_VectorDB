@@ -16,20 +16,26 @@ import { Progress } from "@/components/ui/progress"
 const PROVIDER_INFO = {
   huggingface: {
     name: "Hugging Face",
-    description: "Free inference API with rate limits (DISABLED)",
-    models: ["HuggingFaceH4/zephyr-7b-beta", "microsoft/DialoGPT-medium", "facebook/blenderbot-400M-distill"],
-    defaultModel: "HuggingFaceH4/zephyr-7b-beta",
+    description: "Open-source models via Inference Providers",
+    models: [
+      "meta-llama/Meta-Llama-3.3-70B-Instruct", 
+      "Qwen/Qwen2.5-7B-Instruct-1M", 
+      "microsoft/Phi-4", 
+      "deepseek-ai/DeepSeek-R1",
+      "google/gemma-2-2b-it"
+    ],
+    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     baseUrl: "https://api-inference.huggingface.co",
     features: ["Text Generation", "Embeddings", "Free Tier"],
     limitations: ["Rate Limited", "Cold Start Delays", "Model Loading Time"],
     signupUrl: "https://huggingface.co/settings/tokens",
     embeddingSupport: true,
-    disabled: true,
+    disabled: false,
   },
   openai: {
     name: "OpenAI",
     description: "Premium API with high-quality models",
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "gpt-4"],
+    models: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo"],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.openai.com/v1",
     features: ["High Quality", "Fast Response", "Latest Models"],
@@ -41,7 +47,7 @@ const PROVIDER_INFO = {
   anthropic: {
     name: "Anthropic",
     description: "Claude models with strong reasoning",
-    models: ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307", "claude-3-opus-20240229"],
+    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
     defaultModel: "claude-3-5-sonnet-20241022",
     baseUrl: "https://api.anthropic.com",
     features: ["Strong Reasoning", "Long Context", "Safety Focused"],
@@ -51,13 +57,22 @@ const PROVIDER_INFO = {
     disabled: false,
   },
   aiml: {
-    name: "AIML API",
-    description: "OpenAI-compatible API with competitive pricing",
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "claude-3-5-sonnet-20241022"],
+    name: "AI/ML API",
+    description: "Unified access to 200+ AI models",
+    models: [
+      "gpt-4o",
+      "gpt-4o-mini", 
+      "claude-3-5-sonnet",
+      "deepseek-v3",
+      "deepseek-r1",
+      "llama-3.3-70b",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash"
+    ],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.aimlapi.com/v1",
-    features: ["OpenAI Compatible", "Competitive Pricing", "Multiple Models"],
-    limitations: ["Paid Service", "Third Party", "API Reliability"],
+    features: ["200+ Models", "Competitive Pricing", "OpenAI Compatible"],
+    limitations: ["Paid Service", "Third Party", "Model Availability"],
     signupUrl: "https://aimlapi.com/",
     embeddingSupport: true,
     disabled: false,
@@ -65,7 +80,12 @@ const PROVIDER_INFO = {
   groq: {
     name: "Groq",
     description: "Ultra-fast inference with specialized hardware",
-    models: ["llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+    models: [
+      "llama-3.3-70b-versatile", 
+      "llama-3.1-8b-instant", 
+      "gemma2-9b-it",
+      "deepseek-r1-distill-llama-70b"
+    ],
     defaultModel: "llama-3.1-8b-instant",
     baseUrl: "https://api.groq.com/openai/v1",
     features: ["Ultra Fast", "Low Latency", "Open Source Models"],
@@ -76,22 +96,34 @@ const PROVIDER_INFO = {
   },
   openrouter: {
     name: "OpenRouter",
-    description: "Universal gateway to multiple AI models",
-    models: ["openai/gpt-4o", "anthropic/claude-3-opus", "meta-llama/llama-3-70b-instruct"],
-    defaultModel: "openai/gpt-4o",
+    description: "Universal gateway to 400+ AI models",
+    models: [
+      "openai/gpt-4o",
+      "openai/gpt-4o-mini", 
+      "anthropic/claude-3.5-sonnet",
+      "meta-llama/llama-3.3-70b-instruct",
+      "google/gemini-2.0-flash-exp",
+      "deepseek/deepseek-v3",
+      "openai/o1-preview"
+    ],
+    defaultModel: "openai/gpt-4o-mini",
     baseUrl: "https://openrouter.ai/api/v1",
-    features: ["Model Variety", "Unified API", "Fallback Options"],
-    limitations: ["Third Party", "No Embeddings", "Added Latency"],
+    features: ["400+ Models", "Unified API", "Fallback Options"],
+    limitations: ["Third Party", "Added Latency", "Cost Markup"],
     signupUrl: "https://openrouter.ai/keys",
-    embeddingSupport: false,
+    embeddingSupport: true,
     disabled: false,
   },
 
   deepinfra: {
     name: "DeepInfra",
     description: "Serverless open-source models",
-    models: ["meta-llama/Llama-3.1-70B-Instruct", "mistralai/Mistral-7B-Instruct-v0.2"],
-    defaultModel: "meta-llama/Llama-3.1-70B-Instruct",
+    models: [
+      "meta-llama/Meta-Llama-3.3-70B-Instruct", 
+      "Qwen/Qwen2.5-72B-Instruct",
+      "deepseek-ai/DeepSeek-V3"
+    ],
+    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     baseUrl: "https://api.deepinfra.com/v1/openai",
     features: ["Serverless", "Open Source Models", "Low Cost"],
     limitations: ["No Embeddings", "Limited Features", "API Reliability"],
@@ -102,10 +134,10 @@ const PROVIDER_INFO = {
   deepseek: {
     name: "DeepSeek",
     description: "Advanced reasoning models",
-    models: ["deepseek-chat", "deepseek-coder", "deepseek-math"],
-    defaultModel: "deepseek-chat",
+    models: ["deepseek-chat", "deepseek-coder", "deepseek-r1"],
+    defaultModel: "deepseek-r1",
     baseUrl: "https://api.deepseek.com/v1",
-    features: ["Advanced Reasoning", "Code Generation", "Math Capabilities"],
+    features: ["Advanced Reasoning", "Code Generation", "Cost Effective"],
     limitations: ["No Embeddings", "Limited Availability", "API Costs"],
     signupUrl: "https://platform.deepseek.com/",
     embeddingSupport: false,
@@ -114,8 +146,13 @@ const PROVIDER_INFO = {
   googleai: {
     name: "Google AI Studio",
     description: "Gemini models with multimodal capabilities",
-    models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"],
-    defaultModel: "gemini-1.5-pro",
+    models: [
+      "gemini-2.5-pro", 
+      "gemini-2.5-flash", 
+      "gemini-2.0-flash-exp",
+      "gemini-1.5-pro"
+    ],
+    defaultModel: "gemini-2.5-flash",
     baseUrl: "https://generativelanguage.googleapis.com/v1",
     features: ["Multimodal", "Google Knowledge", "Fast Response"],
     limitations: ["No Embeddings", "API Costs", "Limited Models"],
@@ -126,8 +163,8 @@ const PROVIDER_INFO = {
   vertex: {
     name: "Google Vertex AI",
     description: "Enterprise AI platform with embeddings",
-    models: ["gemini-1.5-pro", "gemini-1.5-flash", "text-embedding-gecko"],
-    defaultModel: "gemini-1.5-pro",
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "text-embedding-gecko"],
+    defaultModel: "gemini-2.5-pro",
     baseUrl: "https://us-central1-aiplatform.googleapis.com/v1",
     features: ["Enterprise Grade", "Embeddings", "Google Cloud Integration"],
     limitations: ["Complex Setup", "API Costs", "GCP Required"],
@@ -150,8 +187,12 @@ const PROVIDER_INFO = {
   perplexity: {
     name: "Perplexity",
     description: "Search-augmented models with real-time knowledge",
-    models: ["pplx-7b-online", "pplx-70b-online", "sonar-small-online"],
-    defaultModel: "pplx-7b-online",
+    models: [
+      "llama-3.1-sonar-large-128k-online", 
+      "llama-3.1-sonar-small-128k-online",
+      "llama-3.1-sonar-huge-128k-online"
+    ],
+    defaultModel: "llama-3.1-sonar-small-128k-online",
     baseUrl: "https://api.perplexity.ai",
     features: ["Real-time Knowledge", "Search Augmented", "Online Access"],
     limitations: ["No Embeddings", "Limited Features", "API Costs"],
@@ -163,8 +204,8 @@ const PROVIDER_INFO = {
   xai: {
     name: "xAI (Grok)",
     description: "Real-time knowledge models",
-    models: ["grok-1", "grok-1-mini", "grok-2"],
-    defaultModel: "grok-1",
+    models: ["grok-3-beta", "grok-3-mini-beta", "grok-beta"],
+    defaultModel: "grok-3-mini-beta",
     baseUrl: "https://api.xai.com/v1",
     features: ["Real-time Knowledge", "Strong Reasoning", "Fast Response"],
     limitations: ["No Embeddings", "Limited Availability", "API Costs"],

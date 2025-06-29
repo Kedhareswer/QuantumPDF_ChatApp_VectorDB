@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
     const client = new InferenceClient(apiKey)
 
-    // Test with a simple embedding request
+    // Test with a simple embedding request using a reliable model
     const response = await client.featureExtraction({
       model: "sentence-transformers/all-MiniLM-L6-v2",
       inputs: "test connection",

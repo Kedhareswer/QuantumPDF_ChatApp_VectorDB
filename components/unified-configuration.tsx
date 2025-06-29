@@ -44,7 +44,7 @@ const AI_PROVIDERS = {
     name: "OpenAI",
     description: "Industry-leading GPT models with high quality responses",
     category: "Major",
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1-preview", "o1-mini"],
+    models: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo"],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.openai.com/v1",
     signupUrl: "https://platform.openai.com/api-keys",
@@ -68,8 +68,8 @@ const AI_PROVIDERS = {
     name: "Google AI",
     description: "Gemini models with multimodal capabilities",
     category: "Major",
-    models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-exp-1206"],
-    defaultModel: "gemini-1.5-flash",
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-pro"],
+    defaultModel: "gemini-2.5-flash",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     signupUrl: "https://makersuite.google.com/app/apikey",
     embeddingSupport: true,
@@ -106,7 +106,7 @@ const AI_PROVIDERS = {
     name: "Cerebras",
     description: "Extremely fast inference on specialized chips",
     category: "Fast",
-    models: ["llama3.1-70b", "llama3.1-8b", "llama3.3-70b"],
+    models: ["llama3.3-70b", "llama3.1-8b", "llama3.1-70b"],
     defaultModel: "llama3.1-8b",
     baseUrl: "https://api.cerebras.ai/v1",
     signupUrl: "https://cloud.cerebras.ai/",
@@ -118,9 +118,17 @@ const AI_PROVIDERS = {
   // Aggregators
   openrouter: {
     name: "OpenRouter",
-    description: "Access to multiple AI models through one API",
+    description: "Access to 400+ AI models through one API",
     category: "Aggregator",
-    models: ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "meta-llama/llama-3.3-70b-instruct", "google/gemini-2.0-flash-exp"],
+    models: [
+      "openai/gpt-4o", 
+      "openai/gpt-4o-mini",
+      "anthropic/claude-3.5-sonnet", 
+      "meta-llama/llama-3.3-70b-instruct", 
+      "google/gemini-2.0-flash-exp",
+      "deepseek/deepseek-v3",
+      "openai/o1-preview"
+    ],
     defaultModel: "openai/gpt-4o-mini",
     baseUrl: "https://openrouter.ai/api/v1",
     signupUrl: "https://openrouter.ai/keys",
@@ -130,9 +138,18 @@ const AI_PROVIDERS = {
   },
   aiml: {
     name: "AI/ML API",
-    description: "Unified access to multiple AI providers",
+    description: "Unified access to 200+ AI providers",
     category: "Aggregator",
-    models: ["gpt-4o", "claude-3-5-sonnet", "llama-3.3-70b", "deepseek-v3"],
+    models: [
+      "gpt-4o",
+      "gpt-4o-mini", 
+      "claude-3-5-sonnet",
+      "deepseek-v3",
+      "deepseek-r1",
+      "llama-3.3-70b",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash"
+    ],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.aimlapi.com/v1",
     signupUrl: "https://aimlapi.com/",
@@ -144,10 +161,16 @@ const AI_PROVIDERS = {
   // Specialized
   huggingface: {
     name: "Hugging Face",
-    description: "Open-source models and inference",
+    description: "Open-source models via Inference Providers",
     category: "Specialized",
-    models: ["meta-llama/Llama-3.3-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct", "microsoft/Phi-3.5-mini-instruct", "mistralai/Mistral-7B-Instruct-v0.3"],
-    defaultModel: "meta-llama/Llama-3.3-70B-Instruct",
+    models: [
+      "meta-llama/Meta-Llama-3.3-70B-Instruct", 
+      "Qwen/Qwen2.5-7B-Instruct-1M", 
+      "microsoft/Phi-4", 
+      "deepseek-ai/DeepSeek-R1",
+      "google/gemma-2-2b-it"
+    ],
+    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     baseUrl: "https://api-inference.huggingface.co",
     signupUrl: "https://huggingface.co/settings/tokens",
     embeddingSupport: true,
@@ -158,7 +181,11 @@ const AI_PROVIDERS = {
     name: "Perplexity",
     description: "Search-augmented language models",
     category: "Specialized",
-    models: ["llama-3.1-sonar-large-128k-online", "llama-3.1-sonar-small-128k-online", "llama-3.1-sonar-huge-128k-online"],
+    models: [
+      "llama-3.1-sonar-large-128k-online", 
+      "llama-3.1-sonar-small-128k-online", 
+      "llama-3.1-sonar-huge-128k-online"
+    ],
     defaultModel: "llama-3.1-sonar-small-128k-online",
     baseUrl: "https://api.perplexity.ai",
     signupUrl: "https://www.perplexity.ai/settings/api",
@@ -172,7 +199,11 @@ const AI_PROVIDERS = {
     name: "DeepInfra",
     description: "Serverless inference for open-source models",
     category: "Cloud",
-    models: ["meta-llama/Meta-Llama-3.3-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct", "deepseek-ai/DeepSeek-V3"],
+    models: [
+      "meta-llama/Meta-Llama-3.3-70B-Instruct", 
+      "Qwen/Qwen2.5-72B-Instruct", 
+      "deepseek-ai/DeepSeek-V3"
+    ],
     defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     baseUrl: "https://api.deepinfra.com/v1/openai",
     signupUrl: "https://deepinfra.com/",
@@ -184,7 +215,11 @@ const AI_PROVIDERS = {
     name: "Replicate",
     description: "Run machine learning models in the cloud",
     category: "Cloud",
-    models: ["meta/llama-3.3-70b-instruct", "deepseek-ai/deepseek-v3", "qwen/qwen2.5-72b-instruct"],
+    models: [
+      "meta/llama-3.3-70b-instruct", 
+      "deepseek-ai/deepseek-v3", 
+      "qwen/qwen2.5-72b-instruct"
+    ],
     defaultModel: "meta/llama-3.3-70b-instruct",
     baseUrl: "https://api.replicate.com/v1",
     signupUrl: "https://replicate.com/account/api-tokens",
@@ -196,7 +231,10 @@ const AI_PROVIDERS = {
     name: "Anyscale",
     description: "Scalable AI model serving",
     category: "Cloud",
-    models: ["meta-llama/Llama-3.3-70b-instruct", "mistralai/Mistral-7B-Instruct-v0.3"],
+    models: [
+      "meta-llama/Llama-3.3-70b-instruct", 
+      "mistralai/Mistral-7B-Instruct-v0.3"
+    ],
     defaultModel: "meta-llama/Llama-3.3-70b-instruct",
     baseUrl: "https://api.endpoints.anyscale.com/v1",
     signupUrl: "https://console.anyscale.com/",
