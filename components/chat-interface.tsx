@@ -78,6 +78,7 @@ interface ChatInterfaceProps {
   onNewSession: () => void
   isProcessing: boolean
   disabled: boolean
+  ragEngine?: any // Add ragEngine prop for diagnostics
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -231,11 +232,13 @@ export function ChatInterface({
   onClearChat, 
   onNewSession, 
   isProcessing, 
-  disabled 
+  disabled, 
+  ragEngine 
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("")
   const [isExpanded, setIsExpanded] = useState(false)
   const [showAdvancedControls, setShowAdvancedControls] = useState(false)
+  const [isRunningDiagnostics, setIsRunningDiagnostics] = useState(false)
   const [enhancedOptions, setEnhancedOptions] = useState({
     showThinking: false,
     complexityLevel: 'auto' as 'auto' | 'simple' | 'normal' | 'complex'
@@ -311,6 +314,83 @@ export function ChatInterface({
   const formatResponseTime = (ms: number) => {
     if (ms < 1000) return `${ms}ms`
     return `${(ms / 1000).toFixed(1)}s`
+  }
+
+  const runDiagnostics = async () => {
+    if (!ragEngine) {
+      console.error("RAG Engine not available for diagnostics")
+      return
+    }
+
+    setIsRunningDiagnostics(true)
+    try {
+      console.log("🔍 Running system diagnostics...")
+      const diagnostics = await ragEngine.runDiagnostics()
+      
+      // Create a diagnostic report message
+      const diagnosticReport = `# 🔍 System Diagnostic Report
+
+## System Status
+- **Initialized:** ${diagnostics.systemStatus.initialized ? '✅ Yes' : '❌ No'}
+- **AI Client:** ${diagnostics.systemStatus.aiClientAvailable ? '✅ Available' : '❌ Not Available'}
+- **Provider:** ${diagnostics.systemStatus.currentProvider || 'Not Set'}
+- **Model:** ${diagnostics.systemStatus.currentModel || 'Not Set'}
+- **Documents:** ${diagnostics.systemStatus.documentsCount}
+- **Total Chunks:** ${diagnostics.systemStatus.totalChunks}
+- **Total Embeddings:** ${diagnostics.systemStatus.totalEmbeddings}
+
+## Document Analysis
+${diagnostics.documents.length === 0 
+  ? '❌ No documents found' 
+  : diagnostics.documents.map((doc: any, i: number) => 
+    `**${i + 1}. ${doc.name}**
+- Chunks: ${doc.chunksCount}
+- Embeddings: ${doc.embeddingsCount}
+- Valid Structure: ${doc.hasValidStructure ? '✅' : '❌'}
+- Embedding Dimension: ${doc.embeddingDimension}
+- Preview: ${doc.firstChunkPreview}`
+  ).join('\n\n')
+}
+
+## Tests
+**Embedding Generation:** ${diagnostics.embeddingTest ? 
+  (diagnostics.embeddingTest.success ? 
+    `✅ Success (${diagnostics.embeddingTest.dimensions} dimensions)` : 
+    `❌ Failed: ${diagnostics.embeddingTest.error}`
+  ) : '⏸️ Not Tested'}
+
+**Similarity Calculation:** ${diagnostics.similarityTest ? 
+  (diagnostics.similarityTest.success ? 
+    `✅ Success (Score: ${diagnostics.similarityTest.similarity?.toFixed(3)})` : 
+    '❌ Failed'
+  ) : '⏸️ Not Tested'}
+
+---
+*Diagnostic completed at ${new Date().toLocaleString()}*`
+
+      // Add diagnostic message to chat
+      const diagnosticMessage = {
+        id: Date.now().toString(),
+        role: "assistant" as const,
+        content: diagnosticReport,
+        timestamp: new Date(),
+        sources: ['System Diagnostics'],
+        metadata: {
+          responseTime: 0,
+          relevanceScore: 1.0,
+          retrievedChunks: 0,
+        },
+      }
+
+      // This would need to be passed up to the parent component
+      // For now, just log the results
+      console.log("Diagnostic report generated:", diagnosticReport)
+      
+    } catch (error) {
+      console.error("Diagnostic failed:", error)
+    } finally {
+      setIsRunningDiagnostics(false)
+    }
   }
 
   return (
@@ -418,6 +498,32 @@ export function ChatInterface({
                   Thinking mode enabled - AI will show its reasoning process
                 </div>
               )}
+              
+              {/* Diagnostic Button */}
+              <div className="mt-3 pt-3 border-t border-purple-200">
+                <Button
+                  onClick={runDiagnostics}
+                  disabled={isRunningDiagnostics || !ragEngine}
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs border-purple-300 text-purple-700 hover:bg-purple-100"
+                >
+                  {isRunningDiagnostics ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      Running Diagnostics...
+                    </>
+                  ) : (
+                    <>
+                      <HelpCircle className="w-3 h-3 mr-1" />
+                      Run System Diagnostics
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-purple-600 mt-1 text-center">
+                  Check document processing & retrieval
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}

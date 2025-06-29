@@ -246,10 +246,39 @@ export default function QuantumPDFChatbot() {
 
   const handleDocumentUpload = async (document: any) => {
     try {
+      console.log("=== Page: Document upload started ===")
+      console.log("Received document:", {
+        name: document.name,
+        id: document.id,
+        hasChunks: !!document.chunks,
+        chunksLength: document.chunks?.length,
+        hasEmbeddings: !!document.embeddings,
+        embeddingsLength: document.embeddings?.length,
+        uploadedAt: document.uploadedAt
+      })
+
+      // Check RAG engine status before adding document
+      console.log("RAG Engine status before adding document:")
+      console.log("- RAG Engine available:", !!ragEngine)
+      console.log("- RAG Engine healthy:", ragEngine ? ragEngine.isHealthy() : false)
+      if (ragEngine) {
+        const status = ragEngine.getStatus()
+        console.log("- RAG Engine initialized:", status.initialized)
+        console.log("- Current document count:", status.documentCount)
+        console.log("- Current provider:", status.currentProvider)
+        console.log("- Current model:", status.currentModel)
+      }
+
+      console.log("🔄 Adding document to RAG engine...")
       await ragEngine.addDocument(document)
+      console.log("✅ Document successfully added to RAG engine")
+      
+      console.log("🔄 Adding document to store...")
       addDocument(document)
+      console.log("✅ Document successfully added to store")
 
       // Add to vector database
+      console.log("🔄 Preparing vector database documents...")
       const vectorDocuments = document.chunks.map((chunk: string, index: number) => ({
         id: `${document.id}_${index}`,
         content: chunk,
@@ -261,21 +290,45 @@ export default function QuantumPDFChatbot() {
           timestamp: document.uploadedAt,
         },
       }))
+      console.log("- Vector documents prepared:", vectorDocuments.length)
 
+      console.log("🔄 Adding documents to vector database...")
       await vectorDB.addDocuments(vectorDocuments)
+      console.log("✅ Documents successfully added to vector database")
 
       // If this is the first document and AI is configured, switch to chat
       if (documents.length === 0 && modelStatus === "ready") {
+        console.log("🔄 First document added - switching to chat tab")
         setTimeout(() => setActiveTab("chat"), 1000)
       }
+
+      // Final status check
+      console.log("Final status after document upload:")
+      if (ragEngine) {
+        const finalStatus = ragEngine.getStatus()
+        console.log("- RAG Engine document count:", finalStatus.documentCount)
+        console.log("- RAG Engine total chunks:", finalStatus.totalChunks)
+      }
+      console.log("- Store document count:", documents.length + 1) // +1 because state update is async
 
       addError({
         type: "success",
         title: "Document Added",
-        message: `Successfully processed ${document.name}`,
+        message: `Successfully processed ${document.name} with ${document.chunks?.length || 0} chunks`,
       })
+      
+      console.log("=== Page: Document upload completed successfully ===")
     } catch (error) {
-      console.error("Error adding document:", error)
+      console.error("❌ Error in handleDocumentUpload:", error)
+      console.error("Document that failed:", {
+        name: document?.name,
+        id: document?.id,
+        hasChunks: !!document?.chunks,
+        chunksLength: document?.chunks?.length,
+        hasEmbeddings: !!document?.embeddings,
+        embeddingsLength: document?.embeddings?.length
+      })
+      
       addError({
         type: "error",
         title: "Document Processing Failed",
@@ -721,6 +774,7 @@ export default function QuantumPDFChatbot() {
               onNewSession={handleNewSession}
               isProcessing={isProcessing}
               disabled={!isChatReady}
+              ragEngine={ragEngine}
             />
           </div>
         </main>

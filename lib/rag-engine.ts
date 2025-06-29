@@ -333,18 +333,43 @@ export class RAGEngine {
 
   async addDocument(document: Document) {
     try {
+      console.log("=== RAG Engine: Adding document ===")
+      console.log("Document name:", document.name)
+      console.log("Document ID:", document.id)
+      
       // Validate document structure
       if (!document || typeof document !== "object") {
+        console.error("Invalid document object:", document)
         throw new Error("Invalid document object")
       }
 
+      console.log("Document structure validation:")
+      console.log("- Has chunks:", !!document.chunks)
+      console.log("- Chunks is array:", Array.isArray(document.chunks))
+      console.log("- Chunks length:", document.chunks?.length)
+      console.log("- Has embeddings:", !!document.embeddings)
+      console.log("- Embeddings is array:", Array.isArray(document.embeddings))
+      console.log("- Embeddings length:", document.embeddings?.length)
+
       if (!document.chunks || !Array.isArray(document.chunks)) {
+        console.error("Document chunks are missing or invalid:", document.chunks)
         throw new Error("Document chunks are missing or invalid")
       }
 
       if (document.chunks.length === 0) {
+        console.error("Document has no chunks")
         throw new Error("Document has no chunks")
       }
+
+      console.log("First few chunks preview:")
+      document.chunks.slice(0, 3).forEach((chunk, i) => {
+        console.log(`  Chunk ${i}: ${chunk.substring(0, 100)}...`)
+      })
+
+      // Check AI client status
+      console.log("AI Client status:")
+      console.log("- AI Client available:", !!this.aiClient)
+      console.log("- RAG Engine initialized:", this.isInitialized)
 
       // Generate embeddings if they don't exist or are invalid
       if (
@@ -353,29 +378,86 @@ export class RAGEngine {
         document.embeddings.length !== document.chunks.length
       ) {
         if (!this.aiClient) {
+          console.error("AI client not initialized - cannot generate embeddings")
           throw new Error("AI client not initialized")
         }
 
-        console.log("Generating missing embeddings for document:", document.name)
-        document.embeddings = await this.aiClient.generateEmbeddings(document.chunks)
+        console.log("🔄 Generating missing embeddings for document:", document.name)
+        console.log("- Need to generate embeddings for", document.chunks.length, "chunks")
+        
+        try {
+          const startTime = Date.now()
+          document.embeddings = await this.aiClient.generateEmbeddings(document.chunks)
+          const endTime = Date.now()
+          console.log(`✅ Embeddings generated successfully in ${endTime - startTime}ms`)
+          console.log("- Generated embeddings count:", document.embeddings.length)
+          if (document.embeddings.length > 0) {
+            console.log("- First embedding dimensions:", document.embeddings[0]?.length)
+          }
+        } catch (embeddingError) {
+          console.error("❌ Failed to generate embeddings:", embeddingError)
+          throw new Error(`Failed to generate embeddings: ${embeddingError instanceof Error ? embeddingError.message : 'Unknown error'}`)
+        }
+      } else {
+        console.log("✅ Document already has valid embeddings")
+        console.log("- Embedding dimensions:", document.embeddings[0]?.length)
       }
 
       // Validate embeddings
       if (!document.embeddings || document.embeddings.length !== document.chunks.length) {
+        console.error("Embedding validation failed:")
+        console.error("- Embeddings exist:", !!document.embeddings)
+        console.error("- Embeddings length:", document.embeddings?.length)
+        console.error("- Chunks length:", document.chunks.length)
         throw new Error("Failed to generate valid embeddings for document")
       }
 
       // Check if embeddings are properly formatted
+      console.log("Validating embedding format...")
       for (let i = 0; i < document.embeddings.length; i++) {
         if (!Array.isArray(document.embeddings[i]) || document.embeddings[i].length === 0) {
+          console.error(`Invalid embedding at index ${i}:`, document.embeddings[i])
           throw new Error(`Invalid embedding at index ${i}`)
+        }
+        
+        // Log first few embedding details
+        if (i < 3) {
+          console.log(`  Embedding ${i}: ${document.embeddings[i].length} dimensions`)
         }
       }
 
+      // Add to documents array
+      const beforeCount = this.documents.length
       this.documents.push(document)
-      console.log(`Added document to RAG engine: ${document.name} (${document.chunks.length} chunks)`)
+      const afterCount = this.documents.length
+      
+      console.log("✅ Document added successfully to RAG engine")
+      console.log("- Documents before:", beforeCount)
+      console.log("- Documents after:", afterCount)
+      console.log("- Document name:", document.name)
+      console.log("- Chunks:", document.chunks.length)
+      console.log("- Total documents in RAG engine:", this.documents.length)
+      
+      // Verify the document was actually added
+      const addedDoc = this.documents.find(d => d.id === document.id)
+      if (addedDoc) {
+        console.log("✅ Document verification: Successfully found in RAG engine documents array")
+      } else {
+        console.error("❌ Document verification: NOT found in RAG engine documents array")
+      }
+      
+      console.log("=== RAG Engine: Document addition complete ===")
+      
     } catch (error) {
-      console.error("Error adding document:", error)
+      console.error("❌ Error adding document to RAG engine:", error)
+      console.error("Document details:", {
+        name: document?.name,
+        id: document?.id,
+        hasChunks: !!document?.chunks,
+        chunksLength: document?.chunks?.length,
+        hasEmbeddings: !!document?.embeddings,
+        embeddingsLength: document?.embeddings?.length
+      })
       throw error
     }
   }
@@ -384,14 +466,16 @@ export class RAGEngine {
     const allChunks: Array<{ content: string; source: string; similarity: number }> = [];
 
     try {
+      console.log("findRelevantChunks: Starting chunk search")
+      
       // Validate inputs
       if (!Array.isArray(questionEmbedding) || questionEmbedding.length === 0) {
-        console.error("Invalid question embedding");
+        console.error("Invalid question embedding:", questionEmbedding);
         return [];
       }
 
       if (!Array.isArray(this.documents) || this.documents.length === 0) {
-        console.error("No documents available");
+        console.error("No documents available:", this.documents.length);
         return [];
       }
 
@@ -400,24 +484,40 @@ export class RAGEngine {
         return [];
       }
 
+      console.log(`Processing ${this.documents.length} documents for similarity search`)
+
       // Calculate similarity for all chunks
       this.documents.forEach((doc, docIndex) => {
         try {
+          console.log(`Processing document ${docIndex}: ${doc.name}`)
+          
           // Validate document structure
           if (!doc || !doc.chunks || !doc.embeddings) {
-            console.warn(`Document ${docIndex} has invalid structure`);
+            console.warn(`Document ${docIndex} has invalid structure:`, {
+              hasDoc: !!doc,
+              hasChunks: !!doc?.chunks,
+              hasEmbeddings: !!doc?.embeddings
+            });
             return;
           }
 
           if (!Array.isArray(doc.chunks) || !Array.isArray(doc.embeddings)) {
-            console.warn(`Document ${docIndex} has invalid chunks or embeddings`);
+            console.warn(`Document ${docIndex} has invalid chunks or embeddings:`, {
+              chunksIsArray: Array.isArray(doc.chunks),
+              embeddingsIsArray: Array.isArray(doc.embeddings)
+            });
             return;
           }
 
           if (doc.chunks.length !== doc.embeddings.length) {
-            console.warn(`Document ${docIndex} has mismatched chunks and embeddings`);
+            console.warn(`Document ${docIndex} has mismatched chunks and embeddings:`, {
+              chunksLength: doc.chunks.length,
+              embeddingsLength: doc.embeddings.length
+            });
             return;
           }
+
+          console.log(`Document ${docIndex} has ${doc.chunks.length} valid chunks`)
 
           doc.chunks.forEach((chunk, chunkIndex) => {
             try {
@@ -425,15 +525,22 @@ export class RAGEngine {
 
               // Validate chunk embedding
               if (!Array.isArray(chunkEmbedding) || chunkEmbedding.length === 0) {
-                console.warn(`Invalid embedding for chunk ${chunkIndex} in document ${docIndex}`);
+                console.warn(`Invalid embedding for chunk ${chunkIndex} in document ${docIndex}:`, {
+                  isArray: Array.isArray(chunkEmbedding),
+                  length: chunkEmbedding?.length
+                });
                 return;
               }
 
               if (chunkEmbedding.length !== questionEmbedding.length) {
-                console.warn(`Embedding dimension mismatch for chunk ${chunkIndex} in document ${docIndex}`);
+                console.warn(`Embedding dimension mismatch for chunk ${chunkIndex} in document ${docIndex}:`, {
+                  chunkDimensions: chunkEmbedding.length,
+                  questionDimensions: questionEmbedding.length
+                });
                 return;
               }
 
+              // Calculate cosine similarity
               const similarity = this.aiClient!.cosineSimilarity(questionEmbedding, chunkEmbedding);
 
               if (typeof similarity === "number" && !isNaN(similarity)) {
@@ -442,21 +549,43 @@ export class RAGEngine {
                   source: `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`,
                   similarity,
                 });
+                
+                // Log high-similarity chunks
+                if (similarity > 0.3) {
+                  console.log(`High similarity chunk found: ${similarity.toFixed(3)} from ${doc.name}`)
+                }
+              } else {
+                console.warn(`Invalid similarity calculated for chunk ${chunkIndex} in document ${docIndex}:`, similarity);
               }
             } catch (chunkError) {
-              console.warn(`Error processing chunk ${chunkIndex} in document ${docIndex}:`, chunkError);
+              console.error(`Error processing chunk ${chunkIndex} in document ${docIndex}:`, chunkError);
             }
           });
         } catch (docError) {
-          console.warn(`Error processing document ${docIndex}:`, docError);
+          console.error(`Error processing document ${docIndex}:`, docError);
         }
       });
 
+      console.log(`Total chunks processed: ${allChunks.length}`)
+      
+      if (allChunks.length === 0) {
+        console.warn("No chunks were successfully processed")
+        return [];
+      }
+
       // Sort by similarity and return top K
-      return allChunks
+      const sortedChunks = allChunks
         .sort((a, b) => b.similarity - a.similarity)
         .slice(0, topK)
-        .filter((chunk) => chunk.similarity > 0.1); // Filter out very low similarity chunks
+        .filter((chunk) => chunk.similarity > 0.05); // Lower threshold for debugging
+
+      console.log(`Returning ${sortedChunks.length} chunks (threshold: 0.05, topK: ${topK})`)
+      if (sortedChunks.length > 0) {
+        console.log(`Best similarity: ${sortedChunks[0].similarity.toFixed(3)}`)
+        console.log(`Worst similarity: ${sortedChunks[sortedChunks.length - 1].similarity.toFixed(3)}`)
+      }
+
+      return sortedChunks;
     } catch (error) {
       console.error("Error finding relevant chunks:", error);
       return [];
@@ -573,49 +702,126 @@ export class RAGEngine {
   private async phase1_ContextAnalysis(question: string, tokenBudget: number) {
     console.log("Phase 1: Context Analysis and Initial Response")
     
-    // Generate embedding for the question
-    const questionEmbedding = await this.aiClient!.generateEmbedding(question);
+    // Debug: Check system state
+    console.log("RAG Engine Debug:")
+    console.log("- Documents available:", this.documents.length)
+    console.log("- AI Client available:", !!this.aiClient)
+    console.log("- Is initialized:", this.isInitialized)
     
-    // Analyze question type for optimal chunk selection
-    const questionType = this.analyzeQuestionType(question)
-    const chunkLimit = this.getOptimalChunkLimit(questionType)
-    
-    // Find relevant chunks
-    let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit);
-    
-    if (relevantChunks.length === 0) {
+    if (this.documents.length === 0) {
+      console.warn("No documents available for retrieval")
       return {
         question,
         relevantChunks: [],
         context: "",
-        initialResponse: "I couldn't find any relevant information to answer your question.",
-        questionType,
+        initialResponse: "No documents have been uploaded yet. Please upload documents first to get answers.",
+        questionType: 'general',
         tokensUsed: 0
       }
     }
 
-    // Optimize chunks for token budget
-    const optimizedChunks = this.optimizeChunksForTokens(relevantChunks, tokenBudget * 0.7)
-    const context = optimizedChunks.map(chunk => chunk.content).join("\n\n");
+    // Debug: Log documents info
+    this.documents.forEach((doc, index) => {
+      console.log(`Document ${index}: ${doc.name}, chunks: ${doc.chunks?.length || 0}, embeddings: ${doc.embeddings?.length || 0}`)
+    })
     
-    // Generate initial response with enhanced prompt
-    const systemPrompt = this.createEnhancedSystemPrompt(questionType)
-    const userPrompt = this.createPhase1UserPrompt(question, context)
-    
-    const messages = [
-      { role: "system" as const, content: systemPrompt },
-      { role: "user" as const, content: userPrompt }
-    ];
+    try {
+      // Generate embedding for the question
+      console.log("Generating embedding for question:", question.substring(0, 100) + "...")
+      const questionEmbedding = await this.aiClient!.generateEmbedding(question);
+      console.log("Question embedding generated, dimensions:", questionEmbedding.length)
+      
+      // Analyze question type for optimal chunk selection
+      const questionType = this.analyzeQuestionType(question)
+      const chunkLimit = this.getOptimalChunkLimit(questionType)
+      console.log(`Question type: ${questionType}, chunk limit: ${chunkLimit}`)
+      
+      // Find relevant chunks
+      console.log("Finding relevant chunks...")
+      let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit);
+      console.log(`Found ${relevantChunks.length} relevant chunks`)
+      
+      // Debug: Log chunk similarities
+      if (relevantChunks.length > 0) {
+        console.log("Top chunks:")
+        relevantChunks.slice(0, 3).forEach((chunk, i) => {
+          console.log(`  ${i + 1}. Similarity: ${chunk.similarity.toFixed(3)}, Source: ${chunk.source}`)
+          console.log(`     Content preview: ${chunk.content.substring(0, 100)}...`)
+        })
+      } else {
+        console.warn("No relevant chunks found - checking why...")
+        
+        // Debug: Check first document in detail
+        if (this.documents.length > 0) {
+          const firstDoc = this.documents[0]
+          console.log("First document analysis:")
+          console.log("- Name:", firstDoc.name)
+          console.log("- Has chunks:", !!firstDoc.chunks)
+          console.log("- Chunks length:", firstDoc.chunks?.length)
+          console.log("- Has embeddings:", !!firstDoc.embeddings)
+          console.log("- Embeddings length:", firstDoc.embeddings?.length)
+          
+          if (firstDoc.chunks && firstDoc.chunks.length > 0) {
+            console.log("- First chunk preview:", firstDoc.chunks[0].substring(0, 100))
+          }
+          
+          if (firstDoc.embeddings && firstDoc.embeddings.length > 0) {
+            console.log("- First embedding dimensions:", firstDoc.embeddings[0]?.length)
+            console.log("- Question embedding dimensions:", questionEmbedding.length)
+          }
+        }
+      }
+      
+      if (relevantChunks.length === 0) {
+        return {
+          question,
+          relevantChunks: [],
+          context: "",
+          initialResponse: "I couldn't find relevant information in the uploaded documents to answer your question. This might be because:\n\n1. The question doesn't match the document content\n2. The documents may not have processed correctly\n3. Try rephrasing your question\n\nDocument status: " + this.documents.length + " documents available with " + this.documents.reduce((total, doc) => total + (doc.chunks?.length || 0), 0) + " total chunks.",
+          questionType,
+          tokensUsed: 0
+        }
+      }
 
-    const initialResponse = await this.aiClient!.generateText(messages);
+      // Optimize chunks for token budget
+      console.log("Optimizing chunks for token budget:", tokenBudget * 0.7)
+      const optimizedChunks = this.optimizeChunksForTokens(relevantChunks, tokenBudget * 0.7)
+      console.log(`Optimized to ${optimizedChunks.length} chunks`)
+      
+      const context = optimizedChunks.map(chunk => chunk.content).join("\n\n");
+      console.log("Context length:", context.length, "characters")
+      
+      // Generate initial response with enhanced prompt
+      const systemPrompt = this.createEnhancedSystemPrompt(questionType)
+      const userPrompt = this.createPhase1UserPrompt(question, context)
+      
+      console.log("Generating AI response...")
+      const messages = [
+        { role: "system" as const, content: systemPrompt },
+        { role: "user" as const, content: userPrompt }
+      ];
 
-    return {
-      question,
-      relevantChunks: optimizedChunks,
-      context,
-      initialResponse: initialResponse.trim(),
-      questionType,
-      tokensUsed: this.estimateTokens(systemPrompt + userPrompt + initialResponse)
+      const initialResponse = await this.aiClient!.generateText(messages);
+      console.log("AI response generated, length:", initialResponse.length)
+
+      return {
+        question,
+        relevantChunks: optimizedChunks,
+        context,
+        initialResponse: initialResponse.trim(),
+        questionType,
+        tokensUsed: this.estimateTokens(systemPrompt + userPrompt + initialResponse)
+      }
+    } catch (error) {
+      console.error("Error in phase1_ContextAnalysis:", error)
+      return {
+        question,
+        relevantChunks: [],
+        context: "",
+        initialResponse: `Error during analysis: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
+        questionType: 'general',
+        tokensUsed: 0
+      }
     }
   }
 
@@ -993,5 +1199,105 @@ Create an improved final response that addresses the identified issues while mai
         isHealthy: () => false,
       }
     }
+  }
+
+  // Diagnostic method to help troubleshoot issues
+  async runDiagnostics(): Promise<any> {
+    console.log("=== RAG Engine Diagnostics ===")
+    
+    const diagnostics: {
+      systemStatus: {
+        initialized: boolean
+        aiClientAvailable: boolean
+        currentProvider: string | undefined
+        currentModel: string | undefined
+        documentsCount: number
+        totalChunks: number
+        totalEmbeddings: number
+      }
+      documents: Array<{
+        index: number
+        id: string
+        name: string
+        chunksCount: number
+        embeddingsCount: number
+        hasValidStructure: boolean
+        firstChunkPreview: string
+        embeddingDimension: number
+      }>
+      embeddingTest: {
+        success: boolean
+        dimensions?: number
+        sampleValues?: number[]
+        error?: string
+      } | null
+      similarityTest: {
+        success: boolean
+        similarity?: number
+        testedAgainst?: string
+      } | null
+    } = {
+      systemStatus: {
+        initialized: this.isInitialized,
+        aiClientAvailable: !!this.aiClient,
+        currentProvider: this.currentConfig?.provider,
+        currentModel: this.currentConfig?.model,
+        documentsCount: this.documents.length,
+        totalChunks: this.documents.reduce((total, doc) => total + (doc.chunks?.length || 0), 0),
+        totalEmbeddings: this.documents.reduce((total, doc) => total + (doc.embeddings?.length || 0), 0)
+      },
+      documents: [],
+      embeddingTest: null,
+      similarityTest: null
+    }
+
+    // Document details
+    diagnostics.documents = this.documents.map((doc, index) => ({
+      index,
+      id: doc.id,
+      name: doc.name,
+      chunksCount: doc.chunks?.length || 0,
+      embeddingsCount: doc.embeddings?.length || 0,
+      hasValidStructure: !!(doc.chunks && doc.embeddings && doc.chunks.length === doc.embeddings.length),
+      firstChunkPreview: doc.chunks?.[0]?.substring(0, 100) + "..." || "No chunks",
+      embeddingDimension: doc.embeddings?.[0]?.length || 0
+    }))
+
+    // Test embedding generation
+    if (this.aiClient && this.isInitialized) {
+      try {
+        console.log("Testing embedding generation...")
+        const testText = "This is a test for embedding generation"
+        const testEmbedding = await this.aiClient.generateEmbedding(testText)
+        diagnostics.embeddingTest = {
+          success: true,
+          dimensions: testEmbedding.length,
+          sampleValues: testEmbedding.slice(0, 5)
+        }
+        console.log("✅ Embedding test successful")
+
+        // Test similarity calculation if we have documents
+        if (this.documents.length > 0 && this.documents[0].embeddings?.length > 0) {
+          const firstDocEmbedding = this.documents[0].embeddings[0]
+          const similarity = this.aiClient.cosineSimilarity(testEmbedding, firstDocEmbedding)
+          diagnostics.similarityTest = {
+            success: true,
+            similarity,
+            testedAgainst: `${this.documents[0].name} (chunk 1)`
+          }
+          console.log("✅ Similarity test successful:", similarity)
+        }
+      } catch (error) {
+        diagnostics.embeddingTest = {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+        console.log("❌ Embedding test failed:", error)
+      }
+    }
+
+    console.log("Diagnostics results:", diagnostics)
+    console.log("=== End Diagnostics ===")
+    return diagnostics
   }
 }
