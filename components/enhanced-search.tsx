@@ -22,6 +22,16 @@ interface SearchResult {
     documentId: string
     chunkIndex: number
     timestamp: string
+    searchMode?: string
+    embeddingGenerated?: boolean
+    semanticScore?: number
+    keywordScore?: number
+    hybridScore?: number
+    debug?: {
+      originalScore?: number
+      thresholdUsed?: number
+      searchMode?: string
+    }
   }
 }
 
@@ -261,6 +271,12 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
                       <Badge variant="outline" className="text-xs">
                         Chunk {result.metadata.chunkIndex + 1}
                       </Badge>
+                      {/* Show which search mode was actually used */}
+                      {result.metadata.searchMode && (
+                        <Badge variant="secondary" className="text-xs">
+                          {result.metadata.searchMode.toUpperCase()}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className={`text-xs font-medium ${getScoreColor(result.score)}`}>
@@ -271,6 +287,26 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
                     </div>
                   </div>
                   <p className="text-sm text-gray-700 line-clamp-3">{result.content}</p>
+                  
+                  {/* Debug information for developers */}
+                  {result.metadata.debug && (
+                    <details className="mt-2">
+                      <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
+                        Debug Info
+                      </summary>
+                      <div className="text-xs text-gray-400 mt-1 space-y-1">
+                        <div>Score: {result.metadata.debug.originalScore?.toFixed(4)}</div>
+                        <div>Threshold: {result.metadata.debug.thresholdUsed?.toFixed(4)}</div>
+                        <div>Mode: {result.metadata.debug.searchMode}</div>
+                        {result.metadata.semanticScore !== undefined && (
+                          <div>Semantic: {result.metadata.semanticScore.toFixed(4)}</div>
+                        )}
+                        {result.metadata.keywordScore !== undefined && (
+                          <div>Keyword: {result.metadata.keywordScore.toFixed(4)}</div>
+                        )}
+                      </div>
+                    </details>
+                  )}
                 </div>
               ))}
             </div>

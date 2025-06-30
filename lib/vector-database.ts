@@ -143,31 +143,189 @@ class PineconeDatabase extends VectorDatabase {
     }
 
     try {
-      const searchParams: any = {
-        vector: embedding,
-        topK: options.limit || 10,
-        includeMetadata: true,
-        includeValues: false,
-      }
+      let results: SearchResult[] = []
 
-      if (options.filters) {
-        searchParams.filter = options.filters
-      }
+      if (options.mode === "semantic") {
+        // Pure semantic search using vector similarity
+        if (!embedding || embedding.length === 0) {
+          console.warn("No embedding provided for semantic search")
+          return []
+        }
 
-      const results = await this.index.query(searchParams)
+        const searchParams: any = {
+          vector: embedding,
+          topK: options.limit || 10,
+          includeMetadata: true,
+          includeValues: false,
+        }
 
-      return (
-        results.matches?.map((match: any) => ({
+        if (options.filters) {
+          searchParams.filter = options.filters
+        }
+
+        const pineconeResults = await this.index.query(searchParams)
+        
+        results = pineconeResults.matches?.map((match: any) => ({
           id: match.id,
           content: match.metadata?.content || "",
           score: match.score || 0,
-          metadata: match.metadata || {},
+          metadata: {
+            ...match.metadata,
+            searchMode: "semantic"
+          },
         })) || []
-      )
+
+      } else if (options.mode === "keyword") {
+        // Pure keyword search using metadata filtering
+        // Since Pinecone doesn't have native text search, we'll fetch more results and filter locally
+        const searchParams: any = {
+          vector: embedding.length > 0 ? embedding : new Array(1536).fill(0), // Use zero vector if no embedding
+          topK: Math.min(1000, (options.limit || 10) * 10), // Fetch more to filter locally
+          includeMetadata: true,
+          includeValues: false,
+        }
+
+        if (options.filters) {
+          searchParams.filter = options.filters
+        }
+
+        const pineconeResults = await this.index.query(searchParams)
+        const allResults = pineconeResults.matches || []
+
+        // Filter results locally using keyword matching
+        const keywordFilteredResults = allResults
+          .map((match: any) => {
+            const content = match.metadata?.content || ""
+            const keywordScore = this.calculateKeywordScore(query, content)
+            
+            return {
+              id: match.id,
+              content: content,
+              score: keywordScore,
+              metadata: {
+                ...match.metadata,
+                searchMode: "keyword",
+                originalPineconeScore: match.score
+              },
+            }
+          })
+          .filter(result => result.score >= (options.threshold || 0.01))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, options.limit || 10)
+
+        results = keywordFilteredResults
+
+      } else if (options.mode === "hybrid") {
+        // Hybrid search - combine semantic and keyword approaches
+        const searchParams: any = {
+          vector: embedding.length > 0 ? embedding : new Array(1536).fill(0),
+          topK: Math.min(1000, (options.limit || 10) * 5), // Fetch more for better hybrid results
+          includeMetadata: true,
+          includeValues: false,
+        }
+
+        if (options.filters) {
+          searchParams.filter = options.filters
+        }
+
+        const pineconeResults = await this.index.query(searchParams)
+        const allResults = pineconeResults.matches || []
+
+        // Calculate hybrid scores
+        const hybridResults = allResults
+          .map((match: any) => {
+            const content = match.metadata?.content || ""
+            const semanticScore = embedding.length > 0 ? (match.score || 0) : 0
+            const keywordScore = this.calculateKeywordScore(query, content)
+            
+            // Combine scores (weighted average)
+            const hybridScore = embedding.length > 0 
+              ? (semanticScore * 0.6 + keywordScore * 0.4) // 60% semantic, 40% keyword
+              : keywordScore // If no embedding, use only keyword score
+
+            return {
+              id: match.id,
+              content: content,
+              score: hybridScore,
+              metadata: {
+                ...match.metadata,
+                searchMode: "hybrid",
+                semanticScore: semanticScore,
+                keywordScore: keywordScore,
+                hybridScore: hybridScore
+              },
+            }
+          })
+          .filter(result => result.score >= (options.threshold || 0.05))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, options.limit || 10)
+
+        results = hybridResults
+      }
+
+      return results
+
     } catch (error) {
       console.error("Failed to search Pinecone:", error)
       throw error
     }
+  }
+
+  // Helper method for keyword scoring in Pinecone
+  private calculateKeywordScore(query: string, content: string): number {
+    if (!content || !query) return 0
+
+    // Normalize text
+    const normalizeText = (text: string) => {
+      return text
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+
+    const normalizedQuery = normalizeText(query)
+    const normalizedContent = normalizeText(content)
+    
+    const queryWords = normalizedQuery.split(/\s+/).filter(word => word.length > 0)
+    const contentWords = normalizedContent.split(/\s+/)
+    
+    if (queryWords.length === 0) return 0
+
+    let exactMatches = 0
+    let partialMatches = 0
+    
+    for (const queryWord of queryWords) {
+      if (contentWords.includes(queryWord)) {
+        exactMatches++
+      } else {
+        const partialMatch = contentWords.some(contentWord => 
+          contentWord.includes(queryWord) || queryWord.includes(contentWord)
+        )
+        if (partialMatch) {
+          partialMatches++
+        }
+      }
+    }
+
+    const exactScore = exactMatches / queryWords.length
+    const partialScore = (partialMatches / queryWords.length) * 0.5
+    let finalScore = exactScore + partialScore
+
+    // Boost single word matches
+    if (queryWords.length === 1 && exactMatches > 0) {
+      finalScore = Math.min(1.0, finalScore * 2)
+    }
+
+    // Frequency bonus
+    if (exactMatches > 0) {
+      const queryText = queryWords.join(' ')
+      const occurrences = (normalizedContent.match(new RegExp(queryText, 'g')) || []).length
+      const frequencyBonus = Math.min(0.3, occurrences * 0.1)
+      finalScore += frequencyBonus
+    }
+
+    return Math.min(1.0, finalScore)
   }
 
   async deleteDocument(documentId: string): Promise<void> {
@@ -319,18 +477,42 @@ class WeaviateDatabase extends VectorDatabase {
 
       const result = await searchQuery.do()
 
-      return (
-        result.data?.Get?.[className]?.map((item: any, index: number) => ({
+      const processedResults = result.data?.Get?.[className]?.map((item: any, index: number) => {
+        // Calculate a more realistic score based on search mode
+        let finalScore = 1 - index / (options.limit || 10) // Base score from ranking
+        
+        // Adjust score based on search mode for better representation
+        if (options.mode === "semantic") {
+          finalScore = Math.max(0.5, finalScore) // Semantic results should have decent scores
+        } else if (options.mode === "keyword") {
+          // For keyword search, calculate actual keyword relevance
+          finalScore = this.calculateKeywordScore(query, item.content)
+        } else if (options.mode === "hybrid") {
+          // For hybrid, this is already a combined score from Weaviate
+          finalScore = Math.max(0.3, finalScore) // Ensure hybrid results have reasonable scores
+        }
+
+        return {
           id: `${item.documentId}_${item.chunkIndex}`,
           content: item.content,
-          score: 1 - index / (options.limit || 10), // Approximate score
+          score: finalScore,
           metadata: {
             source: item.source,
             documentId: item.documentId,
             chunkIndex: item.chunkIndex,
+            searchMode: options.mode,
+            weaviateRank: index + 1,
+            debug: {
+              originalScore: finalScore,
+              thresholdUsed: options.threshold || 0.7,
+              searchMode: options.mode,
+              weaviateIndex: index
+            }
           },
-        })) || []
-      )
+        }
+      }) || []
+
+      return processedResults
     } catch (error) {
       console.error("Failed to search Weaviate:", error)
       throw error
@@ -375,6 +557,63 @@ class WeaviateDatabase extends VectorDatabase {
       console.error("Weaviate connection test failed:", error)
       return false
     }
+  }
+
+  // Helper method for keyword scoring in Weaviate
+  private calculateKeywordScore(query: string, content: string): number {
+    if (!content || !query) return 0
+
+    // Normalize text
+    const normalizeText = (text: string) => {
+      return text
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+
+    const normalizedQuery = normalizeText(query)
+    const normalizedContent = normalizeText(content)
+    
+    const queryWords = normalizedQuery.split(/\s+/).filter(word => word.length > 0)
+    const contentWords = normalizedContent.split(/\s+/)
+    
+    if (queryWords.length === 0) return 0
+
+    let exactMatches = 0
+    let partialMatches = 0
+    
+    for (const queryWord of queryWords) {
+      if (contentWords.includes(queryWord)) {
+        exactMatches++
+      } else {
+        const partialMatch = contentWords.some(contentWord => 
+          contentWord.includes(queryWord) || queryWord.includes(contentWord)
+        )
+        if (partialMatch) {
+          partialMatches++
+        }
+      }
+    }
+
+    const exactScore = exactMatches / queryWords.length
+    const partialScore = (partialMatches / queryWords.length) * 0.5
+    let finalScore = exactScore + partialScore
+
+    // Boost single word matches
+    if (queryWords.length === 1 && exactMatches > 0) {
+      finalScore = Math.min(1.0, finalScore * 2)
+    }
+
+    // Frequency bonus
+    if (exactMatches > 0) {
+      const queryText = queryWords.join(' ')
+      const occurrences = (normalizedContent.match(new RegExp(queryText, 'g')) || []).length
+      const frequencyBonus = Math.min(0.3, occurrences * 0.1)
+      finalScore += frequencyBonus
+    }
+
+    return Math.min(1.0, finalScore)
   }
 }
 
@@ -455,29 +694,256 @@ class ChromaDatabase extends VectorDatabase {
     }
 
     try {
-      const searchParams: any = {
-        queryEmbeddings: [embedding],
-        nResults: options.limit || 10,
-      }
+      let results: SearchResult[] = []
 
-      if (options.filters) {
-        searchParams.where = options.filters
-      }
+      if (options.mode === "semantic") {
+        // Pure semantic search using embeddings
+        if (!embedding || embedding.length === 0) {
+          console.warn("No embedding provided for semantic search")
+          return []
+        }
 
-      const results = await this.collection.query(searchParams)
+        const searchParams: any = {
+          queryEmbeddings: [embedding],
+          nResults: options.limit || 10,
+        }
 
-      return (
-        results.ids[0]?.map((id: string, index: number) => ({
+        if (options.filters) {
+          searchParams.where = options.filters
+        }
+
+        const chromaResults = await this.collection.query(searchParams)
+
+        results = chromaResults.ids[0]?.map((id: string, index: number) => ({
           id,
-          content: results.documents[0][index] || "",
-          score: 1 - (results.distances[0][index] || 0),
-          metadata: results.metadatas[0][index] || {},
+          content: chromaResults.documents[0][index] || "",
+          score: 1 - (chromaResults.distances[0][index] || 0),
+          metadata: {
+            ...chromaResults.metadatas[0][index],
+            searchMode: "semantic"
+          },
         })) || []
-      )
+
+      } else if (options.mode === "keyword") {
+        // Pure keyword search - use a zero vector to get documents, then filter locally
+        // Since ChromaDB doesn't have native text search, we use query with zero vector
+        const zeroVector = new Array(1536).fill(0) // Assuming 1536 dimensions
+        
+        const searchParams: any = {
+          queryEmbeddings: [zeroVector],
+          nResults: Math.min(1000, (options.limit || 10) * 20), // Get more to filter locally
+        }
+
+        if (options.filters) {
+          searchParams.where = options.filters
+        }
+
+        const chromaResults = await this.collection.query(searchParams)
+
+        // Filter using keyword matching
+        const keywordResults = []
+        const ids = chromaResults.ids[0] || []
+        const documents = chromaResults.documents[0] || []
+        const metadatas = chromaResults.metadatas[0] || []
+        
+        for (let i = 0; i < ids.length; i++) {
+          const id = ids[i]
+          const content = documents[i] || ""
+          const metadata = metadatas[i] || {}
+          
+          const keywordScore = this.calculateKeywordScore(query, content)
+          
+          if (keywordScore >= (options.threshold || 0.01)) {
+            keywordResults.push({
+              id,
+              content,
+              score: keywordScore,
+              metadata: {
+                ...metadata,
+                searchMode: "keyword"
+              }
+            })
+          }
+        }
+
+        // Sort by score and limit results
+        results = keywordResults
+          .sort((a, b) => b.score - a.score)
+          .slice(0, options.limit || 10)
+
+      } else if (options.mode === "hybrid") {
+        // Hybrid search - combine semantic and keyword approaches
+        let semanticResults: any[] = []
+        let keywordResults: any[] = []
+
+        // Get semantic results if embedding is available
+        if (embedding && embedding.length > 0) {
+          const searchParams: any = {
+            queryEmbeddings: [embedding],
+            nResults: Math.min(100, (options.limit || 10) * 5), // Get more for better mixing
+          }
+
+          if (options.filters) {
+            searchParams.where = options.filters
+          }
+
+          const chromaResults = await this.collection.query(searchParams)
+          semanticResults = chromaResults.ids[0]?.map((id: string, index: number) => ({
+            id,
+            content: chromaResults.documents[0][index] || "",
+            semanticScore: 1 - (chromaResults.distances[0][index] || 0),
+            metadata: chromaResults.metadatas[0][index] || {},
+          })) || []
+        }
+
+        // Get keyword results using zero vector query
+        const zeroVector = new Array(1536).fill(0)
+        const allDocsParams: any = {
+          queryEmbeddings: [zeroVector],
+          nResults: Math.min(200, (options.limit || 10) * 10),
+        }
+
+        if (options.filters) {
+          allDocsParams.where = options.filters
+        }
+
+        const allDocsResults = await this.collection.query(allDocsParams)
+        
+        const keywordMap = new Map<string, number>()
+        const allIds = allDocsResults.ids[0] || []
+        const allDocuments = allDocsResults.documents[0] || []
+        
+        for (let i = 0; i < allIds.length; i++) {
+          const id = allIds[i]
+          const content = allDocuments[i] || ""
+          const keywordScore = this.calculateKeywordScore(query, content)
+          keywordMap.set(id, keywordScore)
+        }
+
+        // Combine semantic and keyword scores
+        const hybridMap = new Map<string, any>()
+
+        // Add semantic results
+        semanticResults.forEach(result => {
+          hybridMap.set(result.id, {
+            ...result,
+            keywordScore: keywordMap.get(result.id) || 0
+          })
+        })
+
+        // Add any keyword-only results
+        keywordMap.forEach((keywordScore, id) => {
+          if (!hybridMap.has(id) && keywordScore > 0) {
+            const docIndex = allIds.indexOf(id)
+            if (docIndex >= 0) {
+              hybridMap.set(id, {
+                id,
+                content: allDocuments[docIndex] || "",
+                semanticScore: 0,
+                keywordScore,
+                metadata: (allDocsResults.metadatas![0] || [])[docIndex] || {}
+              })
+            }
+          }
+        })
+
+        // Calculate final hybrid scores
+        const hybridResults = Array.from(hybridMap.values()).map(result => {
+          const semanticScore = result.semanticScore || 0
+          const keywordScore = result.keywordScore || 0
+          
+          // Weighted combination (60% semantic, 40% keyword if both available)
+          let hybridScore: number
+          if (semanticScore > 0 && keywordScore > 0) {
+            hybridScore = semanticScore * 0.6 + keywordScore * 0.4
+          } else {
+            hybridScore = semanticScore + keywordScore
+          }
+
+          return {
+            id: result.id,
+            content: result.content,
+            score: hybridScore,
+            metadata: {
+              ...result.metadata,
+              searchMode: "hybrid",
+              semanticScore,
+              keywordScore,
+              hybridScore
+            }
+          }
+        })
+
+        // Filter and sort results
+        results = hybridResults
+          .filter(result => result.score >= (options.threshold || 0.05))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, options.limit || 10)
+      }
+
+      return results
+
     } catch (error) {
       console.error("Failed to search Chroma:", error)
       throw error
     }
+  }
+
+  // Helper method for keyword scoring in ChromaDB
+  private calculateKeywordScore(query: string, content: string): number {
+    if (!content || !query) return 0
+
+    // Normalize text
+    const normalizeText = (text: string) => {
+      return text
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+
+    const normalizedQuery = normalizeText(query)
+    const normalizedContent = normalizeText(content)
+    
+    const queryWords = normalizedQuery.split(/\s+/).filter(word => word.length > 0)
+    const contentWords = normalizedContent.split(/\s+/)
+    
+    if (queryWords.length === 0) return 0
+
+    let exactMatches = 0
+    let partialMatches = 0
+    
+    for (const queryWord of queryWords) {
+      if (contentWords.includes(queryWord)) {
+        exactMatches++
+      } else {
+        const partialMatch = contentWords.some(contentWord => 
+          contentWord.includes(queryWord) || queryWord.includes(contentWord)
+        )
+        if (partialMatch) {
+          partialMatches++
+        }
+      }
+    }
+
+    const exactScore = exactMatches / queryWords.length
+    const partialScore = (partialMatches / queryWords.length) * 0.5
+    let finalScore = exactScore + partialScore
+
+    // Boost single word matches
+    if (queryWords.length === 1 && exactMatches > 0) {
+      finalScore = Math.min(1.0, finalScore * 2)
+    }
+
+    // Frequency bonus
+    if (exactMatches > 0) {
+      const queryText = queryWords.join(' ')
+      const occurrences = (normalizedContent.match(new RegExp(queryText, 'g')) || []).length
+      const frequencyBonus = Math.min(0.3, occurrences * 0.1)
+      finalScore += frequencyBonus
+    }
+
+    return Math.min(1.0, finalScore)
   }
 
   async deleteDocument(documentId: string): Promise<void> {
@@ -570,24 +1036,70 @@ class LocalVectorDatabase extends VectorDatabase {
   async search(query: string, embedding: number[], options: SearchOptions): Promise<SearchResult[]> {
     const results: SearchResult[] = []
 
+    // Dynamic thresholds based on search mode
+    const getThreshold = (mode: string) => {
+      switch (mode) {
+        case "semantic": return options.threshold || 0.1  // 10%
+        case "keyword": return options.threshold || 0.01   // 1% - much lower for keyword matches
+        case "hybrid": return options.threshold || 0.05    // 5% - balanced
+        default: return options.threshold || 0.1
+      }
+    }
+
+    const threshold = getThreshold(options.mode)
+
     for (const doc of this.documents) {
       let score = 0
 
-      if (options.mode === "semantic" || options.mode === "hybrid") {
-        score = this.cosineSimilarity(embedding, doc.embedding)
+      if (options.mode === "semantic") {
+        // Pure semantic search
+        if (embedding && embedding.length > 0) {
+          score = this.cosineSimilarity(embedding, doc.embedding)
+        } else {
+          // If no embedding available, skip this document for semantic search
+          continue
+        }
+      } else if (options.mode === "keyword") {
+        // Pure keyword search - doesn't require embeddings
+        score = this.enhancedKeywordSimilarity(query, doc.content)
+      } else if (options.mode === "hybrid") {
+        // Hybrid search - combine both with fallback
+        let semanticScore = 0
+        let keywordScore = 0
+
+        // Try semantic search if embeddings available
+        if (embedding && embedding.length > 0) {
+          semanticScore = this.cosineSimilarity(embedding, doc.embedding)
+        }
+
+        // Always do keyword search
+        keywordScore = this.enhancedKeywordSimilarity(query, doc.content)
+
+        // If both available, average them; otherwise use what's available
+        if (semanticScore > 0 && keywordScore > 0) {
+          score = (semanticScore + keywordScore) / 2
+        } else if (semanticScore > 0) {
+          score = semanticScore
+        } else {
+          score = keywordScore
+        }
       }
 
-      if (options.mode === "keyword" || options.mode === "hybrid") {
-        const keywordScore = this.keywordSimilarity(query, doc.content)
-        score = options.mode === "hybrid" ? (score + keywordScore) / 2 : keywordScore
-      }
-
-      if (score >= (options.threshold || 0.1)) {
+      if (score >= threshold) {
         results.push({
           id: doc.id,
           content: doc.content,
           score,
-          metadata: doc.metadata,
+          metadata: {
+            ...doc.metadata,
+            searchMode: options.mode,
+            threshold: threshold,
+            debug: {
+              originalScore: score,
+              thresholdUsed: threshold,
+              searchMode: options.mode
+            }
+          },
         })
       }
     }
@@ -616,11 +1128,68 @@ class LocalVectorDatabase extends VectorDatabase {
     return dotProduct / (magnitudeA * magnitudeB)
   }
 
+  private enhancedKeywordSimilarity(query: string, content: string): number {
+    // Normalize text: lowercase, remove punctuation, handle contractions
+    const normalizeText = (text: string) => {
+      return text
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ') // Replace punctuation with spaces
+        .replace(/\s+/g, ' ') // Collapse multiple spaces
+        .trim()
+    }
+
+    const normalizedQuery = normalizeText(query)
+    const normalizedContent = normalizeText(content)
+    
+    const queryWords = normalizedQuery.split(/\s+/).filter(word => word.length > 0)
+    const contentWords = normalizedContent.split(/\s+/)
+    
+    if (queryWords.length === 0) return 0
+
+    // Count exact matches
+    let exactMatches = 0
+    let partialMatches = 0
+    
+    for (const queryWord of queryWords) {
+      // Check for exact matches
+      if (contentWords.includes(queryWord)) {
+        exactMatches++
+      } else {
+        // Check for partial matches (substring matching)
+        const partialMatch = contentWords.some(contentWord => 
+          contentWord.includes(queryWord) || queryWord.includes(contentWord)
+        )
+        if (partialMatch) {
+          partialMatches++
+        }
+      }
+    }
+
+    // Calculate score with higher weight for exact matches
+    const exactScore = exactMatches / queryWords.length
+    const partialScore = (partialMatches / queryWords.length) * 0.5 // Partial matches worth 50%
+    
+    let finalScore = exactScore + partialScore
+
+    // Boost score for short queries (single words should have higher chance of matching)
+    if (queryWords.length === 1 && exactMatches > 0) {
+      finalScore = Math.min(1.0, finalScore * 2) // Double score for single word exact matches
+    }
+
+    // Add frequency bonus - more occurrences = higher score
+    if (exactMatches > 0) {
+      const queryText = queryWords.join(' ')
+      const occurrences = (normalizedContent.match(new RegExp(queryText, 'g')) || []).length
+      const frequencyBonus = Math.min(0.3, occurrences * 0.1) // Max 30% bonus
+      finalScore += frequencyBonus
+    }
+
+    return Math.min(1.0, finalScore) // Cap at 1.0
+  }
+
+  // Legacy method for backward compatibility
   private keywordSimilarity(query: string, content: string): number {
-    const queryWords = query.toLowerCase().split(/\s+/)
-    const contentWords = content.toLowerCase().split(/\s+/)
-    const matches = queryWords.filter((word) => contentWords.includes(word))
-    return matches.length / queryWords.length
+    return this.enhancedKeywordSimilarity(query, content)
   }
 }
 

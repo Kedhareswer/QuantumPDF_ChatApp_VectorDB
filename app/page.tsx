@@ -378,22 +378,72 @@ export default function QuantumPDFChatbot() {
     try {
       setIsSearching(true)
       
-      // Generate embedding for the query or use empty array if not available
+      console.log("=== Document Search Started ===")
+      console.log("Query:", query)
+      console.log("Search mode:", filters.searchMode)
+      console.log("Filters:", filters)
+      console.log("Documents available:", documents.length)
+      console.log("Vector DB provider:", vectorDBConfig.provider)
+      
+      // Generate embedding for the query
       let embedding: number[] = []
+      let embeddingGenerated = false
+      
       try {
-        // Call the RAG engine to generate embeddings (avoiding direct access to aiClient)
-        embedding = await ragEngine.generateEmbedding(query)
+        // Only generate embedding if needed (semantic or hybrid search)
+        if (filters.searchMode === "semantic" || filters.searchMode === "hybrid") {
+          console.log("Generating embedding for query...")
+          embedding = await ragEngine.generateEmbedding(query)
+          embeddingGenerated = true
+          console.log("✅ Embedding generated successfully, length:", embedding.length)
+        } else {
+          console.log("Skipping embedding generation for keyword search")
+        }
       } catch (err) {
-        console.error("Could not generate embedding, using fallback:", err)
+        console.error("❌ Could not generate embedding:", err)
+        
+        // For semantic search, this is a critical error
+        if (filters.searchMode === "semantic") {
+          throw new Error("Embedding generation failed for semantic search. Please configure an AI provider first.")
+        }
+        
+        // For hybrid search, continue with keyword-only
+        if (filters.searchMode === "hybrid") {
+          console.warn("Falling back to keyword-only search due to embedding failure")
+        }
+      }
+
+      // Validate search parameters
+      if (!query.trim()) {
+        throw new Error("Search query cannot be empty")
+      }
+
+      if (documents.length === 0) {
+        throw new Error("No documents available to search. Please upload some documents first.")
       }
 
       // Search using vector database
-      const results = await vectorDB.search(query, embedding, {
+      console.log("Performing search with vector database...")
+      const searchOptions = {
         mode: filters.searchMode,
-        filters: filters.documentTypes ? { documentId: { $in: filters.documentTypes } } : undefined,
+        filters: filters.documentTypes.length > 0 
+          ? { documentId: { $in: filters.documentTypes } } 
+          : undefined,
         limit: filters.maxResults,
         threshold: filters.relevanceThreshold,
-      })
+      }
+      
+      console.log("Search options:", searchOptions)
+      
+      const results = await vectorDB.search(query, embedding, searchOptions)
+      
+      console.log("Raw search results:", results.length)
+      console.log("Results preview:", results.slice(0, 3).map(r => ({
+        id: r.id,
+        score: r.score,
+        contentPreview: r.content.substring(0, 100) + "...",
+        searchMode: r.metadata?.searchMode
+      })))
 
       // Transform results to match expected format
       const transformedResults = results.map((result, index) => ({
@@ -405,18 +455,62 @@ export default function QuantumPDFChatbot() {
           documentId: result.metadata?.documentId || result.id,
           chunkIndex: result.metadata?.chunkIndex || 0,
           timestamp: result.metadata?.timestamp || new Date().toISOString(),
+          searchMode: result.metadata?.searchMode || filters.searchMode,
+          embeddingGenerated: embeddingGenerated,
+          debug: result.metadata?.debug
         }
       }))
 
+      console.log("✅ Search completed successfully")
+      console.log("Final results count:", transformedResults.length)
+      console.log("Search mode used:", transformedResults[0]?.metadata?.searchMode)
+      console.log("=== Document Search Completed ===")
+
       setSearchResults(transformedResults)
+      
+      // Show success message with details
+      if (transformedResults.length > 0) {
+        addError({
+          type: "success",
+          title: "Search Completed",
+          message: `Found ${transformedResults.length} result${transformedResults.length > 1 ? 's' : ''} using ${filters.searchMode} search`,
+        })
+      } else {
+        addError({
+          type: "info",
+          title: "No Results Found",
+          message: `No results found for "${query}" using ${filters.searchMode} search. Try adjusting your search terms or lowering the relevance threshold.`,
+        })
+      }
+      
       return transformedResults
+      
     } catch (error) {
-      console.error("Search failed:", error)
+      console.error("❌ Search failed:", error)
+      
+      // Enhanced error handling with specific messages
+      let errorMessage = "Unknown error occurred"
+      let errorTitle = "Search Failed"
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+        
+        // Categorize error types
+        if (error.message.includes("embedding")) {
+          errorTitle = "AI Configuration Error"
+        } else if (error.message.includes("documents")) {
+          errorTitle = "No Documents Available"
+        } else if (error.message.includes("vector database")) {
+          errorTitle = "Database Connection Error"
+        }
+      }
+      
       addError({
         type: "error",
-        title: "Search Failed",
-        message: error instanceof Error ? error.message : "Unknown error",
+        title: errorTitle,
+        message: errorMessage,
       })
+      
       setSearchResults([])
       return []
     } finally {
