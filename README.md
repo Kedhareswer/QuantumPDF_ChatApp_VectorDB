@@ -10,11 +10,6 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
 
-[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen)](https://github.com/Kedhareswer/QuantumPDF_ChatApp)
-[![Mobile Compatible](https://img.shields.io/badge/Mobile-Compatible-green)](https://github.com/Kedhareswer/QuantumPDF_ChatApp)
-[![PWA Ready](https://img.shields.io/badge/PWA-Ready-purple)](https://github.com/Kedhareswer/QuantumPDF_ChatApp)
-[![AI Enhanced](https://img.shields.io/badge/AI-Enhanced_RAG-orange)](https://github.com/Kedhareswer/QuantumPDF_ChatApp)
-
 </div>
 
 ---
