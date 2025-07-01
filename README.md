@@ -1,4 +1,4 @@
-# QuantumPDF ChatApp 🚀
+# QuantumPDF ChatApp
 
 <div align="center">
 
