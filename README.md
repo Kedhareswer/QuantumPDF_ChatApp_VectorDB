@@ -733,54 +733,6 @@ const getCachedQuality = (responseHash: string) => {
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions from the community! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
-### Quick Contribution Guide
-
-| Type | Process | Timeline | Recognition |
-|------|---------|----------|-------------|
-| **🐛 Bug Reports** | Issues → Discussion → PR | 1-3 days | Contributors list |
-| **✨ Feature Requests** | Discussion → Design → Implementation | 1-2 weeks | Feature credits |
-| **📚 Documentation** | Direct PR for small changes | Same day | Docs contributors |
-| **🎨 UI/UX Improvements** | Screenshots required | 3-5 days | Design team |
-| **⚡ Performance** | Benchmarks required | 1 week | Performance team |
-
-### Development Setup
-
-```bash
-# 1. Fork and clone
-git clone https://github.com/YOUR_USERNAME/QuantumPDF_ChatApp.git
-cd QuantumPDF_ChatApp
-
-# 2. Install dependencies
-pnpm install
-
-# 3. Create feature branch
-git checkout -b feature/your-feature-name
-
-# 4. Start development
-pnpm dev
-
-# 5. Run tests
-pnpm test
-
-# 6. Submit PR
-git push origin feature/your-feature-name
-```
-
-### Code Quality Standards
-
-| Standard | Tool | Configuration | Enforcement |
-|----------|------|---------------|-------------|
-| **TypeScript** | tsc | Strict mode | Pre-commit |
-| **ESLint** | eslint | Next.js config | CI/CD |
-| **Prettier** | prettier | Standard config | Auto-format |
-| **Testing** | Jest + RTL | Component tests | Required |
-
----
-
 ## 📄 License
 
 This project is licensed under the **GNU General Public License v3.0**.
