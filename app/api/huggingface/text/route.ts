@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { InferenceClient } from "@huggingface/inference"
 
 export async function POST(request: NextRequest) {
-  let textModel: string = "HuggingFaceH4/zephyr-7b-beta"; // Default model
+  let textModel: string = "meta-llama/Meta-Llama-3.3-70B-Instruct"; // Updated default model
   try {
     const apiKey = process.env.HUGGINGFACE_API_KEY
     console.log("Hugging Face API Key found:", apiKey ? "Yes" : "No");
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     const client = new InferenceClient(apiKey)
-    textModel = model || "HuggingFaceH4/zephyr-7b-beta" // Assign specific model
+    textModel = model || "meta-llama/Meta-Llama-3.3-70B-Instruct" // Updated specific model
 
     const fullPrompt = context
       ? `Context: ${context}\n\nQuestion: ${prompt}\n\nAnswer:`

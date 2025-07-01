@@ -1,5 +1,5 @@
 {
-  "name": "my-v0-project",
+  "name": "quantum-pdf-chatapp",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -57,11 +57,14 @@
     "react-day-picker": "8.10.1",
     "react-dom": "^19",
     "react-hook-form": "^7.54.1",
+    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
+    "remark-gfm": "^4.0.1",
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "tesseract.js": "^5.0.5",
     "use-sync-external-store": "latest",
     "vaul": "^0.9.6",
     "weaviate-ts-client": "latest",

@@ -2,6 +2,9 @@
 
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import type { Components } from 'react-markdown'
 import {
   Send,
   Loader2,
@@ -18,12 +21,25 @@ import {
   RotateCcw,
   Download,
   Share,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  Zap,
+  Settings,
+  HelpCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { QuickActions } from "@/components/quick-actions"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { EnhancedChatProcessingSkeleton, ChatTypingIndicator } from "@/components/skeleton-loaders"
 
 interface Message {
   id: string
@@ -35,16 +51,38 @@ interface Message {
     responseTime?: number
     relevanceScore?: number
     retrievedChunks?: number
+    qualityMetrics?: {
+      accuracyScore: number
+      completenessScore: number
+      clarityScore: number
+      confidenceScore: number
+      finalRating: number
+    }
+    tokenUsage?: {
+      contextTokens: number
+      reasoningTokens: number
+      responseTokens: number
+      totalTokens: number
+    }
+    reasoning?: {
+      initialThoughts: string
+      criticalReview: string
+      finalRefinement: string
+    }
   }
 }
 
 interface ChatInterfaceProps {
   messages: Message[]
-  onSendMessage: (content: string) => void
+  onSendMessage: (content: string, options?: {
+    showThinking?: boolean,
+    complexityLevel?: 'simple' | 'normal' | 'complex'
+  }) => void
   onClearChat: () => void
   onNewSession: () => void
   isProcessing: boolean
   disabled: boolean
+  ragEngine?: any // Add ragEngine prop for diagnostics
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -54,16 +92,234 @@ const SUGGESTED_QUESTIONS = [
   "How do the documents relate to each other?",
 ]
 
+// Component to parse and render message content with thinking sections
+function MessageContent({ content }: { content: string }) {
+  const [expandedThinking, setExpandedThinking] = useState<{[key: string]: boolean}>({})
+
+  // Parse content to extract thinking sections
+  const parseContent = (text: string) => {
+    const parts = []
+    let currentIndex = 0
+    let thinkingCounter = 0
+
+    // Replace newlines with a placeholder to simulate the 's' flag behavior
+    const processedText = text.replace(/\n/g, '\n')
+    
+    // Regex to match <think> or <thinking> tags (compatible with older JS)
+    const thinkingRegex = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/g
+    let match
+
+    while ((match = thinkingRegex.exec(processedText)) !== null) {
+      // Add text before thinking section
+      if (match.index > currentIndex) {
+        const beforeText = processedText.slice(currentIndex, match.index).trim()
+        if (beforeText) {
+          parts.push({
+            type: 'text',
+            content: beforeText,
+            id: `text-${parts.length}`
+          })
+        }
+      }
+
+      // Add thinking section
+      const thinkingContent = match[1].trim()
+      if (thinkingContent) {
+        thinkingCounter++
+        parts.push({
+          type: 'thinking',
+          content: thinkingContent,
+          id: `thinking-${thinkingCounter}`
+        })
+      }
+
+      currentIndex = match.index + match[0].length
+    }
+
+    // Add remaining text after last thinking section
+    if (currentIndex < processedText.length) {
+      const remainingText = processedText.slice(currentIndex).trim()
+      if (remainingText) {
+        parts.push({
+          type: 'text',
+          content: remainingText,
+          id: `text-${parts.length}`
+        })
+      }
+    }
+
+    // If no thinking sections found, return original text
+    if (parts.length === 0) {
+      parts.push({
+        type: 'text',
+        content: text,
+        id: 'text-0'
+      })
+    }
+
+    return parts
+  }
+
+  const toggleThinking = (id: string) => {
+    setExpandedThinking(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }))
+  }
+
+  const parts = parseContent(content)
+
+  return (
+    <div className="space-y-3">
+      {parts.map((part) => {
+        if (part.type === 'thinking') {
+          const isExpanded = expandedThinking[part.id] || false
+          
+          return (
+            <Collapsible
+              key={part.id}
+              open={isExpanded}
+              onOpenChange={() => toggleThinking(part.id)}
+            >
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-between text-left h-7 px-2 py-1 text-xs bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800 font-medium"
+                >
+                  <div className="flex items-center space-x-1.5">
+                    <Brain className="w-3 h-3" />
+                    <span>Thinking</span>
+                    <Badge variant="outline" className="text-xs px-1 py-0 h-3.5 border-amber-300 text-amber-700">
+                      {part.content.length > 1000 ? `${Math.round(part.content.length / 100) / 10}k` : `${part.content.length}c`}
+                    </Badge>
+                  </div>
+                  {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                </Button>
+              </CollapsibleTrigger>
+              
+              <CollapsibleContent>
+                <Card className="mt-2 border border-amber-200 bg-amber-50/50">
+                  <CardContent className="p-3">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Eye className="w-3 h-3 text-amber-600" />
+                      <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                        Internal Reasoning
+                      </span>
+                    </div>
+                    <div className="text-sm text-amber-900 whitespace-pre-wrap leading-relaxed bg-white/60 p-3 rounded border border-amber-200/50 font-mono">
+                      {part.content}
+                    </div>
+                  </CardContent>
+                </Card>
+              </CollapsibleContent>
+            </Collapsible>
+          )
+        } else {
+          return (
+            <div key={part.id} className="markdown-content">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  // Custom styling for markdown elements
+                  h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-lg font-bold mb-2 mt-4 first:mt-0">{children}</h3>,
+                  h4: ({ children }) => <h4 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h4>,
+                  h5: ({ children }) => <h5 className="text-sm font-bold mb-2 mt-3 first:mt-0">{children}</h5>,
+                  h6: ({ children }) => <h6 className="text-sm font-bold mb-2 mt-3 first:mt-0">{children}</h6>,
+                  p: ({ children }) => <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc list-inside mb-4 space-y-1">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal list-inside mb-4 space-y-1">{children}</ol>,
+                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                  blockquote: ({ children }) => (
+                    <blockquote className="border-l-4 border-gray-300 pl-4 my-4 italic text-gray-700 bg-gray-50 py-2">
+                      {children}
+                    </blockquote>
+                  ),
+                  code: (props: any) => {
+                    const { inline, children, ...rest } = props;
+                    return inline ? (
+                      <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800" {...rest}>
+                        {children}
+                      </code>
+                    ) : (
+                      <code className="block bg-gray-100 p-3 rounded text-sm font-mono overflow-x-auto" {...rest}>
+                        {children}
+                      </code>
+                    );
+                  },
+                  pre: ({ children }) => (
+                    <pre className="bg-gray-100 p-3 rounded text-sm font-mono overflow-x-auto mb-4">
+                      {children}
+                    </pre>
+                  ),
+                  table: ({ children }) => (
+                    <div className="overflow-x-auto mb-4">
+                      <table className="min-w-full border-collapse border border-gray-300 bg-white">
+                        {children}
+                      </table>
+                    </div>
+                  ),
+                  thead: ({ children }) => (
+                    <thead className="bg-gray-50">
+                      {children}
+                    </thead>
+                  ),
+                  tbody: ({ children }) => <tbody>{children}</tbody>,
+                  tr: ({ children }) => <tr className="border-b border-gray-200">{children}</tr>,
+                  th: ({ children }) => (
+                    <th className="border border-gray-300 px-4 py-2 text-left font-semibold text-gray-900 bg-gray-50">
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children }) => (
+                    <td className="border border-gray-300 px-4 py-2 text-gray-700">
+                      {children}
+                    </td>
+                  ),
+                  strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+                  em: ({ children }) => <em className="italic">{children}</em>,
+                  a: ({ href, children }) => (
+                    <a 
+                      href={href} 
+                      className="text-blue-600 hover:text-blue-800 underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {children}
+                    </a>
+                  ),
+                  hr: () => <hr className="my-6 border-t-2 border-gray-200" />,
+                } as Components}
+            >
+              {part.content}
+              </ReactMarkdown>
+            </div>
+          )
+        }
+      })}
+    </div>
+  )
+}
+
 export function ChatInterface({ 
   messages, 
   onSendMessage, 
   onClearChat, 
   onNewSession, 
   isProcessing, 
-  disabled 
+  disabled, 
+  ragEngine 
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("")
   const [isExpanded, setIsExpanded] = useState(false)
+  const [showAdvancedControls, setShowAdvancedControls] = useState(false)
+  const [isRunningDiagnostics, setIsRunningDiagnostics] = useState(false)
+  const [enhancedOptions, setEnhancedOptions] = useState({
+    showThinking: false,
+    complexityLevel: 'auto' as 'auto' | 'simple' | 'normal' | 'complex'
+  })
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -82,7 +338,14 @@ export function ChatInterface({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (input.trim() && !isProcessing && !disabled) {
-      onSendMessage(input.trim())
+      const options = enhancedOptions.complexityLevel === 'auto' 
+        ? { showThinking: enhancedOptions.showThinking }
+        : { 
+            showThinking: enhancedOptions.showThinking,
+            complexityLevel: enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex'
+          }
+      
+      onSendMessage(input.trim(), options)
       setInput("")
       setIsExpanded(false)
     }
@@ -97,7 +360,14 @@ export function ChatInterface({
 
   const handleSuggestedQuestion = (question: string) => {
     if (!isProcessing && !disabled) {
-      onSendMessage(question)
+      const options = enhancedOptions.complexityLevel === 'auto' 
+        ? { showThinking: enhancedOptions.showThinking }
+        : { 
+            showThinking: enhancedOptions.showThinking,
+            complexityLevel: enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex'
+          }
+      
+      onSendMessage(question, options)
     }
   }
 
@@ -123,6 +393,83 @@ export function ChatInterface({
     return `${(ms / 1000).toFixed(1)}s`
   }
 
+  const runDiagnostics = async () => {
+    if (!ragEngine) {
+      console.error("RAG Engine not available for diagnostics")
+      return
+    }
+
+    setIsRunningDiagnostics(true)
+    try {
+      console.log("🔍 Running system diagnostics...")
+      const diagnostics = await ragEngine.runDiagnostics()
+      
+      // Create a diagnostic report message
+      const diagnosticReport = `# 🔍 System Diagnostic Report
+
+## System Status
+- **Initialized:** ${diagnostics.systemStatus.initialized ? '✅ Yes' : '❌ No'}
+- **AI Client:** ${diagnostics.systemStatus.aiClientAvailable ? '✅ Available' : '❌ Not Available'}
+- **Provider:** ${diagnostics.systemStatus.currentProvider || 'Not Set'}
+- **Model:** ${diagnostics.systemStatus.currentModel || 'Not Set'}
+- **Documents:** ${diagnostics.systemStatus.documentsCount}
+- **Total Chunks:** ${diagnostics.systemStatus.totalChunks}
+- **Total Embeddings:** ${diagnostics.systemStatus.totalEmbeddings}
+
+## Document Analysis
+${diagnostics.documents.length === 0 
+  ? '❌ No documents found' 
+  : diagnostics.documents.map((doc: any, i: number) => 
+    `**${i + 1}. ${doc.name}**
+- Chunks: ${doc.chunksCount}
+- Embeddings: ${doc.embeddingsCount}
+- Valid Structure: ${doc.hasValidStructure ? '✅' : '❌'}
+- Embedding Dimension: ${doc.embeddingDimension}
+- Preview: ${doc.firstChunkPreview}`
+  ).join('\n\n')
+}
+
+## Tests
+**Embedding Generation:** ${diagnostics.embeddingTest ? 
+  (diagnostics.embeddingTest.success ? 
+    `✅ Success (${diagnostics.embeddingTest.dimensions} dimensions)` : 
+    `❌ Failed: ${diagnostics.embeddingTest.error}`
+  ) : '⏸️ Not Tested'}
+
+**Similarity Calculation:** ${diagnostics.similarityTest ? 
+  (diagnostics.similarityTest.success ? 
+    `✅ Success (Score: ${diagnostics.similarityTest.similarity?.toFixed(3)})` : 
+    '❌ Failed'
+  ) : '⏸️ Not Tested'}
+
+---
+*Diagnostic completed at ${new Date().toLocaleString()}*`
+
+      // Add diagnostic message to chat
+      const diagnosticMessage = {
+        id: Date.now().toString(),
+        role: "assistant" as const,
+        content: diagnosticReport,
+        timestamp: new Date(),
+        sources: ['System Diagnostics'],
+        metadata: {
+          responseTime: 0,
+          relevanceScore: 1.0,
+          retrievedChunks: 0,
+        },
+      }
+
+      // This would need to be passed up to the parent component
+      // For now, just log the results
+      console.log("Diagnostic report generated:", diagnosticReport)
+      
+    } catch (error) {
+      console.error("Diagnostic failed:", error)
+    } finally {
+      setIsRunningDiagnostics(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Chat Header with Controls */}
@@ -130,48 +477,133 @@ export function ChatInterface({
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Chat</h2>
           <div className="flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClearChat}
-              disabled={disabled || messages.length === 0}
-              title="Clear Chat"
-              className="text-gray-500 hover:text-black"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onNewSession}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAdvancedControls(!showAdvancedControls)}
+                    className={showAdvancedControls ? "bg-purple-50 text-purple-700" : ""}
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Enhanced AI Controls</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          <QuickActions
+            onClearChat={onClearChat}
+            onNewSession={onNewSession}
               disabled={disabled}
-              title="New Session"
-              className="text-gray-500 hover:text-black"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {}}
-              disabled={disabled}
-              title="Export Chat"
-              className="text-gray-500 hover:text-black"
-            >
-              <Download className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {}}
-              disabled={disabled}
-              title="Share"
-              className="text-gray-500 hover:text-black"
-            >
-              <Share className="w-4 h-4" />
-            </Button>
-          </div>
+          />
         </div>
+        </div>
+        
+        {/* Enhanced Controls */}
+        {showAdvancedControls && (
+          <Card className="mt-3 border border-purple-200 bg-purple-50/50">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-purple-800 flex items-center">
+                  <Brain className="w-4 h-4 mr-1" />
+                  Enhanced AI Settings
+                </h3>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-4 h-4 text-purple-600" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-sm">
+                        <strong>Thinking Mode:</strong> Shows AI's reasoning process<br/>
+                        <strong>Complexity:</strong> Controls analysis depth<br/>
+                        • Simple: Fast, direct answers<br/>
+                        • Normal: Balanced analysis<br/>
+                        • Complex: Deep reasoning with validation
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="thinking-mode"
+                    checked={enhancedOptions.showThinking}
+                    onCheckedChange={(checked) => 
+                      setEnhancedOptions(prev => ({ ...prev, showThinking: checked }))
+                    }
+                  />
+                  <Label htmlFor="thinking-mode" className="text-sm">
+                    Show Thinking Process
+                  </Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Label htmlFor="complexity-level" className="text-sm whitespace-nowrap">
+                    Analysis Level:
+                  </Label>
+                  <Select
+                    value={enhancedOptions.complexityLevel}
+                    onValueChange={(value) => 
+                      setEnhancedOptions(prev => ({ 
+                        ...prev, 
+                        complexityLevel: value as 'auto' | 'simple' | 'normal' | 'complex'
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto-detect</SelectItem>
+                      <SelectItem value="simple">Simple</SelectItem>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="complex">Complex</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              {enhancedOptions.showThinking && (
+                <div className="mt-2 text-xs text-purple-700 bg-purple-100 p-2 rounded">
+                  <Brain className="w-3 h-3 inline mr-1" />
+                  Thinking mode enabled - AI will show its reasoning process
+                </div>
+              )}
+              
+              {/* Diagnostic Button */}
+              <div className="mt-3 pt-3 border-t border-purple-200">
+                <Button
+                  onClick={runDiagnostics}
+                  disabled={isRunningDiagnostics || !ragEngine}
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs border-purple-300 text-purple-700 hover:bg-purple-100"
+                >
+                  {isRunningDiagnostics ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      Running Diagnostics...
+                    </>
+                  ) : (
+                    <>
+                      <HelpCircle className="w-3 h-3 mr-1" />
+                      Run System Diagnostics
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-purple-600 mt-1 text-center">
+                  Check document processing & retrieval
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
       
       {/* Skip to content link for accessibility */}
@@ -257,7 +689,7 @@ export function ChatInterface({
                     </div>
 
                     {message.metadata && (
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-3 flex-wrap gap-2">
                         {message.metadata.responseTime && (
                           <Badge variant="outline" className="text-xs border-gray-300">
                             <Clock className="w-3 h-3 mr-1" />
@@ -270,6 +702,53 @@ export function ChatInterface({
                             {(message.metadata.relevanceScore * 100).toFixed(1)}%
                           </Badge>
                         )}
+                        {message.metadata.qualityMetrics && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs cursor-help ${
+                                    message.metadata.qualityMetrics.finalRating >= 85 
+                                      ? 'border-green-500 text-green-700 bg-green-50' 
+                                      : message.metadata.qualityMetrics.finalRating >= 70
+                                      ? 'border-yellow-500 text-yellow-700 bg-yellow-50'
+                                      : 'border-red-500 text-red-700 bg-red-50'
+                                  }`}
+                                >
+                                  <Sparkles className="w-3 h-3 mr-1" />
+                                  Q: {message.metadata.qualityMetrics.finalRating.toFixed(0)}%
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <div className="text-sm space-y-1">
+                                  <div className="font-semibold mb-2">Response Quality Breakdown:</div>
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div>Accuracy: {message.metadata.qualityMetrics.accuracyScore}%</div>
+                                    <div>Completeness: {message.metadata.qualityMetrics.completenessScore}%</div>
+                                    <div>Clarity: {message.metadata.qualityMetrics.clarityScore}%</div>
+                                    <div>Confidence: {message.metadata.qualityMetrics.confidenceScore}%</div>
+                                  </div>
+                                  <div className="text-xs text-gray-600 mt-2">
+                                    Overall Rating: {message.metadata.qualityMetrics.finalRating.toFixed(1)}%
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {message.metadata.tokenUsage && (
+                          <Badge variant="outline" className="text-xs border-gray-300">
+                            <Zap className="w-3 h-3 mr-1" />
+                            {message.metadata.tokenUsage.totalTokens}t
+                          </Badge>
+                        )}
+                        {message.metadata.reasoning && (
+                          <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 bg-purple-50">
+                            <Brain className="w-3 h-3 mr-1" />
+                            Enhanced
+                          </Badge>
+                        )}
                       </div>
                     )}
                   </div>
@@ -279,7 +758,9 @@ export function ChatInterface({
                     className={`message-bubble ${message.role === "user" ? "message-bubble-user" : "message-bubble-assistant"} group`}
                   >
                     <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1 whitespace-pre-wrap leading-relaxed text-base">{message.content}</div>
+                      <div className="flex-1">
+                        <MessageContent content={message.content} />
+                      </div>
 
                       {/* Message Actions */}
                       <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -339,42 +820,7 @@ export function ChatInterface({
                 </div>
               ))}
 
-              {isProcessing && (
-                <div className="space-y-4" role="status" aria-live="polite" aria-label="AI is processing your request">
-                  <div className="flex items-center space-x-4">
-                    <Badge variant="outline" className="border-gray-400 text-gray-700 font-bold px-3 py-1">
-                      ASSISTANT
-                    </Badge>
-                    <time className="text-sm text-gray-500 font-mono">{formatTimestamp(new Date())}</time>
-                  </div>
-                  <div className="message-bubble message-bubble-assistant">
-                    <div className="flex items-center space-x-4">
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                      <span className="text-base">Analyzing documents and generating response...</span>
-                    </div>
-                    <div className="mt-4 text-sm text-gray-500 space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-                        <span>Searching relevant content</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <div
-                          className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"
-                          style={{ animationDelay: "0.2s" }}
-                        ></div>
-                        <span>Generating embeddings</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <div
-                          className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"
-                          style={{ animationDelay: "0.4s" }}
-                        ></div>
-                        <span>Processing with AI model</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {isProcessing && <EnhancedChatProcessingSkeleton phase="retrieving" />}
 
               <div ref={messagesEndRef} />
             </div>

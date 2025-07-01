@@ -23,13 +23,13 @@ interface APIConfigurationProps {
 
 const PROVIDER_MODELS = {
   huggingface: [
-    "HuggingFaceH4/zephyr-7b-beta",
-    "microsoft/DialoGPT-medium",
-    "microsoft/DialoGPT-large",
-    "mistralai/Mistral-7B-Instruct-v0.1",
-    "meta-llama/Llama-2-7b-chat-hf",
+    "meta-llama/Meta-Llama-3.3-70B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct-1M",
+    "microsoft/Phi-4",
+    "deepseek-ai/DeepSeek-R1",
+    "google/gemma-2-2b-it",
   ],
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1-preview", "o1-mini"],
+  openai: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo"],
   anthropic: [
     "claude-3-5-sonnet-20241022",
     "claude-3-5-haiku-20241022",
@@ -37,24 +37,27 @@ const PROVIDER_MODELS = {
     "claude-3-sonnet-20240229",
   ],
   aiml: [
-    "openai/gpt-4.1-nano-2025-04-14",
-    "openai/gpt-4o",
-    "openai/gpt-4o-mini",
-    "openai/gpt-3.5-turbo",
-    "anthropic/claude-3-5-sonnet",
-    "anthropic/claude-3-haiku",
-    "google/gemini-pro",
-    "meta-llama/llama-3.1-8b-instruct",
-    "meta-llama/llama-3.1-70b-instruct",
-    "mistralai/mistral-7b-instruct",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "claude-3-5-sonnet",
+    "deepseek-v3",
+    "deepseek-r1",
+    "llama-3.3-70b",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
   ],
-  groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"],
+  groq: [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "gemma2-9b-it",
+    "deepseek-r1-distill-llama-70b"
+  ],
 }
 
 const PROVIDER_INFO = {
   huggingface: {
     name: "Hugging Face",
-    description: "Free inference API with various open-source models",
+    description: "Open-source models via Inference Providers",
     baseUrl: "https://api-inference.huggingface.co",
     keyFormat: "hf_xxxxxxxxxx",
   },
@@ -71,8 +74,8 @@ const PROVIDER_INFO = {
     keyFormat: "sk-ant-xxxxxxxxxx",
   },
   aiml: {
-    name: "AIML API",
-    description: "Access to multiple AI models through one API",
+    name: "AI/ML API",
+    description: "Access to 200+ AI models through one API",
     baseUrl: "https://api.aimlapi.com/v1",
     keyFormat: "xxxxxxxxxx",
   },

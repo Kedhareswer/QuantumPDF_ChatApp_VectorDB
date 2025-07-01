@@ -31,6 +31,12 @@ import {
   Search,
 } from "lucide-react"
 import { useAppStore } from "@/lib/store"
+import { 
+  ConfigurationTestingSkeleton, 
+  APITestingSkeleton, 
+  VectorDatabaseLoadingSkeleton, 
+  WandbConfigurationLoadingSkeleton 
+} from "@/components/skeleton-loaders"
 
 const AI_PROVIDERS = {
   // Major Providers
@@ -38,7 +44,7 @@ const AI_PROVIDERS = {
     name: "OpenAI",
     description: "Industry-leading GPT models with high quality responses",
     category: "Major",
-    models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+    models: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo"],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.openai.com/v1",
     signupUrl: "https://platform.openai.com/api-keys",
@@ -50,7 +56,7 @@ const AI_PROVIDERS = {
     name: "Anthropic",
     description: "Claude models with strong reasoning and safety focus",
     category: "Major",
-    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
+    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229"],
     defaultModel: "claude-3-5-sonnet-20241022",
     baseUrl: "https://api.anthropic.com",
     signupUrl: "https://console.anthropic.com/",
@@ -62,8 +68,8 @@ const AI_PROVIDERS = {
     name: "Google AI",
     description: "Gemini models with multimodal capabilities",
     category: "Major",
-    models: ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"],
-    defaultModel: "gemini-1.5-flash",
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-pro"],
+    defaultModel: "gemini-2.5-flash",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     signupUrl: "https://makersuite.google.com/app/apikey",
     embeddingSupport: true,
@@ -76,7 +82,7 @@ const AI_PROVIDERS = {
     name: "Groq",
     description: "Ultra-fast inference with specialized hardware",
     category: "Fast",
-    models: ["llama-3.1-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "deepseek-r1-distill-llama-70b"],
     defaultModel: "llama-3.1-8b-instant",
     baseUrl: "https://api.groq.com/openai/v1",
     signupUrl: "https://console.groq.com/keys",
@@ -88,7 +94,7 @@ const AI_PROVIDERS = {
     name: "Fireworks AI",
     description: "Fast and cost-effective model serving",
     category: "Fast",
-    models: ["llama-v3p1-70b-instruct", "llama-v3p1-8b-instruct", "mixtral-8x7b-instruct"],
+    models: ["llama-v3p3-70b-instruct", "llama-v3p1-8b-instruct", "qwen2p5-72b-instruct", "deepseek-v3"],
     defaultModel: "llama-v3p1-8b-instruct",
     baseUrl: "https://api.fireworks.ai/inference/v1",
     signupUrl: "https://fireworks.ai/",
@@ -100,7 +106,7 @@ const AI_PROVIDERS = {
     name: "Cerebras",
     description: "Extremely fast inference on specialized chips",
     category: "Fast",
-    models: ["llama3.1-70b", "llama3.1-8b"],
+    models: ["llama3.3-70b", "llama3.1-8b", "llama3.1-70b"],
     defaultModel: "llama3.1-8b",
     baseUrl: "https://api.cerebras.ai/v1",
     signupUrl: "https://cloud.cerebras.ai/",
@@ -112,9 +118,17 @@ const AI_PROVIDERS = {
   // Aggregators
   openrouter: {
     name: "OpenRouter",
-    description: "Access to multiple AI models through one API",
+    description: "Access to 400+ AI models through one API",
     category: "Aggregator",
-    models: ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "meta-llama/llama-3.1-70b-instruct"],
+    models: [
+      "openai/gpt-4o", 
+      "openai/gpt-4o-mini",
+      "anthropic/claude-3.5-sonnet", 
+      "meta-llama/llama-3.3-70b-instruct", 
+      "google/gemini-2.0-flash-exp",
+      "deepseek/deepseek-v3",
+      "openai/o1-preview"
+    ],
     defaultModel: "openai/gpt-4o-mini",
     baseUrl: "https://openrouter.ai/api/v1",
     signupUrl: "https://openrouter.ai/keys",
@@ -124,9 +138,18 @@ const AI_PROVIDERS = {
   },
   aiml: {
     name: "AI/ML API",
-    description: "Unified access to multiple AI providers",
+    description: "Unified access to 200+ AI providers",
     category: "Aggregator",
-    models: ["gpt-4o", "claude-3-5-sonnet", "llama-3.1-70b"],
+    models: [
+      "gpt-4o",
+      "gpt-4o-mini", 
+      "claude-3-5-sonnet",
+      "deepseek-v3",
+      "deepseek-r1",
+      "llama-3.3-70b",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash"
+    ],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.aimlapi.com/v1",
     signupUrl: "https://aimlapi.com/",
@@ -136,24 +159,18 @@ const AI_PROVIDERS = {
   },
 
   // Specialized
-  cohere: {
-    name: "Cohere",
-    description: "Enterprise-focused language models",
-    category: "Specialized",
-    models: ["command-r-plus", "command-r", "command"],
-    defaultModel: "command-r",
-    baseUrl: "https://api.cohere.ai/v1",
-    signupUrl: "https://dashboard.cohere.ai/api-keys",
-    embeddingSupport: true,
-    icon: <Sparkles className="w-4 h-4" />,
-    pricing: "$$",
-  },
   huggingface: {
     name: "Hugging Face",
-    description: "Open-source models and inference",
+    description: "Open-source models via Inference Providers",
     category: "Specialized",
-    models: ["meta-llama/Llama-2-70b-chat-hf", "mistralai/Mixtral-8x7B-Instruct-v0.1"],
-    defaultModel: "meta-llama/Llama-2-7b-chat-hf",
+    models: [
+      "meta-llama/Meta-Llama-3.3-70B-Instruct", 
+      "Qwen/Qwen2.5-7B-Instruct-1M", 
+      "microsoft/Phi-4", 
+      "deepseek-ai/DeepSeek-R1",
+      "google/gemma-2-2b-it"
+    ],
+    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     baseUrl: "https://api-inference.huggingface.co",
     signupUrl: "https://huggingface.co/settings/tokens",
     embeddingSupport: true,
@@ -164,7 +181,11 @@ const AI_PROVIDERS = {
     name: "Perplexity",
     description: "Search-augmented language models",
     category: "Specialized",
-    models: ["llama-3.1-sonar-large-128k-online", "llama-3.1-sonar-small-128k-online"],
+    models: [
+      "llama-3.1-sonar-large-128k-online", 
+      "llama-3.1-sonar-small-128k-online", 
+      "llama-3.1-sonar-huge-128k-online"
+    ],
     defaultModel: "llama-3.1-sonar-small-128k-online",
     baseUrl: "https://api.perplexity.ai",
     signupUrl: "https://www.perplexity.ai/settings/api",
@@ -178,32 +199,28 @@ const AI_PROVIDERS = {
     name: "DeepInfra",
     description: "Serverless inference for open-source models",
     category: "Cloud",
-    models: ["meta-llama/Meta-Llama-3.1-70B-Instruct", "mistralai/Mixtral-8x7B-Instruct-v0.1"],
-    defaultModel: "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    models: [
+      "meta-llama/Meta-Llama-3.3-70B-Instruct", 
+      "Qwen/Qwen2.5-72B-Instruct", 
+      "deepseek-ai/DeepSeek-V3"
+    ],
+    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     baseUrl: "https://api.deepinfra.com/v1/openai",
     signupUrl: "https://deepinfra.com/",
     embeddingSupport: true,
     icon: <Cpu className="w-4 h-4" />,
     pricing: "$",
   },
-  together: {
-    name: "Together AI",
-    description: "Fast inference for open-source models",
-    category: "Cloud",
-    models: ["meta-llama/Llama-3-70b-chat-hf", "mistralai/Mixtral-8x7B-Instruct-v0.1"],
-    defaultModel: "meta-llama/Llama-3-8b-chat-hf",
-    baseUrl: "https://api.together.xyz/v1",
-    signupUrl: "https://api.together.xyz/settings/api-keys",
-    embeddingSupport: true,
-    icon: <Globe className="w-4 h-4" />,
-    pricing: "$",
-  },
   replicate: {
     name: "Replicate",
     description: "Run machine learning models in the cloud",
     category: "Cloud",
-    models: ["meta/llama-2-70b-chat", "mistralai/mixtral-8x7b-instruct-v0.1"],
-    defaultModel: "meta/llama-2-7b-chat",
+    models: [
+      "meta/llama-3.3-70b-instruct", 
+      "deepseek-ai/deepseek-v3", 
+      "qwen/qwen2.5-72b-instruct"
+    ],
+    defaultModel: "meta/llama-3.3-70b-instruct",
     baseUrl: "https://api.replicate.com/v1",
     signupUrl: "https://replicate.com/account/api-tokens",
     embeddingSupport: false,
@@ -214,8 +231,11 @@ const AI_PROVIDERS = {
     name: "Anyscale",
     description: "Scalable AI model serving",
     category: "Cloud",
-    models: ["meta-llama/Llama-2-70b-chat-hf", "codellama/CodeLlama-34b-Instruct-hf"],
-    defaultModel: "meta-llama/Llama-2-7b-chat-hf",
+    models: [
+      "meta-llama/Llama-3.3-70b-instruct", 
+      "mistralai/Mistral-7B-Instruct-v0.3"
+    ],
+    defaultModel: "meta-llama/Llama-3.3-70b-instruct",
     baseUrl: "https://api.endpoints.anyscale.com/v1",
     signupUrl: "https://console.anyscale.com/",
     embeddingSupport: false,
@@ -352,7 +372,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
         addError({
           type: "success",
           title: "AI Connection Successful",
-          message: `Connected to ${AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].name}`,
+          message: `Connected to ${AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS]?.name || aiConfig.provider}`,
         })
       } else {
         addError({
@@ -605,8 +625,8 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
                   <AlertDescription>
                     <div className="space-y-2">
                       <p className="text-sm">
-                        <strong>{AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].name}:</strong>{" "}
-                        {AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].description}
+                        <strong>{AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS]?.name || 'Unknown Provider'}:</strong>{" "}
+                        {AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS]?.description || 'Provider not found'}
                       </p>
                       <div className="flex items-center space-x-2">
                         <Button
@@ -614,7 +634,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
                           variant="outline"
                           onClick={() =>
                             window.open(
-                              AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].signupUrl,
+                              AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS]?.signupUrl || '#',
                               "_blank",
                             )
                           }
@@ -624,7 +644,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
                           Get API Key
                         </Button>
                         <Badge variant="outline" className="text-xs">
-                          {AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].pricing} pricing
+                          {AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS]?.pricing || '?'} pricing
                         </Badge>
                       </div>
                     </div>
@@ -632,12 +652,22 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
                 </Alert>
 
                 {/* Embedding Warning */}
-                {!AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].embeddingSupport && (
+                {AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS] && !AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].embeddingSupport && (
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>
                       <strong>Warning:</strong> This provider doesn't support embeddings. Document processing will use
                       fallback embeddings which may reduce search quality.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Provider Not Found Warning */}
+                {!AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS] && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Error:</strong> Provider "{aiConfig.provider}" is not supported. Please select a different provider.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -671,7 +701,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].models.map((model) => (
+                      {(AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS]?.models || []).map((model) => (
                         <SelectItem key={model} value={model}>
                           {model}
                         </SelectItem>
@@ -710,20 +740,17 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
                 </div>
 
                 {/* Test Connection */}
+                {testingStatus.ai === "testing" ? (
+                  <ConfigurationTestingSkeleton />
+                ) : (
                 <Button
                   onClick={handleTestAI}
-                  disabled={!aiConfig.apiKey.trim() || testingStatus.ai === "testing"}
+                    disabled={!aiConfig.apiKey.trim()}
                   className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
                 >
-                  {testingStatus.ai === "testing" ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Testing Connection...
-                    </>
-                  ) : (
-                    "Test Connection"
-                  )}
+                    Test Connection
                 </Button>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -894,20 +921,20 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
               </div>
 
               {/* Test Connection */}
+              {testingStatus.vectordb === "testing" ? (
+                <VectorDatabaseLoadingSkeleton />
+              ) : (
               <Button
                 onClick={handleTestVectorDB}
-                disabled={testingStatus.vectordb === "testing"}
+                  disabled={
+                    (VECTOR_DB_PROVIDERS[vectorDBConfig.provider as keyof typeof VECTOR_DB_PROVIDERS].requiresApiKey && !vectorDBConfig.apiKey?.trim()) ||
+                    (VECTOR_DB_PROVIDERS[vectorDBConfig.provider as keyof typeof VECTOR_DB_PROVIDERS].requiresUrl && !vectorDBConfig.url?.trim())
+                  }
                 className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
               >
-                {testingStatus.vectordb === "testing" ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Testing Connection...
-                  </>
-                ) : (
-                  "Test Connection"
-                )}
+                  Test Connection
               </Button>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1006,20 +1033,17 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
                   </div>
 
                   {/* Test Connection */}
+                  {testingStatus.wandb === "testing" ? (
+                    <WandbConfigurationLoadingSkeleton />
+                  ) : (
                   <Button
                     onClick={handleTestWandb}
-                    disabled={!wandbConfig.apiKey.trim() || testingStatus.wandb === "testing"}
+                      disabled={!wandbConfig.enabled || !wandbConfig.apiKey.trim() || !wandbConfig.projectName.trim()}
                     className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
                   >
-                    {testingStatus.wandb === "testing" ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Testing Connection...
-                      </>
-                    ) : (
-                      "Test Connection"
-                    )}
+                      Test Connection
                   </Button>
+                  )}
                 </>
               ) : (
                 <div className="text-center py-8 text-gray-500">
