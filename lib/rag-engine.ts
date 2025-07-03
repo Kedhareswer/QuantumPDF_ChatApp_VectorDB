@@ -530,7 +530,7 @@ export class RAGEngine {
               }
             }
           }
-
+          
           // Validate document structure
           if (!doc || !doc.chunks || !doc.embeddings) {
             console.warn(`Document ${docIndex} has invalid structure:`, {

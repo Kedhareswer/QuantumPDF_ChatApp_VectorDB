@@ -1,8 +1,12 @@
-# QuantumPDF ChatApp
+<div align="center">
+
+# [![QuantumPDF ChatApp](https://img.shields.io/badge/QuantumPDF-ChatApp-blue?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDJMMiA3djEwbDEwIDUgMTAtNVY3TDEyIDJ6Ii8+PC9zdmc+)](https://github.com/Kedhareswer/QuantumPDF_ChatApp)
+
+</div>
 
 <div align="center">
 
-**Next-Generation AI-Powered PDF Document Analysis & Conversational Intelligence Platform**
+**AI-Powered PDF Document Analysis & Chat Platform**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Next.js](https://img.shields.io/badge/Next.js-15.2.4-black?logo=next.js)](https://nextjs.org/)
@@ -14,150 +18,302 @@
 
 ---
 
-## 📑 Overview
+## 📖 Table of Contents
 
-QuantumPDF ChatApp lets you **chat with your PDFs** using a multi-phase Retrieval-Augmented Generation (RAG) engine.  
-It extracts knowledge ➜ stores it in a vector database ➜ reasons over it with your favourite Large Language Model.
-
-| 💡 | Feature | Why it matters |
-|-----|---------|---------------|
-| 🧠 | **3-Phase RAG** | Initial answer → self-critique → refined answer = fewer hallucinations. |
-| ⚡ | **Adaptive Chunking** | Dynamic chunk size & overlap keep context windows lean. |
-| 🔍 | **Metadata Pre-Filtering** | Author / date / tag filters prune irrelevant docs before similarity search. |
-| 🔌 | **Pluggable Providers** | 20+ LLMs & 4 vector DBs out-of-the-box. |
-| 📱 | **Responsive PWA** | Smooth on mobile, desktop and everything between. |
-
----
-
-## 🛣️ How It Works
-
-```mermaid
-flowchart TD
-    U[User Query / Upload] -->|1. Extract & Chunk| E[PDF Processor]
-    E -->|2. Embed| V[Vector DB]
-    U -->|3. Embed Query| V
-    V -->|4. Retrieve Top-K| C[Context]
-    C -->|5. Phase 1| P1[Initial Answer]
-    P1 -->|6. Phase 2| P2[Self-Critique]
-    P2 -->|7. Phase 3| P3[Refinement]
-    P3 -->|8. Stream ↯| UI[Chat UI]
-```
-
-### Why This Design Wins
-
-| Challenge | Traditional RAG | QuantumPDF Solution |
-|-----------|-----------------|---------------------|
-| Hallucinations | One-shot response | Self-critique & refinement |
-| Latency | Big contexts | Pre-filter + adaptive chunking |
-| Token Cost | Oversized chunks | Tuned budgets per phase |
-| UX | Long blank waits | Streaming partial answers within ~1 s |
+- [Overview](#-overview)
+- [How It Works](#-how-it-works)
+- [Key Features](#-key-features)
+- [Architecture](#-architecture)
+- [Use Cases](#-use-cases)
+- [Getting Started](#-getting-started)
+- [Configuration](#-configuration)
+- [Example Prompts](#-example-prompts)
+- [Performance](#-performance)
+- [Contributing](#-contributing)
+- [License](#-license)
 
 ---
 
-## 🚀 Quick Start
+## 🌟 Overview
 
-```bash
-# Clone & install
-pnpm create quantum-pdf@latest   # or git clone && pnpm install
+QuantumPDF ChatApp enables intelligent conversations with PDF documents. Built with Next.js 15 and React 19, it uses Retrieval-Augmented Generation (RAG) to provide accurate, context-aware responses from your documents.
 
-# Secrets stay local – never committed
-cp .env.example .env.local
-# Add ONLY the keys you need, e.g.
-# OPENAI_API_KEY="YOUR_OPENAI_KEY"
-# PINECONE_API_KEY="YOUR_PINECONE_KEY"
+### What Makes It Different
 
-pnpm dev   # http://localhost:3000
-```
-
-### Minimal `.env.local`
-
-```bash
-OPENAI_API_KEY="YOUR_OPENAI_KEY"
-OPENAI_MODEL="gpt-4o-mini"
-
-PINECONE_API_KEY="YOUR_PINECONE_KEY"
-PINECONE_ENVIRONMENT="us-east1-gcp"
-PINECONE_INDEX_NAME="quantum-pdf"
-```
+- **Multi-phase RAG processing** for improved accuracy
+- **20+ AI provider support** for flexibility
+- **Client-side PDF processing** for privacy
+- **Adaptive chunk sizing** for optimal performance
+- **Document pre-filtering** for targeted searches
+- **Real-time quality metrics** for transparency
 
 ---
 
-## 🛠️ Use-Cases
+## 🔧 How It Works
 
-| Domain | Example Prompt | Benefit |
-|--------|----------------|---------|
-| Research | *"Summarise the methodology differences between paper A & B."* | Lit-review in seconds |
-| Legal | *"List all parties and obligations on page 12."* | Faster contract analysis |
-| Finance | *"Extract cash-flow assumptions from the model appendix."* | Rapid due-diligence |
-| Support | *"Why does error E04 occur and how do I fix it?"* | Smarter help-desk bots |
-
----
-
-## 🌟 API Examples
-
-### Chat with a Document
-
-```bash
-curl -X POST http://localhost:3000/api/chat \
-  -H 'Content-Type: application/json' \
-  -d '{
-        "message": "What are the key findings on climate impact?",
-        "config": { "model": "gpt-4", "enableThinking": true }
-      }'
-```
-
-### Upload & Index a PDF
-
-```bash
-curl -F file=@research.pdf http://localhost:3000/api/pdf/extract
-```
-
----
-
-## 🗺️ Tech Map
+### Core Processing Flow
 
 ```mermaid
 graph LR
-  subgraph Frontend
-    UI[Next.js 15 / React 19] --> Tailwind
-    UI --> RadixUI
-  end
-  subgraph Backend
-    API[Next.js API Routes] --> RAG
-    RAG --> LLM[[LLM Providers]]
-    RAG --> VectorDB[(Vector DBs)]
-  end
-  Browser --> UI
+    A[PDF Upload] --> B[Text Extraction]
+    B --> C[Adaptive Chunking]
+    C --> D[Embedding Generation]
+    D --> E[Vector Storage]
+    
+    F[User Question] --> G[Query Analysis]
+    G --> H[Document Filtering]
+    H --> I[Similarity Search]
+    I --> J[Context Retrieval]
+    J --> K[AI Response Generation]
+    K --> L[Quality Validation]
+    L --> M[Final Answer]
+```
+
+### Technical Components
+
+1. **PDF Processing**
+   - Uses PDF.js for text extraction
+   - Supports OCR via Tesseract.js for scanned documents
+   - Preserves document structure and metadata
+
+2. **Intelligent Chunking**
+   - Dynamically adjusts chunk size based on document length
+   - Maintains semantic boundaries
+   - Optimizes for model context windows
+
+3. **Vector Search**
+   - Generates embeddings using configured AI provider
+   - Stores in vector database (Pinecone, ChromaDB, etc.)
+   - Performs cosine similarity search
+
+4. **RAG Engine**
+   - Retrieves relevant document chunks
+   - Applies pre-filters (author, date, tags)
+   - Generates contextual responses
+
+---
+
+## ✨ Key Features
+
+### Document Processing
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **Client-side Processing** | PDFs processed in browser | Privacy & speed |
+| **Adaptive Chunking** | Dynamic chunk sizing | Better context preservation |
+| **Metadata Extraction** | Author, date, title extraction | Enhanced filtering |
+| **OCR Support** | Process scanned documents | Broader compatibility |
+
+### AI Capabilities
+
+| Provider | Models | Use Case |
+|----------|--------|----------|
+| **OpenAI** | GPT-4, GPT-3.5 | General purpose, high quality |
+| **Anthropic** | Claude 3 | Long context, analysis |
+| **Google AI** | Gemini Pro | Multimodal capabilities |
+| **Groq** | Llama 3, Mixtral | Fast inference |
+| **Local Models** | Via Ollama | Privacy-focused |
+
+### Search & Retrieval
+
+- **Semantic Search**: Find content by meaning
+- **Keyword Search**: Exact text matching
+- **Hybrid Search**: Best of both approaches
+- **Pre-filtering**: Filter by author, date, tags, documents
+- **Similarity Threshold**: Adjustable relevance scoring
+
+---
+
+## 🏗️ Architecture
+
+### System Components
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Frontend      │     │   API Routes    │     │   AI Services   │
+│                 │     │                 │     │                 │
+│ • React 19      │────▶│ • PDF Extract   │────▶│ • OpenAI        │
+│ • Next.js 15    │     │ • Chat Handler  │     │ • Anthropic     │
+│ • Tailwind CSS  │     │ • Vector DB     │     │ • Google AI     │
+│ • Radix UI      │     │ • Search        │     │ • 20+ Providers │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                       │                        │
+         └───────────────────────┴────────────────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │    Vector Database      │
+                    │                         │
+                    │ • Pinecone              │
+                    │ • ChromaDB              │
+                    │ • Weaviate              │
+                    │ • Local Storage         │
+                    └─────────────────────────┘
+```
+
+### Data Flow
+
+1. **Document Upload** → PDF.js extraction → Adaptive chunking
+2. **Embedding Generation** → AI provider → Vector storage
+3. **User Query** → Embedding → Similarity search
+4. **Context Retrieval** → Filtered chunks → AI generation
+5. **Response** → Quality metrics → User interface
+
+---
+
+## 💡 Use Cases
+
+### Academic Research
+- **Challenge**: Analyzing multiple research papers
+- **Solution**: Upload PDFs, ask comparative questions
+- **Example**: "Compare the methodologies used in these papers"
+
+### Legal Document Review
+- **Challenge**: Finding specific clauses in contracts
+- **Solution**: Semantic search with keyword precision
+- **Example**: "Find all termination clauses with 30-day notice"
+
+### Technical Documentation
+- **Challenge**: Quick answers from extensive docs
+- **Solution**: Natural language queries
+- **Example**: "How do I configure authentication?"
+
+### Business Reports
+- **Challenge**: Extracting insights from reports
+- **Solution**: Analytical questions with data extraction
+- **Example**: "What were the Q3 revenue trends?"
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18+ 
+- PNPM package manager
+- AI provider API key (at least one)
+
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
+cd QuantumPDF_ChatApp
+
+# Install dependencies
+pnpm install
+
+# Configure environment
+cp .env.example .env.local
+# Edit .env.local with your API keys
+
+# Start development server
+pnpm dev
+```
+
+### First Steps
+
+1. **Configure AI Provider**: Settings → AI Configuration
+2. **Upload PDF**: Documents → Upload Document
+3. **Start Chatting**: Ask questions about your documents
+
+---
+
+## ⚙️ Configuration
+
+### Configuration Options
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **AI Provider** | LLM for chat responses | Required |
+| **Embedding Model** | Model for vector generation | Provider default |
+| **Vector Database** | Storage for embeddings | Local storage |
+| **Chunk Size** | Text segment size | Adaptive (300-1200) |
+| **Overlap** | Chunk overlap percentage | 10% |
+
+---
+
+## 📝 Example Prompts
+
+### Information Extraction
+```
+"What are the key findings in this research paper?"
+"List all the requirements mentioned in section 3"
+"Extract the financial data from the annual report"
+```
+
+### Analysis & Comparison
+```
+"Compare the approaches described in chapters 2 and 5"
+"What are the pros and cons of the proposed solution?"
+"How does this contract differ from the standard template?"
+```
+
+### Specific Searches
+```
+"Find all mentions of 'machine learning' with their context"
+"What does the document say about data privacy?"
+"Show me the conclusion section"
+```
+
+### Complex Queries
+```
+"Summarize the methodology and results, focusing on statistical significance"
+"What are the legal implications of clause 7.3 combined with section 12?"
+"Based on the financial statements, calculate the year-over-year growth"
 ```
 
 ---
 
-## 🔄 Data Flow (avg)
+## ⚡ Performance
 
-| Step | Time | Notes |
-|------|------|-------|
-| Extract & embed | 230 ms / page | OCR adds ~400 ms |
-| Retrieval | < 50 ms | Pre-filter drops ~60 % vectors |
-| Phase 1 | 1.5 s | 40 % token budget |
-| Phase 2 | 0.9 s | Quality check |
-| Phase 3 | 1.2 s | Refinement & streaming |
+### Benchmarks
+
+| Operation | Time | Notes |
+|-----------|------|-------|
+| PDF Processing (1MB) | ~12s | Client-side |
+| Embedding Generation | ~4.5s | Depends on provider |
+| Vector Search | <100ms | 1000 chunks |
+| Chat Response | 2-5s | Varies by complexity |
+
+### Optimization Features
+
+- **Adaptive Chunking**: Reduces API calls by 30-40%
+- **Pre-filtering**: Speeds up search by limiting scope
+- **Client-side Processing**: No upload delays
+- **Response Caching**: Faster repeated queries
 
 ---
 
-## 🧩 Extend Me
+## 🤝 Contributing
 
-1. **New LLM** → add an `AIClient` adapter.  
-2. **Different Vector DB** → implement a driver in `lib/vector-database.ts`.  
-3. **Custom Filters** → extend `RAGFilterOptions` & UI filter panel.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Areas for Contribution
+
+- Additional AI provider integrations
+- Performance optimizations
+- UI/UX improvements
+- Documentation and examples
+- Bug fixes and testing
 
 ---
 
-## 📜 License
+## 📄 License
 
-GPL-3.0 – see [LICENSE](LICENSE).
+This project is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
+
+---
+
+## 🌟 Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Kedhareswer/QuantumPDF_ChatApp&type=Date)](https://star-history.com/#Kedhareswer/QuantumPDF_ChatApp&Date)
 
 ---
 
-Made with ❤️ & caffeine by the QuantumPDF community.
+<div align="center">
+
+**Built with care by the community**
+
+If you find this project helpful, please consider giving it a ⭐
+
+</div>
