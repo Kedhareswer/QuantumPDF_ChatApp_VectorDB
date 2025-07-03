@@ -746,7 +746,6 @@ export default function QuantumPDFChatbot() {
                     <UnifiedConfiguration
                       onTestAI={handleTestAI}
                       onTestVectorDB={handleTestVectorDB}
-                      onTestWandb={handleTestWandb}
                     />
                     )}
                   </TabsContent>

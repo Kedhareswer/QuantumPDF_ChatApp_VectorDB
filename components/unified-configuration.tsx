@@ -8,34 +8,14 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
-import {
-  Zap,
-  Database,
-  BarChart3,
-  Eye,
-  EyeOff,
-  Check,
-  X,
-  ExternalLink,
-  Info,
-  AlertTriangle,
-  Settings,
-  Loader2,
-  Globe,
-  Cpu,
-  Sparkles,
-  Brain,
-  Search,
-} from "lucide-react"
+import { Zap, Database, Eye, EyeOff, Check, X, ExternalLink, Info, AlertTriangle, Settings, Loader2, Globe, Cpu, Sparkles, Brain, Search } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { 
   ConfigurationTestingSkeleton, 
   APITestingSkeleton, 
-  VectorDatabaseLoadingSkeleton, 
-  WandbConfigurationLoadingSkeleton 
+  VectorDatabaseLoadingSkeleton 
 } from "@/components/skeleton-loaders"
 
 const AI_PROVIDERS = {
@@ -306,23 +286,20 @@ const VECTOR_DB_PROVIDERS = {
 interface UnifiedConfigurationProps {
   onTestAI: (config: any) => Promise<boolean>
   onTestVectorDB: (config: any) => Promise<boolean>
-  onTestWandb: (config: any) => Promise<boolean>
 }
 
-export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: UnifiedConfigurationProps) {
-  const { aiConfig, setAIConfig, vectorDBConfig, setVectorDBConfig, wandbConfig, setWandbConfig, addError } =
+export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfigurationProps) {
+  const { aiConfig, setAIConfig, vectorDBConfig, setVectorDBConfig, addError } =
     useAppStore()
 
   const [showApiKeys, setShowApiKeys] = useState({
     ai: false,
     vectordb: false,
-    wandb: false,
   })
 
   const [testingStatus, setTestingStatus] = useState({
     ai: "idle" as "idle" | "testing" | "success" | "error",
     vectordb: "idle" as "idle" | "testing" | "success" | "error",
-    wandb: "idle" as "idle" | "testing" | "success" | "error",
   })
 
   const [selectedCategory, setSelectedCategory] = useState("Major")
@@ -441,54 +418,6 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
     }
   }
 
-  const handleTestWandb = async () => {
-    if (!wandbConfig.enabled) {
-      addError({
-        type: "warning",
-        title: "Wandb Disabled",
-        message: "Enable Wandb tracking first",
-      })
-      return
-    }
-
-    if (!wandbConfig.apiKey.trim()) {
-      addError({
-        type: "error",
-        title: "Configuration Error",
-        message: "Wandb API key is required",
-      })
-      return
-    }
-
-    setTestingStatus((prev) => ({ ...prev, wandb: "testing" }))
-
-    try {
-      const success = await onTestWandb(wandbConfig)
-      setTestingStatus((prev) => ({ ...prev, wandb: success ? "success" : "error" }))
-
-      if (success) {
-        addError({
-          type: "success",
-          title: "Wandb Connection Successful",
-          message: "Connected to Weights & Biases",
-        })
-      } else {
-        addError({
-          type: "error",
-          title: "Wandb Connection Failed",
-          message: "Unable to connect to Wandb. Check your API key and project settings.",
-        })
-      }
-    } catch (error) {
-      setTestingStatus((prev) => ({ ...prev, wandb: "error" }))
-      addError({
-        type: "error",
-        title: "Wandb Test Failed",
-        message: error instanceof Error ? error.message : "Unknown error",
-      })
-    }
-  }
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "success":
@@ -527,7 +456,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
       </div>
 
       <Tabs defaultValue="ai" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
+        <TabsList className="grid w-full grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
           <TabsTrigger 
             value="ai"
             className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
@@ -543,14 +472,6 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
           >
             <Database className="w-4 h-4 mr-1" />
             <span className="text-sm truncate">Vector DB</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="wandb"
-            className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
-                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
-          >
-            <BarChart3 className="w-4 h-4 mr-1" />
-            <span className="text-sm truncate">Wandb</span>
           </TabsTrigger>
         </TabsList>
 
@@ -934,123 +855,6 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onTestWandb }: 
               >
                   Test Connection
               </Button>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Wandb Configuration */}
-        <TabsContent value="wandb">
-          <Card className="border-2 border-black shadow-none">
-            <CardHeader className="border-b border-black">
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span>WANDB TRACKING</span>
-                  {getStatusIcon(testingStatus.wandb)}
-                </div>
-                <Switch
-                  checked={wandbConfig.enabled}
-                  onCheckedChange={(enabled) => setWandbConfig({ ...wandbConfig, enabled })}
-                />
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 space-y-4">
-              {wandbConfig.enabled ? (
-                <>
-                  {/* Info */}
-                  <Alert>
-                    <Info className="h-4 w-4" />
-                    <AlertDescription>
-                      <div className="space-y-2">
-                        <p className="text-sm">
-                          <strong>Weights & Biases</strong> integration for experiment tracking, metrics logging, and
-                          model monitoring.
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => window.open("https://wandb.ai/settings", "_blank")}
-                          className="h-6 text-xs border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white"
-                        >
-                          <ExternalLink className="w-3 h-3 mr-1" />
-                          Get API Key
-                        </Button>
-                      </div>
-                    </AlertDescription>
-                  </Alert>
-
-                  {/* API Key */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">API Key</label>
-                    <div className="relative">
-                      <Input
-                        type={showApiKeys.wandb ? "text" : "password"}
-                        value={wandbConfig.apiKey}
-                        onChange={(e) => setWandbConfig({ ...wandbConfig, apiKey: e.target.value })}
-                        placeholder="Enter your Wandb API key"
-                        className="border-2 border-black pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKeys((prev) => ({ ...prev, wandb: !prev.wandb }))}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1"
-                      >
-                        {showApiKeys.wandb ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Project Configuration */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Project Name</label>
-                      <Input
-                        value={wandbConfig.projectName}
-                        onChange={(e) => setWandbConfig({ ...wandbConfig, projectName: e.target.value })}
-                        placeholder="pdf-rag-chatbot"
-                        className="border-2 border-black"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Entity (Optional)</label>
-                      <Input
-                        value={wandbConfig.entityName || ""}
-                        onChange={(e) => setWandbConfig({ ...wandbConfig, entityName: e.target.value })}
-                        placeholder="your-username"
-                        className="border-2 border-black"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Run Name (Optional)</label>
-                    <Input
-                      value={wandbConfig.runName || ""}
-                      onChange={(e) => setWandbConfig({ ...wandbConfig, runName: e.target.value })}
-                      placeholder="Auto-generated if empty"
-                      className="border-2 border-black"
-                    />
-                  </div>
-
-                  {/* Test Connection */}
-                  {testingStatus.wandb === "testing" ? (
-                    <WandbConfigurationLoadingSkeleton />
-                  ) : (
-                  <Button
-                    onClick={handleTestWandb}
-                      disabled={!wandbConfig.enabled || !wandbConfig.apiKey.trim() || !wandbConfig.projectName.trim()}
-                    className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
-                  >
-                      Test Connection
-                  </Button>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">Enable Wandb tracking to monitor experiments and log metrics</p>
-                  <p className="text-xs mt-2">Track model performance, document processing stats, and chat analytics</p>
-                </div>
               )}
             </CardContent>
           </Card>

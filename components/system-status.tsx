@@ -33,7 +33,6 @@ interface RealTimeMetrics {
 interface APIHealthStatus {
   ai: { status: 'online' | 'offline' | 'checking'; latency: number; lastCheck: number }
   vectorDB: { status: 'online' | 'offline' | 'checking'; latency: number; lastCheck: number }
-  wandb: { status: 'online' | 'offline' | 'checking'; latency: number; lastCheck: number }
   browser: { status: 'online' | 'offline' | 'checking'; latency: number; lastCheck: number }
 }
 
@@ -76,7 +75,6 @@ export function SystemStatus({
   const [apiHealth, setAPIHealth] = useState<APIHealthStatus>({
     ai: { status: 'checking', latency: 0, lastCheck: 0 },
     vectorDB: { status: 'checking', latency: 0, lastCheck: 0 },
-    wandb: { status: 'checking', latency: 0, lastCheck: 0 },
     browser: { status: 'checking', latency: 0, lastCheck: 0 }
   })
 
@@ -201,13 +199,6 @@ export function SystemStatus({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'health' })
-      }),
-      
-      // Wandb (if configured) 
-      checkAPI('wandb', '/api/wandb/init', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ test: true })
       }),
       
       // AI provider (basic check)
