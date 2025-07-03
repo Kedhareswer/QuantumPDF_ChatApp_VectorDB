@@ -422,13 +422,31 @@ export default function QuantumPDFChatbot() {
         throw new Error("No documents available to search. Please upload some documents first.")
       }
 
-      // Search using vector database
-      console.log("Performing search with vector database...")
+      // Build dynamic filter object for vector DB / backend
+      let dbFilters: Record<string, any> | undefined = undefined
+
+      if (filters.documentTypes.length > 0) {
+        dbFilters = { ...(dbFilters || {}), documentId: { $in: filters.documentTypes } }
+      }
+      if (filters.authors && filters.authors.length > 0) {
+        dbFilters = { ...(dbFilters || {}), author: { $in: filters.authors } }
+      }
+      if (filters.tags && filters.tags.length > 0) {
+        dbFilters = { ...(dbFilters || {}), tags: { $in: filters.tags } }
+      }
+      if (filters.dateRange && (filters.dateRange.start || filters.dateRange.end)) {
+        dbFilters = {
+          ...(dbFilters || {}),
+          date: {
+            ...(filters.dateRange.start ? { $gte: filters.dateRange.start } : {}),
+            ...(filters.dateRange.end ? { $lte: filters.dateRange.end } : {}),
+          },
+        }
+      }
+
       const searchOptions = {
         mode: filters.searchMode,
-        filters: filters.documentTypes.length > 0 
-          ? { documentId: { $in: filters.documentTypes } } 
-          : undefined,
+        filters: dbFilters,
         limit: filters.maxResults,
         threshold: filters.relevanceThreshold,
       }

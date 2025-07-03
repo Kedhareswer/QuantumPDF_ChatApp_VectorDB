@@ -108,6 +108,20 @@ interface AIConfig {
   baseUrl?: string
 }
 
+// Options for document pre-filtering before vector search
+interface RAGFilterOptions {
+  /** Author names to include (case-insensitive exact match against document metadata.author) */
+  authors?: string[]
+  /** Optional date range (inclusive) for filtering by document upload or creation date */
+  dateRange?: { start: Date; end: Date }
+  /** Restrict search to specific document IDs */
+  documentIds?: string[]
+  /** Custom metadata tags to include (exact string match in document.metadata.tags array) */
+  tags?: string[]
+  /** Minimum cosine similarity threshold for a chunk to be kept */
+  minSimilarity?: number
+}
+
 export class RAGEngine {
   private documents: Document[] = []
   private aiClient: AIClient | null = null
@@ -293,8 +307,11 @@ export class RAGEngine {
       // Extract text from PDF
       const pdfContent = await this.pdfParser.extractText(file)
 
-      // Chunk the text
-      const chunks = this.pdfParser.chunkText(pdfContent.text, 500, 50)
+      // Adaptive chunk sizing based on document length
+      const { chunkSize, overlap } = this.getAdaptiveChunkParams(pdfContent.text.length)
+
+      // Chunk the text with adaptive parameters
+      const chunks = this.pdfParser.chunkText(pdfContent.text, chunkSize, overlap)
       // Generated chunks
 
       if (chunks.length === 0) {
@@ -462,7 +479,7 @@ export class RAGEngine {
     }
   }
 
-  private findRelevantChunks(questionEmbedding: number[], topK: number) {
+  private findRelevantChunks(questionEmbedding: number[], topK: number, filters?: RAGFilterOptions) {
     const allChunks: Array<{ content: string; source: string; similarity: number }> = [];
 
     try {
@@ -491,6 +508,29 @@ export class RAGEngine {
         try {
           console.log(`Processing document ${docIndex}: ${doc.name}`)
           
+          // Apply document-level filters first
+          if (filters) {
+            if (filters.documentIds && filters.documentIds.length > 0 && !filters.documentIds.includes(doc.id)) {
+              return // Skip – ID not in whitelist
+            }
+            if (filters.authors && filters.authors.length > 0) {
+              const author = (doc.metadata?.author || '').toString().toLowerCase()
+              const matchesAuthor = filters.authors.some((a) => a.toLowerCase() === author)
+              if (!matchesAuthor) return
+            }
+            if (filters.tags && filters.tags.length > 0) {
+              const docTags: string[] = Array.isArray(doc.metadata?.tags) ? doc.metadata!.tags : []
+              const tagMatch = docTags.some((t) => filters.tags!.includes(t))
+              if (!tagMatch) return
+            }
+            if (filters.dateRange) {
+              const docDate = doc.metadata?.creationDate || doc.uploadedAt
+              if (docDate instanceof Date) {
+                if (docDate < filters.dateRange.start || docDate > filters.dateRange.end) return
+              }
+            }
+          }
+
           // Validate document structure
           if (!doc || !doc.chunks || !doc.embeddings) {
             console.warn(`Document ${docIndex} has invalid structure:`, {
@@ -543,7 +583,10 @@ export class RAGEngine {
               // Calculate cosine similarity
               const similarity = this.aiClient!.cosineSimilarity(questionEmbedding, chunkEmbedding);
 
-              if (typeof similarity === "number" && !isNaN(similarity)) {
+              // Apply similarity threshold if provided
+              const minSim = filters?.minSimilarity ?? 0.05
+               
+              if (typeof similarity === "number" && !isNaN(similarity) && similarity >= minSim) {
                 allChunks.push({
                   content: chunk || "",
                   source: `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`,
@@ -577,9 +620,9 @@ export class RAGEngine {
       const sortedChunks = allChunks
         .sort((a, b) => b.similarity - a.similarity)
         .slice(0, topK)
-        .filter((chunk) => chunk.similarity > 0.05); // Lower threshold for debugging
+        .filter((chunk) => chunk.similarity >= (filters?.minSimilarity ?? 0.05));
 
-      console.log(`Returning ${sortedChunks.length} chunks (threshold: 0.05, topK: ${topK})`)
+      console.log(`Returning ${sortedChunks.length} chunks (threshold: ${filters?.minSimilarity ?? 0.05}, topK: ${topK})`)
       if (sortedChunks.length > 0) {
         console.log(`Best similarity: ${sortedChunks[0].similarity.toFixed(3)}`)
         console.log(`Worst similarity: ${sortedChunks[sortedChunks.length - 1].similarity.toFixed(3)}`)
@@ -595,7 +638,8 @@ export class RAGEngine {
   async query(question: string, options?: { 
     showThinking?: boolean, 
     tokenBudget?: number,
-    complexityLevel?: 'simple' | 'normal' | 'complex'
+    complexityLevel?: 'simple' | 'normal' | 'complex',
+    filters?: RAGFilterOptions
   }): Promise<EnhancedQueryResponse> {
     console.log("Enhanced RAG query started:", question);
 
@@ -603,6 +647,7 @@ export class RAGEngine {
     const showThinking = options?.showThinking ?? false
     const tokenBudget = options?.tokenBudget ?? 4000
     const complexityLevel = options?.complexityLevel ?? 'normal'
+    const filters = options?.filters
 
     // Create default response structure
     const defaultResponse: EnhancedQueryResponse = {
@@ -643,7 +688,7 @@ export class RAGEngine {
       }
 
       // Determine processing approach based on complexity
-      return await this.processQueryEnhanced(question, tokenBudget, complexityLevel, showThinking)
+      return await this.processQueryEnhanced(question, tokenBudget, complexityLevel, showThinking, filters)
 
     } catch (error) {
       console.error("Error in enhanced RAG query:", error);
@@ -658,14 +703,15 @@ export class RAGEngine {
     question: string, 
     tokenBudget: number, 
     complexityLevel: string,
-    showThinking: boolean
+    showThinking: boolean,
+    filters?: RAGFilterOptions
   ): Promise<EnhancedQueryResponse> {
     
     // Phase-based token allocation
     const tokenAllocation = this.calculateTokenAllocation(tokenBudget, complexityLevel)
     
     // Phase 1: Context Analysis and Initial Response
-    const phase1Result = await this.phase1_ContextAnalysis(question, tokenAllocation.context)
+    const phase1Result = await this.phase1_ContextAnalysis(question, tokenAllocation.context, filters)
     
     // Phase 2: Self-Critique and Validation (only for normal/complex queries)
     const phase2Result = complexityLevel === 'simple' 
@@ -699,7 +745,7 @@ export class RAGEngine {
     }
   }
 
-  private async phase1_ContextAnalysis(question: string, tokenBudget: number) {
+  private async phase1_ContextAnalysis(question: string, tokenBudget: number, filters?: RAGFilterOptions) {
     console.log("Phase 1: Context Analysis and Initial Response")
     
     // Debug: Check system state
@@ -738,7 +784,7 @@ export class RAGEngine {
       
       // Find relevant chunks
       console.log("Finding relevant chunks...")
-      let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit);
+      let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit, filters);
       console.log(`Found ${relevantChunks.length} relevant chunks`)
       
       // Debug: Log chunk similarities
@@ -1346,5 +1392,24 @@ Provide ONLY the final response - no explanations about changes made.`
     console.log("Diagnostics results:", diagnostics)
     console.log("=== End Diagnostics ===")
     return diagnostics
+  }
+
+  /**
+   * Simple heuristics to derive chunk size & overlap from text length (in characters).
+   * This helps fit chunks within model context windows while minimizing calls.
+   */
+  private getAdaptiveChunkParams(textLength: number): { chunkSize: number; overlap: number } {
+    let chunkSize: number
+
+    if (textLength > 20_000) chunkSize = 1000
+    else if (textLength > 10_000) chunkSize = 800
+    else if (textLength > 5_000) chunkSize = 600
+    else chunkSize = 400
+
+    // Ensure reasonable bounds
+    chunkSize = Math.max(300, Math.min(chunkSize, 1200))
+
+    const overlap = Math.floor(chunkSize * 0.1) // 10% overlap
+    return { chunkSize, overlap }
   }
 }

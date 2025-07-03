@@ -40,6 +40,9 @@ interface SearchFilters {
   documentTypes: string[]
   maxResults: number
   relevanceThreshold: number
+  authors: string[]
+  tags: string[]
+  dateRange: { start: string; end: string }
 }
 
 interface EnhancedSearchProps {
@@ -56,6 +59,9 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
     documentTypes: [],
     maxResults: 10,
     relevanceThreshold: 0.1,
+    authors: [],
+    tags: [],
+    dateRange: { start: "", end: "" },
   })
   const [showFilters, setShowFilters] = useState(false)
 
@@ -106,6 +112,13 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
       return "Unknown"
     }
   }
+
+  // Helpers to update comma-separated list fields
+  const parseList = (value: string): string[] =>
+    value
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0)
 
   return (
     <div className="space-y-4">
@@ -236,6 +249,62 @@ export function EnhancedSearch({ onSearch, documents }: EnhancedSearchProps) {
                   </div>
                 </div>
               )}
+
+              {/* Author filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Filter by Author(s)</Label>
+                <Input
+                  placeholder="Comma-separated authors"
+                  disabled={isSearching}
+                  value={filters.authors.join(", ")}
+                  onChange={(e) =>
+                    setFilters({ ...filters, authors: parseList(e.target.value) })
+                  }
+                  className="border-2 border-black"
+                />
+              </div>
+
+              {/* Tag filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Filter by Tag(s)</Label>
+                <Input
+                  placeholder="Comma-separated tags"
+                  disabled={isSearching}
+                  value={filters.tags.join(", ")}
+                  onChange={(e) =>
+                    setFilters({ ...filters, tags: parseList(e.target.value) })
+                  }
+                  className="border-2 border-black"
+                />
+              </div>
+
+              {/* Date range filter */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Start Date</Label>
+                  <Input
+                    type="date"
+                    disabled={isSearching}
+                    value={filters.dateRange.start}
+                    onChange={(e) =>
+                      setFilters({ ...filters, dateRange: { ...filters.dateRange, start: e.target.value } })
+                    }
+                    className="border-2 border-black"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">End Date</Label>
+                  <Input
+                    type="date"
+                    disabled={isSearching}
+                    value={filters.dateRange.end}
+                    onChange={(e) =>
+                      setFilters({ ...filters, dateRange: { ...filters.dateRange, end: e.target.value } })
+                    }
+                    className="border-2 border-black"
+                  />
+                </div>
+              </div>
             </div>
           )}
         </CardContent>
