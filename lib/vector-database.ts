@@ -1040,7 +1040,7 @@ class LocalVectorDatabase extends VectorDatabase {
     const getThreshold = (mode: string) => {
       switch (mode) {
         case "semantic": return options.threshold || 0.1  // 10%
-        case "keyword": return options.threshold || 0.01   // 1% - much lower for keyword matches
+        case "keyword": return options.threshold ?? 0       // 0 for literal matches
         case "hybrid": return options.threshold || 0.05    // 5% - balanced
         default: return options.threshold || 0.1
       }
