@@ -72,6 +72,7 @@ export default function QuantumPDFChatbot() {
     setSidebarCollapsed,
     addError,
     removeError,
+    updateMessage,
   } = useAppStore()
 
   const [ragEngine] = useState(() => new RAGEngine())
@@ -171,11 +172,20 @@ export default function QuantumPDFChatbot() {
       let responseMeta: any = {}
 
       if (options?.useContext === false) {
-        // generic chat without document context
         const client = new AIClient(aiConfig)
-        responseAnswer = await client.generateText([
+        const assistantId = (Date.now() + 1).toString()
+        addMessage({
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          timestamp: new Date(),
+        })
+        await client.generateTextStream([
           { role: "user", content }
-        ])
+        ], (token) => {
+          updateMessage(assistantId, { content: (messages.find(m=>m.id===assistantId)?.content || "") + token })
+        })
+        return // early since streaming handled
       } else {
         const response = await ragEngine.query(content, {
           showThinking,

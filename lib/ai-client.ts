@@ -1271,4 +1271,50 @@ export class AIClient {
       return new Array(384).fill(0);
     }
   }
+
+  async generateTextStream(messages: ChatMessage[], onToken: (token: string)=>void): Promise<void> {
+    if (this.config.provider !== "openai") {
+      // Fallback to non-stream call
+      const full = await this.generateText(messages)
+      onToken(full)
+      return
+    }
+    const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.config.model,
+        stream: true,
+        messages,
+      }),
+    })
+    if (!response.ok || !response.body) {
+      throw new Error(`OpenAI stream error: ${response.status}`)
+    }
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder("utf-8")
+    let buffer = ""
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split("\n\n")
+      buffer = parts.pop() || ""
+      for (const part of parts) {
+        if (part.startsWith("data: ")) {
+          const payload = part.replace("data: ", "").trim()
+          if (payload === "[DONE]") return
+          try {
+            const json = JSON.parse(payload)
+            const token = json.choices?.[0]?.delta?.content
+            if (token) onToken(token)
+          } catch {}
+        }
+      }
+    }
+  }
 }

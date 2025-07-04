@@ -121,6 +121,7 @@ interface AppState {
 
   // Actions
   addMessage: (message: Message) => void
+  updateMessage: (id: string, partial: Partial<Message>) => void
   clearMessages: () => void
   addDocument: (document: Document) => void
   removeDocument: (id: string) => void
@@ -172,6 +173,11 @@ export const useAppStore = create<AppState>()(
       addMessage: (message) =>
         set((state) => ({
           messages: [...state.messages, message],
+        })),
+
+      updateMessage: (id, partial) =>
+        set((state) => ({
+          messages: state.messages.map((m) => (m.id === id ? { ...m, ...partial } : m)),
         })),
 
       clearMessages: () => set({ messages: [] }),
