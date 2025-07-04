@@ -42,6 +42,7 @@ import { LoadingIndicator } from "@/components/loading-indicator"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TabContentLoadingSkeleton, ChatInterfaceSkeleton } from "@/components/skeleton-loaders"
+import { AIClient } from "@/lib/ai-client"
 
 export default function QuantumPDFChatbot() {
   const {
@@ -135,9 +136,10 @@ export default function QuantumPDFChatbot() {
 
   const handleSendMessage = async (content: string, options?: {
     showThinking?: boolean,
-    complexityLevel?: 'simple' | 'normal' | 'complex'
+    complexityLevel?: 'simple' | 'normal' | 'complex',
+    useContext?: boolean
   }) => {
-    if (!documents.length) {
+    if ((options?.useContext ?? true) && !documents.length) {
       addError({
         type: "warning",
         title: "No Documents",
@@ -164,42 +166,57 @@ export default function QuantumPDFChatbot() {
 
       console.log(`Processing query with complexity: ${detectedComplexity}, thinking: ${showThinking}`)
 
-      const response = await ragEngine.query(content, {
-        showThinking,
-        complexityLevel: detectedComplexity,
-        tokenBudget: 4000
-      })
+      let responseAnswer = ""
+      let responseSources: string[] = []
+      let responseMeta: any = {}
+
+      if (options?.useContext === false) {
+        // generic chat without document context
+        const client = new AIClient(aiConfig)
+        responseAnswer = await client.generateText([
+          { role: "user", content }
+        ])
+      } else {
+        const response = await ragEngine.query(content, {
+          showThinking,
+          complexityLevel: detectedComplexity,
+          tokenBudget: 4000
+        })
+        responseAnswer = response.answer
+        responseSources = response.sources
+        responseMeta = response
+      }
 
       const assistantMessage = {
         id: (Date.now() + 1).toString(),
         role: "assistant" as const,
-        content: response.answer,
+        content: responseAnswer,
         timestamp: new Date(),
-        sources: response.sources,
+        sources: responseSources,
         metadata: {
-          responseTime: response.tokenUsage.totalTokens * 2, // Rough estimate based on tokens
-          relevanceScore: response.relevanceScore,
-          retrievedChunks: response.retrievedChunks.length,
-          qualityMetrics: response.qualityMetrics,
-          tokenUsage: response.tokenUsage,
-          reasoning: response.reasoning
+          ...(responseMeta.tokenUsage ? {responseTime: responseMeta.tokenUsage.totalTokens * 2} : {}),
+          ...(responseMeta.relevanceScore !== undefined ? {relevanceScore: responseMeta.relevanceScore} : {}),
+          ...(responseMeta.retrievedChunks ? {retrievedChunks: responseMeta.retrievedChunks.length} : {}),
+          ...(responseMeta.qualityMetrics ? {qualityMetrics: responseMeta.qualityMetrics} : {}),
+          ...(responseMeta.tokenUsage ? {tokenUsage: responseMeta.tokenUsage} : {}),
+          ...(responseMeta.reasoning ? {reasoning: responseMeta.reasoning} : {}),
         },
       }
 
       addMessage(assistantMessage)
 
       // Show quality metrics as info if they're particularly good or bad
-      if (response.qualityMetrics.finalRating >= 85) {
+      if (responseMeta.qualityMetrics?.finalRating >= 85) {
         addError({
           type: "success",
           title: "High Quality Response",
-          message: `Response quality: ${response.qualityMetrics.finalRating.toFixed(1)}% - Enhanced analysis completed`,
+          message: `Response quality: ${responseMeta.qualityMetrics.finalRating.toFixed(1)}% - Enhanced analysis completed`,
         })
-      } else if (response.qualityMetrics.finalRating < 60) {
+      } else if (responseMeta.qualityMetrics?.finalRating < 60) {
         addError({
           type: "warning",
           title: "Response Quality Notice",
-          message: `Response quality: ${response.qualityMetrics.finalRating.toFixed(1)}% - Consider rephrasing your question for better results`,
+          message: `Response quality: ${responseMeta.qualityMetrics.finalRating.toFixed(1)}% - Consider rephrasing your question for better results`,
         })
       }
 

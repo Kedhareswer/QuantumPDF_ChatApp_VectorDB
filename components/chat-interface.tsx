@@ -4,6 +4,11 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+// @ts-ignore - missing types
+import remarkMath from 'remark-math'
+// @ts-ignore - missing types
+import rehypeKatex from 'rehype-katex'
+import Mermaid from '@/components/mermaid'
 import type { Components } from 'react-markdown'
 import {
   Send,
@@ -40,6 +45,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { EnhancedChatProcessingSkeleton, ChatTypingIndicator } from "@/components/skeleton-loaders"
+import { ThinkingBubble } from "@/components/thinking-bubble"
 
 interface Message {
   id: string
@@ -86,10 +92,12 @@ interface ChatInterfaceProps {
 }
 
 const SUGGESTED_QUESTIONS = [
-  "What are the main topics covered in the documents?",
-  "Can you summarize the key findings?",
-  "What are the most important conclusions?",
-  "How do the documents relate to each other?",
+  "Give me a concise executive summary of this document.",
+  "List the top five key insights with brief explanations.",
+  "Explain the methodology used and its significance.",
+  "What limitations or open questions are highlighted?",
+  "Create a timeline of major events or milestones discussed.",
+  "Identify and define all acronyms found in the text.",
 ]
 
 // Component to parse and render message content with thinking sections
@@ -219,7 +227,8 @@ function MessageContent({ content }: { content: string }) {
           return (
             <div key={part.id} className="markdown-content">
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex as unknown as any]}
                 components={{
                   // Custom styling for markdown elements
                   h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0">{children}</h1>,
@@ -239,6 +248,15 @@ function MessageContent({ content }: { content: string }) {
                   ),
                   code: (props: any) => {
                     const { inline, children, ...rest } = props;
+                    const className: any = (props as any).className || ''
+                    const langMatch = /language-(\w+)/.exec(className)
+                    const language = langMatch ? langMatch[1] : undefined
+                    const codeString = String(children).trim()
+
+                    if (!inline && language === 'mermaid') {
+                      return <Mermaid chart={codeString} />
+                    }
+
                     return inline ? (
                       <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800" {...rest}>
                         {children}
@@ -292,8 +310,8 @@ function MessageContent({ content }: { content: string }) {
                   ),
                   hr: () => <hr className="my-6 border-t-2 border-gray-200" />,
                 } as Components}
-            >
-              {part.content}
+              >
+                {part.content}
               </ReactMarkdown>
             </div>
           )
@@ -320,6 +338,7 @@ export function ChatInterface({
     showThinking: false,
     complexityLevel: 'auto' as 'auto' | 'simple' | 'normal' | 'complex'
   })
+  const [useContext, setUseContext] = useState(true)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -339,10 +358,11 @@ export function ChatInterface({
     e.preventDefault()
     if (input.trim() && !isProcessing && !disabled) {
       const options = enhancedOptions.complexityLevel === 'auto' 
-        ? { showThinking: enhancedOptions.showThinking }
+        ? { showThinking: enhancedOptions.showThinking, useContext }
         : { 
             showThinking: enhancedOptions.showThinking,
-            complexityLevel: enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex'
+            complexityLevel: enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex',
+            useContext
           }
       
       onSendMessage(input.trim(), options)
@@ -361,10 +381,11 @@ export function ChatInterface({
   const handleSuggestedQuestion = (question: string) => {
     if (!isProcessing && !disabled) {
       const options = enhancedOptions.complexityLevel === 'auto' 
-        ? { showThinking: enhancedOptions.showThinking }
+        ? { showThinking: enhancedOptions.showThinking, useContext }
         : { 
             showThinking: enhancedOptions.showThinking,
-            complexityLevel: enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex'
+            complexityLevel: enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex',
+            useContext
           }
       
       onSendMessage(question, options)
@@ -567,6 +588,17 @@ ${diagnostics.documents.length === 0
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="context-toggle"
+                    checked={useContext}
+                    onCheckedChange={(checked) => setUseContext(checked)}
+                  />
+                  <Label htmlFor="context-toggle" className="text-sm">
+                    Use Document Context
+                  </Label>
+                </div>
               </div>
               
               {enhancedOptions.showThinking && (
@@ -757,65 +789,87 @@ ${diagnostics.documents.length === 0
                   <div
                     className={`message-bubble ${message.role === "user" ? "message-bubble-user" : "message-bubble-assistant"} group`}
                   >
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1">
-                        <MessageContent content={message.content} />
-                      </div>
+                    <div className="flex flex-col gap-4">
+                      {/* Collapsible Thinking Bubble for assistant messages */}
+                      {message.role === "assistant" && message.metadata?.reasoning && (
+                        <ThinkingBubble
+                          reasoning={message.metadata.reasoning}
+                          responseTime={message.metadata.responseTime}
+                        />
+                      )}
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="flex-1">
+                          <MessageContent
+                            content={(() => {
+                              if (message.role !== "assistant") return message.content
+                              let cleaned = message.content
+                                .replace(/<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi, "")
 
-                      {/* Message Actions */}
-                      <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => copyToClipboard(message.content)}
-                          className={`h-8 w-8 p-0 ${message.role === "user" ? "text-white hover:bg-white/20" : "text-gray-600 hover:bg-gray-100"}`}
-                          aria-label="Copy message"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                        {message.role === "assistant" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
-                              aria-label="Thumbs up"
-                            >
-                              <ThumbsUp className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
-                              aria-label="Thumbs down"
-                            >
-                              <ThumbsDown className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                              // Remove any reasoning block starting with AI Reasoning Process up to Response heading
+                              cleaned = cleaned.replace(/^[\s\S]*?AI Reasoning Process[\s\S]*?Response\s*/i, "")
+                              // Fallback: if still contains Final Enhancement before Response, trim again
+                              cleaned = cleaned.replace(/^[\s\S]*?Final Enhancement[\s\S]*?Response\s*/i, "")
 
-                    {message.sources && message.sources.length > 0 && (
-                      <Card className="mt-6 border border-gray-200 bg-gray-50">
-                        <CardContent className="p-4">
-                          <div className="flex items-center space-x-2 mb-4">
-                            <FileText className="w-4 h-4 text-gray-600" />
-                            <span className="text-sm font-bold text-gray-700">SOURCES ({message.sources.length})</span>
-                          </div>
-                          <div className="space-y-3">
-                            {message.sources.map((source, index) => (
-                              <div
-                                key={index}
-                                className="text-sm bg-white p-3 border border-gray-200 font-mono rounded-sm"
+                              return cleaned.trim()
+                            })()}
+                          />
+                        </div>
+
+                        {/* Message Actions */}
+                        <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => copyToClipboard(message.content)}
+                            className={`h-8 w-8 p-0 ${message.role === "user" ? "text-white hover:bg-white/20" : "text-gray-600 hover:bg-gray-100"}`}
+                            aria-label="Copy message"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                          {message.role === "assistant" && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
+                                aria-label="Thumbs up"
                               >
-                                <span className="text-gray-600 font-bold">#{index + 1}</span> {source}
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
+                                <ThumbsUp className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
+                                aria-label="Thumbs down"
+                              >
+                                <ThumbsDown className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {message.sources && message.sources.length > 0 && (
+                        <Card className="mt-6 border border-gray-200 bg-gray-50">
+                          <CardContent className="p-4">
+                            <div className="flex items-center space-x-2 mb-4">
+                              <FileText className="w-4 h-4 text-gray-600" />
+                              <span className="text-sm font-bold text-gray-700">SOURCES ({message.sources.length})</span>
+                            </div>
+                            <div className="space-y-3">
+                              {message.sources.map((source, index) => (
+                                <div
+                                  key={index}
+                                  className="text-sm bg-white p-3 border border-gray-200 font-mono rounded-sm"
+                                >
+                                  <span className="text-gray-600 font-bold">#{index + 1}</span> {source}
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
