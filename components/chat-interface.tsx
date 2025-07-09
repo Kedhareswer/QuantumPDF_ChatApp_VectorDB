@@ -310,8 +310,8 @@ function MessageContent({ content }: { content: string }) {
                   ),
                   hr: () => <hr className="my-6 border-t-2 border-gray-200" />,
                 } as Components}
-              >
-                {part.content}
+            >
+              {part.content}
               </ReactMarkdown>
             </div>
           )
@@ -797,8 +797,8 @@ ${diagnostics.documents.length === 0
                           responseTime={message.metadata.responseTime}
                         />
                       )}
-                      <div className="flex justify-between items-start gap-4">
-                        <div className="flex-1">
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1">
                           <MessageContent
                             content={(() => {
                               if (message.role !== "assistant") return message.content
@@ -813,62 +813,62 @@ ${diagnostics.documents.length === 0
                               return cleaned.trim()
                             })()}
                           />
-                        </div>
-
-                        {/* Message Actions */}
-                        <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => copyToClipboard(message.content)}
-                            className={`h-8 w-8 p-0 ${message.role === "user" ? "text-white hover:bg-white/20" : "text-gray-600 hover:bg-gray-100"}`}
-                            aria-label="Copy message"
-                          >
-                            <Copy className="w-4 h-4" />
-                          </Button>
-                          {message.role === "assistant" && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
-                                aria-label="Thumbs up"
-                              >
-                                <ThumbsUp className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
-                                aria-label="Thumbs down"
-                              >
-                                <ThumbsDown className="w-4 h-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
                       </div>
 
-                      {message.sources && message.sources.length > 0 && (
-                        <Card className="mt-6 border border-gray-200 bg-gray-50">
-                          <CardContent className="p-4">
-                            <div className="flex items-center space-x-2 mb-4">
-                              <FileText className="w-4 h-4 text-gray-600" />
-                              <span className="text-sm font-bold text-gray-700">SOURCES ({message.sources.length})</span>
-                            </div>
-                            <div className="space-y-3">
-                              {message.sources.map((source, index) => (
-                                <div
-                                  key={index}
-                                  className="text-sm bg-white p-3 border border-gray-200 font-mono rounded-sm"
-                                >
-                                  <span className="text-gray-600 font-bold">#{index + 1}</span> {source}
-                                </div>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
+                      {/* Message Actions */}
+                      <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => copyToClipboard(message.content)}
+                          className={`h-8 w-8 p-0 ${message.role === "user" ? "text-white hover:bg-white/20" : "text-gray-600 hover:bg-gray-100"}`}
+                          aria-label="Copy message"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+                        {message.role === "assistant" && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
+                              aria-label="Thumbs up"
+                            >
+                              <ThumbsUp className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
+                              aria-label="Thumbs down"
+                            >
+                              <ThumbsDown className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {message.sources && message.sources.length > 0 && (
+                      <Card className="mt-6 border border-gray-200 bg-gray-50">
+                        <CardContent className="p-4">
+                          <div className="flex items-center space-x-2 mb-4">
+                            <FileText className="w-4 h-4 text-gray-600" />
+                            <span className="text-sm font-bold text-gray-700">SOURCES ({message.sources.length})</span>
+                          </div>
+                          <div className="space-y-3">
+                            {message.sources.map((source, index) => (
+                              <div
+                                key={index}
+                                className="text-sm bg-white p-3 border border-gray-200 font-mono rounded-sm"
+                              >
+                                <span className="text-gray-600 font-bold">#{index + 1}</span> {source}
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
                     </div>
                   </div>
                 </div>

@@ -187,11 +187,11 @@ export default function QuantumPDFChatbot() {
         })
         return // early since streaming handled
       } else {
-        const response = await ragEngine.query(content, {
-          showThinking,
-          complexityLevel: detectedComplexity,
-          tokenBudget: 4000
-        })
+      const response = await ragEngine.query(content, {
+        showThinking,
+        complexityLevel: detectedComplexity,
+        tokenBudget: 4000
+      })
         responseAnswer = response.answer
         responseSources = response.sources
         responseMeta = response
