@@ -760,7 +760,7 @@ export default function QuantumPDFChatbot() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="documents" className="h-full m-0 p-4 overflow-auto">
+                  <TabsContent value="documents" className="h-full m-0 p-4 overflow-auto overscroll-contain -webkit-overflow-scrolling-touch">
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
@@ -773,7 +773,7 @@ export default function QuantumPDFChatbot() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="search" className="h-full m-0 p-4 overflow-auto">
+                  <TabsContent value="search" className="h-full m-0 p-4 overflow-auto overscroll-contain -webkit-overflow-scrolling-touch">
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
@@ -784,7 +784,7 @@ export default function QuantumPDFChatbot() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="settings" className="h-full m-0 p-4 overflow-auto">
+                  <TabsContent value="settings" className="h-full m-0 p-4 overflow-auto overscroll-contain -webkit-overflow-scrolling-touch">
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
@@ -795,7 +795,7 @@ export default function QuantumPDFChatbot() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="status" className="h-full m-0 p-4 overflow-auto">
+                  <TabsContent value="status" className="h-full m-0 p-4 overflow-auto overscroll-contain -webkit-overflow-scrolling-touch">
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (

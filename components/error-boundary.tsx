@@ -49,7 +49,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       }
 
       return (
-        <div className="min-h-screen bg-white text-black font-mono flex items-center justify-center p-4">
+        <div className="min-h-screen bg-white text-black font-mono flex items-center justify-center p-4 overflow-y-auto">
           <Card className="border-2 border-red-600 shadow-none max-w-md w-full">
             <CardHeader className="border-b border-red-600 bg-red-50">
               <CardTitle className="flex items-center space-x-2 text-red-800">
@@ -57,7 +57,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 <span>APPLICATION ERROR</span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-6 space-y-4">
+            <CardContent className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
               <div className="space-y-2">
                 <p className="text-sm">
                   <strong>Something went wrong:</strong>
@@ -68,9 +68,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               {process.env.NODE_ENV === "development" && this.state.error && (
                 <details className="text-xs bg-gray-100 p-3 rounded border">
                   <summary className="cursor-pointer font-medium">Technical Details</summary>
-                  <pre className="mt-2 whitespace-pre-wrap break-words">{this.state.error.stack}</pre>
+                  <pre className="mt-2 whitespace-pre-wrap break-words overflow-x-auto">{this.state.error.stack}</pre>
                   {this.state.errorInfo && (
-                    <pre className="mt-2 whitespace-pre-wrap break-words">{this.state.errorInfo.componentStack}</pre>
+                    <pre className="mt-2 whitespace-pre-wrap break-words overflow-x-auto">{this.state.errorInfo.componentStack}</pre>
                   )}
                 </details>
               )}
