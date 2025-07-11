@@ -672,9 +672,9 @@ export default function QuantumPDFChatbot() {
           </div>
 
           {/* Sidebar Content */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden">
             {!sidebarCollapsed ? (
-              <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col overflow-hidden">
                 <TabsList className="grid w-full grid-cols-5 m-4 border-2 border-black bg-white">
                   <TabsTrigger
                     value="chat"
@@ -812,10 +812,113 @@ export default function QuantumPDFChatbot() {
                     )}
                   </TabsContent>
                 </div>
+                <div className="flex-1 overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
+                  <TabsContent value="chat" className="h-full m-0 p-0">
+                    {isTabLoading ? (
+                      <div className="p-4">
+                        <ChatInterfaceSkeleton />
+                      </div>
+                    ) : (
+                      <div className="space-y-4 p-4">
+                        <div className="flex items-center justify-between">
+                          <h2 className="font-bold text-lg">Chat Controls</h2>
+                          <QuickActions
+                            onClearChat={handleClearChat}
+                            onNewSession={handleNewSession}
+                            disabled={!isChatReady}
+                          />
+                        </div>
+                        <Card className="border-2 border-black shadow-none">
+                          <CardHeader className="border-b border-black">
+                            <CardTitle className="text-sm flex items-center space-x-2">
+                              <Brain className="w-4 h-4" />
+                              <span>CHAT STATUS</span>
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-4 space-y-3">
+                            <div className="flex items-center justify-between text-sm">
+                              <span>AI Model:</span>
+                              <Badge variant={modelStatus === "ready" ? "default" : "secondary"}>
+                                {modelStatus.toUpperCase()}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span>Documents:</span>
+                              <span className="font-bold">{documents.length}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span>Messages:</span>
+                              <span className="font-bold">{messages.length}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span>Vector DB:</span>
+                              <Badge variant="outline" className="text-xs">
+                                {vectorDBConfig.provider.toUpperCase()}
+                              </Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="documents" className="h-full m-0 p-4">
+                    {isTabLoading ? (
+                      <TabContentLoadingSkeleton />
+                    ) : (
+                      <div className="space-y-4">
+                        <h2 className="font-bold text-lg">Document Management</h2>
+                        <UnifiedPDFProcessor onDocumentProcessed={handleDocumentUpload} />
+                        <Separator className="bg-black" />
+                        <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="search" className="h-full m-0 p-4">
+                    {isTabLoading ? (
+                      <TabContentLoadingSkeleton />
+                    ) : (
+                      <div className="space-y-4">
+                        <h2 className="font-bold text-lg">Document Search</h2>
+                        <EnhancedSearch onSearch={handleSearch} documents={documents} />
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="settings" className="h-full m-0 p-4">
+                    {isTabLoading ? (
+                      <TabContentLoadingSkeleton />
+                    ) : (
+                      <UnifiedConfiguration
+                        onTestAI={handleTestAI}
+                        onTestVectorDB={handleTestVectorDB}
+                      />
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="status" className="h-full m-0 p-4">
+                    {isTabLoading ? (
+                      <TabContentLoadingSkeleton />
+                    ) : (
+                      <div className="space-y-4">
+                        <h2 className="font-bold text-lg">System Monitor</h2>
+                        <SystemStatus
+                          modelStatus={modelStatus}
+                          apiConfig={aiConfig}
+                          documents={documents}
+                          messages={messages}
+                          ragEngine={ragEngine ? ragEngine.getStatus() : {}}
+                        />
+                      </div>
+                    )}
+                  </TabsContent>
+                </div>
               </Tabs>
             ) : (
               // Collapsed sidebar
-              <div className="p-4 space-y-4">
+              <div className="p-4 space-y-4 overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch h-full">
+                <div className="space-y-4">
                 <Button
                   variant={activeTab === "chat" ? "default" : "outline"}
                   size="sm"
@@ -861,6 +964,7 @@ export default function QuantumPDFChatbot() {
                 >
                   <Activity className="w-4 h-4" />
                 </Button>
+                </div>
               </div>
             )}
           </div>
