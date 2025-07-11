@@ -643,7 +643,7 @@ export default function QuantumPDFChatbot() {
         {/* Sidebar */}
         <div
           className={`
-          fixed lg:relative inset-y-0 left-0 z-40 
+          fixed lg:relative inset-y-0 left-0 z-40 flex flex-col 
           ${sidebarCollapsed ? "w-16" : "w-80"} 
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
           transition-all duration-300 ease-in-out
@@ -672,7 +672,7 @@ export default function QuantumPDFChatbot() {
           </div>
 
           {/* Sidebar Content */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
             {!sidebarCollapsed ? (
               <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col overflow-hidden">
                 <TabsList className="grid w-full grid-cols-5 m-4 border-2 border-black bg-white">
@@ -709,7 +709,7 @@ export default function QuantumPDFChatbot() {
                   </TabsTrigger>
                 </TabsList>
 
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
                   <TabsContent value="chat" className="h-full m-0 p-4 space-y-4">
                     {isTabLoading ? (
                       <div className="p-4">
