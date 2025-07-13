@@ -542,8 +542,6 @@ This project is licensed under the GNU General Public License v3.0. See [LICENSE
 
 <div align="center">
 
-**Built with care by the community**
-
 If you find this project helpful, please consider giving it a ⭐
 
 </div>
