@@ -32,6 +32,9 @@ import {
   Zap,
   Settings,
   HelpCircle,
+  CheckCircle,
+  XCircle,
+  Circle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -228,7 +231,7 @@ function MessageContent({ content }: { content: string }) {
             <div key={part.id} className="markdown-content">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex as unknown as any]}
+                rehypePlugins={[rehypeKatex as any]}
                 components={{
                   // Custom styling for markdown elements
                   h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0">{children}</h1>,
@@ -321,6 +324,23 @@ function MessageContent({ content }: { content: string }) {
   )
 }
 
+// Stepper UI component
+function Stepper({ steps }: { steps: { key: string, label: string, status: string }[] }) {
+  return (
+    <ul className="flex flex-col gap-2 my-4" aria-label="Progress steps">
+      {steps.map((step, idx) => (
+        <li key={step.key} className="flex items-center gap-2 text-sm">
+          {step.status === "done" && <CheckCircle className="text-green-600 w-5 h-5" aria-label="Done" />}
+          {step.status === "in_progress" && <Loader2 className="animate-spin text-blue-500 w-5 h-5" aria-label="In progress" />}
+          {step.status === "pending" && <Circle className="text-gray-300 w-5 h-5" aria-label="Pending" />}
+          {step.status === "error" && <XCircle className="text-red-500 w-5 h-5" aria-label="Error" />}
+          <span>{step.label}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function ChatInterface({ 
   messages, 
   onSendMessage, 
@@ -342,6 +362,15 @@ export function ChatInterface({
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [stepperSteps, setStepperSteps] = useState([
+    { key: "search", label: "Searching document database", status: "pending" },
+    { key: "ranking", label: "Ranking by relevance", status: "pending" },
+    { key: "context", label: "Preparing context", status: "pending" },
+    { key: "answer", label: "Generating answer", status: "pending" }
+  ])
+  const [showStepper, setShowStepper] = useState(false)
+  const [streamedAnswer, setStreamedAnswer] = useState<string | null>(null)
+  const [stepperError, setStepperError] = useState<string | null>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -488,6 +517,75 @@ ${diagnostics.documents.length === 0
       console.error("Diagnostic failed:", error)
     } finally {
       setIsRunningDiagnostics(false)
+    }
+  }
+
+  // Streaming chat submit handler
+  const handleSubmitStreaming = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const input = (e.target as any).elements?.userInput?.value || ""
+    if (!input.trim()) return
+    setShowStepper(true)
+    setStepperError(null)
+    setStreamedAnswer(null)
+    setStepperSteps([
+      { key: "search", label: "Searching document database", status: "in_progress" },
+      { key: "ranking", label: "Ranking by relevance", status: "pending" },
+      { key: "context", label: "Preparing context", status: "pending" },
+      { key: "answer", label: "Generating answer", status: "pending" }
+    ])
+    // Start streaming fetch
+    try {
+      const res = await fetch("/api/huggingface/text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: input })
+      })
+      if (!res.body) throw new Error("No response body")
+      const reader = res.body.getReader()
+      let buffer = ""
+      let done = false
+      while (!done) {
+        const { value, done: doneReading } = await reader.read()
+        done = doneReading
+        if (value) {
+          buffer += new TextDecoder().decode(value)
+          // Parse SSE events
+          const events = buffer.split("\n\n")
+          buffer = events.pop() || ""
+          for (const event of events) {
+            if (!event.startsWith("data: ")) continue
+            const data = event.slice(6)
+            try {
+              const evt = JSON.parse(data)
+              if (evt.step === "error") {
+                setStepperError(evt.message || "Unknown error")
+                setStepperSteps(prev => prev.map(s => s.status === "in_progress" ? { ...s, status: "error" } : s))
+                setShowStepper(true)
+                return
+              }
+              setStepperSteps(prev => prev.map((s, i) => {
+                if (s.key === evt.step) {
+                  return { ...s, status: evt.status }
+                }
+                // If previous step just finished, set next to in_progress
+                if (i > 0 && prev[i-1].key === evt.step && evt.status === "done" && s.status === "pending") {
+                  return { ...s, status: "in_progress" }
+                }
+                return s
+              }))
+              if (evt.step === "answer" && evt.status === "done") {
+                setStreamedAnswer(evt.text || "")
+                setShowStepper(false)
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch (err: any) {
+      setStepperError(err.message || "Unknown error")
+      setStepperSteps(prev => prev.map(s => s.status === "in_progress" ? { ...s, status: "error" } : s))
+      setShowStepper(true)
     }
   }
 
@@ -876,6 +974,38 @@ ${diagnostics.documents.length === 0
 
               {isProcessing && <EnhancedChatProcessingSkeleton phase="retrieving" />}
 
+              {/* Stepper UI */}
+              {showStepper && (
+                <Card className="mb-4">
+                  <CardContent>
+                    <Stepper steps={stepperSteps} />
+                    {stepperError && <div className="text-red-600 mt-2">{stepperError}</div>}
+                  </CardContent>
+                </Card>
+              )}
+              {/* If streamedAnswer, show it as the latest assistant message */}
+              {streamedAnswer && (
+                <div className="mb-4">
+                  <Card>
+                    <CardContent>
+                      <div className="flex gap-2 items-center mb-2"><Brain className="w-4 h-4 text-blue-500" /><span className="font-semibold">Assistant</span></div>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex as any]}
+                        components={{
+                          code({ node, className, children, ...props }) {
+                            if (typeof children === "string" && children.startsWith("mermaid\n")) {
+                              return <Mermaid chart={children.replace(/^mermaid\n/, "")} />
+                            }
+                            return <code className={className} {...props}>{children}</code>
+                          },
+                        } as Components}
+                      >{streamedAnswer}</ReactMarkdown>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
           )}
@@ -885,7 +1015,7 @@ ${diagnostics.documents.length === 0
       {/* Input Area */}
       <div className="border-t-2 border-black bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <form onSubmit={handleSubmit} className="space-y-4 form-enhanced">
+          <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
             <div className="flex space-x-4">
               <div className="flex-1">
                 <label htmlFor="chat-input" className="sr-only">

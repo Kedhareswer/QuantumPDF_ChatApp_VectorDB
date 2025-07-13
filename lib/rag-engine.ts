@@ -619,16 +619,46 @@ export class RAGEngine {
       // Sort by similarity and return top K
       const sortedChunks = allChunks
         .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, topK)
         .filter((chunk) => chunk.similarity >= (filters?.minSimilarity ?? 0.05));
 
-      console.log(`Returning ${sortedChunks.length} chunks (threshold: ${filters?.minSimilarity ?? 0.05}, topK: ${topK})`)
-      if (sortedChunks.length > 0) {
-        console.log(`Best similarity: ${sortedChunks[0].similarity.toFixed(3)}`)
-        console.log(`Worst similarity: ${sortedChunks[sortedChunks.length - 1].similarity.toFixed(3)}`)
+      // --- Diversity Rule: Ensure at least one chunk per document (if available) ---
+      const docChunkMap = new Map<string, { content: string; source: string; similarity: number }>();
+      // Extract document name from source string (format: "docName (chunk N)")
+      for (const chunk of sortedChunks) {
+        const docName = chunk.source.split(" (chunk ")[0];
+        if (!docChunkMap.has(docName)) {
+          docChunkMap.set(docName, chunk); // Take the highest-similarity chunk per doc
+        }
+      }
+      // Start with one chunk per document (if available)
+      const diverseChunks = Array.from(docChunkMap.values());
+      // Fill up to topK with remaining highest-similarity chunks (excluding already picked)
+      const pickedSet = new Set(diverseChunks.map((c) => c.source));
+      for (const chunk of sortedChunks) {
+        if (diverseChunks.length >= topK) break;
+        if (!pickedSet.has(chunk.source)) {
+          diverseChunks.push(chunk);
+          pickedSet.add(chunk.source);
+        }
+      }
+      // If still less than topK, just take more from sortedChunks (shouldn't happen, but for safety)
+      while (diverseChunks.length < topK && diverseChunks.length < sortedChunks.length) {
+        const next = sortedChunks[diverseChunks.length];
+        if (next && !pickedSet.has(next.source)) {
+          diverseChunks.push(next);
+          pickedSet.add(next.source);
+        }
+      }
+      // Limit to topK
+      const finalChunks = diverseChunks.slice(0, topK);
+
+      console.log(`Returning ${finalChunks.length} chunks (diversity rule, threshold: ${filters?.minSimilarity ?? 0.05}, topK: ${topK})`)
+      if (finalChunks.length > 0) {
+        console.log(`Best similarity: ${finalChunks[0].similarity.toFixed(3)}`)
+        console.log(`Worst similarity: ${finalChunks[finalChunks.length - 1].similarity.toFixed(3)}`)
       }
 
-      return sortedChunks;
+      return finalChunks;
     } catch (error) {
       console.error("Error finding relevant chunks:", error);
       return [];
