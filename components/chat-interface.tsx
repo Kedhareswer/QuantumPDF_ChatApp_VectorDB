@@ -104,7 +104,13 @@ const SUGGESTED_QUESTIONS = [
   "Identify and define all acronyms found in the text.",
 ]
 
-// Component to parse and render message content with thinking sections
+/**
+ * Renders chat message content, parsing and displaying internal "thinking" sections separately from regular text.
+ *
+ * Thinking sections enclosed in `<think>` or `<thinking>` tags are shown in collapsible panels labeled "Thinking" with content length badges. Regular text is rendered as markdown with support for GitHub-flavored markdown, math, KaTeX, and Mermaid diagrams, using custom styles for various markdown elements.
+ *
+ * @param content - The raw message content, which may include special thinking tags and markdown formatting.
+ */
 function MessageContent({ content }: { content: string }) {
   const [expandedThinking, setExpandedThinking] = useState<{[key: string]: boolean}>({})
 
@@ -325,7 +331,14 @@ function MessageContent({ content }: { content: string }) {
   )
 }
 
-// Stepper UI component
+/**
+ * Displays a vertical list of progress steps with status indicators and labels.
+ *
+ * Each step shows an icon representing its status ("done", "in_progress", "pending", or "error") alongside its label.
+ *
+ * @param steps - Array of step objects, each containing a unique key, label, and status.
+ * @returns A list UI element representing the progress of each step.
+ */
 function Stepper({ steps }: { steps: { key: string, label: string, status: string }[] }) {
   return (
     <ul className="flex flex-col gap-2 my-4" aria-label="Progress steps">
@@ -342,6 +355,13 @@ function Stepper({ steps }: { steps: { key: string, label: string, status: strin
   )
 }
 
+/**
+ * Renders the main chat interface for interacting with AI-powered document analysis, including message history, advanced controls, streaming responses, and diagnostics.
+ *
+ * Provides a chat UI with support for enhanced AI settings, streaming answer generation with step-by-step progress visualization, markdown and math rendering, source citations, and system diagnostics. Users can send questions, view assistant reasoning (if enabled), and manage chat sessions.
+ *
+ * @returns The chat interface component with message display, input area, advanced controls, and streaming/diagnostic features.
+ */
 export function ChatInterface({ 
   messages, 
   onSendMessage, 

@@ -3,6 +3,13 @@ import { InferenceClient } from "@huggingface/inference"
 
 export const runtime = "edge";
 
+/**
+ * Handles POST requests by streaming a multi-step text generation process using a Hugging Face model via Server-Sent Events (SSE).
+ *
+ * Parses the request body for a prompt, optional context, and model selection. Validates input and streams progress events for each step: searching, ranking, context preparation, and answer generation. The final step streams the generated text and model information. Errors and invalid input are returned as JSON responses with appropriate status codes.
+ *
+ * @returns A streaming Response with event-encoded JSON messages for each step of the process, suitable for consumption via SSE.
+ */
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
 

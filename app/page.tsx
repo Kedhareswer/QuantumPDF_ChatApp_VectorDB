@@ -44,6 +44,13 @@ import { Toaster } from "@/components/ui/sonner"
 import { TabContentLoadingSkeleton, ChatInterfaceSkeleton } from "@/components/skeleton-loaders"
 import { AIClient } from "@/lib/ai-client"
 
+/**
+ * Renders the QuantumPDFChatbot application, an AI-powered document chat and analysis interface with multi-tab navigation.
+ *
+ * This component manages document upload, AI model initialization, chat messaging with retrieval-augmented generation, document search using a vector database, configuration testing, and UI tab management. It integrates global state, handles user interactions, and provides feedback through error and status messages. The UI includes a sidebar with tabs for chat, documents, search, settings, and system status, as well as a main content area for chat and document analysis.
+ *
+ * @returns The complete React component for the QuantumPDFChatbot application.
+ */
 export default function QuantumPDFChatbot() {
   const {
     // State

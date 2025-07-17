@@ -15,6 +15,11 @@ export const metadata: Metadata = {
   }
 }
 
+/**
+ * Defines the root HTML layout for the application, setting the language to English and rendering the provided content within the body.
+ *
+ * @param children - The content to be rendered inside the body of the HTML document
+ */
 export default function RootLayout({
   children,
 }: Readonly<{
