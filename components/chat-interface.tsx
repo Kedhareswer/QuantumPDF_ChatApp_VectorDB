@@ -889,7 +889,7 @@ ${diagnostics.documents.length === 0
                   >
                     <div className="flex flex-col gap-4">
                       {/* Collapsible Thinking Bubble for assistant messages */}
-                      {message.role === "assistant" && message.metadata?.reasoning && (
+                      {message.role === "assistant" && message.metadata?.reasoning && enhancedOptions.showThinking && (
                         <ThinkingBubble
                           reasoning={message.metadata.reasoning}
                           responseTime={message.metadata.responseTime}

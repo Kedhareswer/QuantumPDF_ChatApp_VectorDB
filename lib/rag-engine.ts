@@ -1096,14 +1096,14 @@ Applied improvements based on critical review to ensure accuracy and clarity.
   }
 
   private createEnhancedSystemPrompt(questionType: string): string {
-    const basePrompt = `You are an expert document analyst providing precise, well-formatted responses.
+    const basePrompt = `You are an expert document analyst providing precise, well-formatted responses to questions about the documents you have been provided.
 
 CORE REQUIREMENTS:
-• Use ONLY information from the provided context
-• Create clean, professional formatting using proper markdown
-• Cite sources clearly and consistently
-• Never add meta-commentary, confidence ratings, or system notes
-• Focus on answering the user's question directly
+• Use information from the provided context, but also use your own knowledge and experience to answer the question if it is not clear from the context.
+• Create clean, professional formatting using proper markdown and proper headings.
+• Cite sources clearly and consistently.
+• Never add confidence ratings or meta-commentary.
+• Focus on answering the user's question directly.
 
 FORMATTING STANDARDS:
 • Use ## for main headings, ### for subheadings
@@ -1115,19 +1115,19 @@ FORMATTING STANDARDS:
 
 CONTENT RULES:
 • Answer directly without preambles
-• No "according to the documents" unless natural
-• No confidence ratings or meta-analysis
-• No commentary on response quality
-• Focus on factual information from sources`
+• No "according to the documents" unless natural.
+• No confidence ratings or meta-analysis.
+• No commentary on response quality or confidence.
+• Focus on factual information from sources and your own knowledge and experience.`
 
     const typeSpecificPrompts = {
       'summary': '\n\nFORMAT: Start with brief overview, then organized sections with clear headings and bullet points.',
-      'analysis': '\n\nFORMAT: Structured analysis with clear reasoning, evidence sections, and logical conclusions.',
-      'timeline': '\n\nFORMAT: Chronological presentation with dates, events, and source references in table format.',
-      'data': '\n\nFORMAT: Present numerical data in well-formatted tables with clear headers and units.',
-      'process': '\n\nFORMAT: Step-by-step procedure with numbered steps and clear instructions.',
-      'comparison': '\n\nFORMAT: Side-by-side comparison table showing key differences and similarities.',
-      'general': '\n\nFORMAT: Clear, direct response with appropriate headings and organized information.'
+      'analysis': '\n\nFORMAT: Structured analysis with clear reasoning, evidence sections, and logical conclusions using your own knowledge and experience.',
+      'timeline': '\n\nFORMAT: Chronological presentation with dates, events, and source references in table format using your own knowledge and experience.',
+      'data': '\n\nFORMAT: Present numerical data in well-formatted tables with clear headers and units using your own knowledge and experience.',
+      'process': '\n\nFORMAT: Step-by-step procedure with numbered steps and clear instructions using your own knowledge and experience.',
+      'comparison': '\n\nFORMAT: Side-by-side comparison table showing key differences and similarities using your own knowledge and experience.',
+      'general': '\n\nFORMAT: Clear, direct response with appropriate headings and organized information using your own knowledge and experience.'
     }
 
     return basePrompt + (typeSpecificPrompts[questionType as keyof typeof typeSpecificPrompts] || typeSpecificPrompts.general)
@@ -1151,9 +1151,10 @@ RESPONSE: ${phase1Result.initialResponse}
 Check for:
 • Factual accuracy against context
 • Complete coverage of question
-• Clear source attribution  
-• Clean formatting
-• Direct answering without fluff
+• Clear source attribution using the source name and page number
+• Clean formatting using proper markdown and proper headings
+• Direct answering without fluff and meta-commentary
+• Use your own knowledge and experience to answer the question if it is not clear from the context
 
 Identify specific improvements needed. Be concise.`
   }
@@ -1166,11 +1167,11 @@ INITIAL RESPONSE: ${phase1Result.initialResponse}
 IMPROVEMENTS NEEDED: ${phase2Result.critiqueText}
 
 Create a refined, final response that:
-• Addresses the identified issues
-• Maintains clean, professional formatting
-• Provides direct answers without meta-commentary
-• Uses proper markdown that renders cleanly
-• Eliminates any artifacts or confidence ratings
+• Addresses the identified issues.
+• Maintains clean, professional formatting using proper markdown and proper headings.
+• Provides direct answers without meta-commentary.
+• Uses proper markdown that renders cleanly using proper headings.
+• Eliminates any artifacts or confidence ratings or meta-commentary.
 
 Provide ONLY the final response - no explanations about changes made.`
   }
