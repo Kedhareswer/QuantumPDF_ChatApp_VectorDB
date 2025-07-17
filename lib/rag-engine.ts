@@ -619,16 +619,46 @@ export class RAGEngine {
       // Sort by similarity and return top K
       const sortedChunks = allChunks
         .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, topK)
         .filter((chunk) => chunk.similarity >= (filters?.minSimilarity ?? 0.05));
 
-      console.log(`Returning ${sortedChunks.length} chunks (threshold: ${filters?.minSimilarity ?? 0.05}, topK: ${topK})`)
-      if (sortedChunks.length > 0) {
-        console.log(`Best similarity: ${sortedChunks[0].similarity.toFixed(3)}`)
-        console.log(`Worst similarity: ${sortedChunks[sortedChunks.length - 1].similarity.toFixed(3)}`)
+      // --- Diversity Rule: Ensure at least one chunk per document (if available) ---
+      const docChunkMap = new Map<string, { content: string; source: string; similarity: number }>();
+      // Extract document name from source string (format: "docName (chunk N)")
+      for (const chunk of sortedChunks) {
+        const docName = chunk.source.split(" (chunk ")[0];
+        if (!docChunkMap.has(docName)) {
+          docChunkMap.set(docName, chunk); // Take the highest-similarity chunk per doc
+        }
+      }
+      // Start with one chunk per document (if available)
+      const diverseChunks = Array.from(docChunkMap.values());
+      // Fill up to topK with remaining highest-similarity chunks (excluding already picked)
+      const pickedSet = new Set(diverseChunks.map((c) => c.source));
+      for (const chunk of sortedChunks) {
+        if (diverseChunks.length >= topK) break;
+        if (!pickedSet.has(chunk.source)) {
+          diverseChunks.push(chunk);
+          pickedSet.add(chunk.source);
+        }
+      }
+      // If still less than topK, just take more from sortedChunks (shouldn't happen, but for safety)
+      while (diverseChunks.length < topK && diverseChunks.length < sortedChunks.length) {
+        const next = sortedChunks[diverseChunks.length];
+        if (next && !pickedSet.has(next.source)) {
+          diverseChunks.push(next);
+          pickedSet.add(next.source);
+        }
+      }
+      // Limit to topK
+      const finalChunks = diverseChunks.slice(0, topK);
+
+      console.log(`Returning ${finalChunks.length} chunks (diversity rule, threshold: ${filters?.minSimilarity ?? 0.05}, topK: ${topK})`)
+      if (finalChunks.length > 0) {
+        console.log(`Best similarity: ${finalChunks[0].similarity.toFixed(3)}`)
+        console.log(`Worst similarity: ${finalChunks[finalChunks.length - 1].similarity.toFixed(3)}`)
       }
 
-      return sortedChunks;
+      return finalChunks;
     } catch (error) {
       console.error("Error finding relevant chunks:", error);
       return [];
@@ -1066,14 +1096,14 @@ Applied improvements based on critical review to ensure accuracy and clarity.
   }
 
   private createEnhancedSystemPrompt(questionType: string): string {
-    const basePrompt = `You are an expert document analyst providing precise, well-formatted responses.
+    const basePrompt = `You are an expert document analyst providing precise, well-formatted responses to questions about the documents you have been provided.
 
 CORE REQUIREMENTS:
-• Use ONLY information from the provided context
-• Create clean, professional formatting using proper markdown
-• Cite sources clearly and consistently
-• Never add meta-commentary, confidence ratings, or system notes
-• Focus on answering the user's question directly
+• Use information from the provided context, but also use your own knowledge and experience to answer the question if it is not clear from the context.
+• Create clean, professional formatting using proper markdown and proper headings.
+• Cite sources clearly and consistently.
+• Never add confidence ratings or meta-commentary.
+• Focus on answering the user's question directly.
 
 FORMATTING STANDARDS:
 • Use ## for main headings, ### for subheadings
@@ -1085,19 +1115,19 @@ FORMATTING STANDARDS:
 
 CONTENT RULES:
 • Answer directly without preambles
-• No "according to the documents" unless natural
-• No confidence ratings or meta-analysis
-• No commentary on response quality
-• Focus on factual information from sources`
+• No "according to the documents" unless natural.
+• No confidence ratings or meta-analysis.
+• No commentary on response quality or confidence.
+• Focus on factual information from sources and your own knowledge and experience.`
 
     const typeSpecificPrompts = {
       'summary': '\n\nFORMAT: Start with brief overview, then organized sections with clear headings and bullet points.',
-      'analysis': '\n\nFORMAT: Structured analysis with clear reasoning, evidence sections, and logical conclusions.',
-      'timeline': '\n\nFORMAT: Chronological presentation with dates, events, and source references in table format.',
-      'data': '\n\nFORMAT: Present numerical data in well-formatted tables with clear headers and units.',
-      'process': '\n\nFORMAT: Step-by-step procedure with numbered steps and clear instructions.',
-      'comparison': '\n\nFORMAT: Side-by-side comparison table showing key differences and similarities.',
-      'general': '\n\nFORMAT: Clear, direct response with appropriate headings and organized information.'
+      'analysis': '\n\nFORMAT: Structured analysis with clear reasoning, evidence sections, and logical conclusions using your own knowledge and experience.',
+      'timeline': '\n\nFORMAT: Chronological presentation with dates, events, and source references in table format using your own knowledge and experience.',
+      'data': '\n\nFORMAT: Present numerical data in well-formatted tables with clear headers and units using your own knowledge and experience.',
+      'process': '\n\nFORMAT: Step-by-step procedure with numbered steps and clear instructions using your own knowledge and experience.',
+      'comparison': '\n\nFORMAT: Side-by-side comparison table showing key differences and similarities using your own knowledge and experience.',
+      'general': '\n\nFORMAT: Clear, direct response with appropriate headings and organized information using your own knowledge and experience.'
     }
 
     return basePrompt + (typeSpecificPrompts[questionType as keyof typeof typeSpecificPrompts] || typeSpecificPrompts.general)
@@ -1121,9 +1151,10 @@ RESPONSE: ${phase1Result.initialResponse}
 Check for:
 • Factual accuracy against context
 • Complete coverage of question
-• Clear source attribution  
-• Clean formatting
-• Direct answering without fluff
+• Clear source attribution using the source name and page number
+• Clean formatting using proper markdown and proper headings
+• Direct answering without fluff and meta-commentary
+• Use your own knowledge and experience to answer the question if it is not clear from the context
 
 Identify specific improvements needed. Be concise.`
   }
@@ -1136,11 +1167,11 @@ INITIAL RESPONSE: ${phase1Result.initialResponse}
 IMPROVEMENTS NEEDED: ${phase2Result.critiqueText}
 
 Create a refined, final response that:
-• Addresses the identified issues
-• Maintains clean, professional formatting
-• Provides direct answers without meta-commentary
-• Uses proper markdown that renders cleanly
-• Eliminates any artifacts or confidence ratings
+• Addresses the identified issues.
+• Maintains clean, professional formatting using proper markdown and proper headings.
+• Provides direct answers without meta-commentary.
+• Uses proper markdown that renders cleanly using proper headings.
+• Eliminates any artifacts or confidence ratings or meta-commentary.
 
 Provide ONLY the final response - no explanations about changes made.`
   }

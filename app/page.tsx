@@ -643,7 +643,7 @@ export default function QuantumPDFChatbot() {
         {/* Sidebar */}
         <div
           className={`
-          fixed lg:relative inset-y-0 left-0 z-40 flex flex-col 
+          fixed lg:relative inset-y-0 left-0 z-40 
           ${sidebarCollapsed ? "w-16" : "w-80"} 
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
           transition-all duration-300 ease-in-out
@@ -672,9 +672,9 @@ export default function QuantumPDFChatbot() {
           </div>
 
           {/* Sidebar Content */}
-          <div className="flex-1 flex flex-col overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
+          <div className="flex-1 overflow-hidden">
             {!sidebarCollapsed ? (
-              <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col overflow-hidden">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col">
                 <TabsList className="grid w-full grid-cols-5 m-4 border-2 border-black bg-white">
                   <TabsTrigger
                     value="chat"
@@ -709,7 +709,7 @@ export default function QuantumPDFChatbot() {
                   </TabsTrigger>
                 </TabsList>
 
-                <div className="flex-1 overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch">
+                <div className="flex-1 overflow-hidden">
                   <TabsContent value="chat" className="h-full m-0 p-4 space-y-4">
                     {isTabLoading ? (
                       <div className="p-4">
@@ -760,7 +760,7 @@ export default function QuantumPDFChatbot() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="documents" className="h-full m-0 p-4 overflow-auto overscroll-contain -webkit-overflow-scrolling-touch">
+                  <TabsContent value="documents" className="h-full m-0 p-4 overflow-auto">
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
@@ -773,7 +773,7 @@ export default function QuantumPDFChatbot() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="search" className="h-full m-0 p-4 overflow-auto overscroll-contain -webkit-overflow-scrolling-touch">
+                  <TabsContent value="search" className="h-full m-0 p-4 overflow-auto">
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
@@ -784,7 +784,7 @@ export default function QuantumPDFChatbot() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="settings" className="h-full m-0 p-4 overflow-auto overscroll-contain -webkit-overflow-scrolling-touch">
+                  <TabsContent value="settings" className="h-full m-0 p-4 overflow-auto">
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
@@ -795,7 +795,7 @@ export default function QuantumPDFChatbot() {
                     )}
                   </TabsContent>
 
-                  <TabsContent value="status" className="h-full m-0 p-4 overflow-auto overscroll-contain -webkit-overflow-scrolling-touch">
+                  <TabsContent value="status" className="h-full m-0 p-4 overflow-auto">
                     {isTabLoading ? (
                       <TabContentLoadingSkeleton />
                     ) : (
@@ -815,8 +815,7 @@ export default function QuantumPDFChatbot() {
               </Tabs>
             ) : (
               // Collapsed sidebar
-              <div className="p-4 space-y-4 overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch h-full">
-                <div className="space-y-4">
+              <div className="p-4 space-y-4">
                 <Button
                   variant={activeTab === "chat" ? "default" : "outline"}
                   size="sm"
@@ -862,7 +861,6 @@ export default function QuantumPDFChatbot() {
                 >
                   <Activity className="w-4 h-4" />
                 </Button>
-                </div>
               </div>
             )}
           </div>
