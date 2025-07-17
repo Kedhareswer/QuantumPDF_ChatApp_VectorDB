@@ -49,6 +49,7 @@ import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { EnhancedChatProcessingSkeleton, ChatTypingIndicator } from "@/components/skeleton-loaders"
 import { ThinkingBubble } from "@/components/thinking-bubble"
+import { useToast } from "@/hooks/use-toast"
 
 interface Message {
   id: string
@@ -371,6 +372,7 @@ export function ChatInterface({
   const [showStepper, setShowStepper] = useState(false)
   const [streamedAnswer, setStreamedAnswer] = useState<string | null>(null)
   const [stepperError, setStepperError] = useState<string | null>(null)
+  const { toast } = useToast();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -421,12 +423,32 @@ export function ChatInterface({
     }
   }
 
-  const copyToClipboard = async (text: string) => {
+  const handleCopy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text)
+      toast({
+        title: "Copied!",
+        description: "Message copied to clipboard."
+      })
     } catch (err) {
-      console.error("Failed to copy text: ", err)
+      toast({
+        title: "Copy failed",
+        description: "Could not copy message.",
+        variant: "destructive"
+      })
     }
+  }
+  const handleThumbsUp = () => {
+    toast({
+      title: "Feedback received!",
+      description: "You liked this response."
+    })
+  }
+  const handleThumbsDown = () => {
+    toast({
+      title: "Feedback received!",
+      description: "You disliked this response."
+    })
   }
 
   const formatTimestamp = (date: Date) => {
@@ -918,7 +940,7 @@ ${diagnostics.documents.length === 0
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => copyToClipboard(message.content)}
+                          onClick={() => handleCopy(message.content)}
                           className={`h-8 w-8 p-0 ${message.role === "user" ? "text-white hover:bg-white/20" : "text-gray-600 hover:bg-gray-100"}`}
                           aria-label="Copy message"
                         >
@@ -931,6 +953,7 @@ ${diagnostics.documents.length === 0
                               variant="ghost"
                               className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
                               aria-label="Thumbs up"
+                              onClick={handleThumbsUp}
                             >
                               <ThumbsUp className="w-4 h-4" />
                             </Button>
@@ -939,6 +962,7 @@ ${diagnostics.documents.length === 0
                               variant="ghost"
                               className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
                               aria-label="Thumbs down"
+                              onClick={handleThumbsDown}
                             >
                               <ThumbsDown className="w-4 h-4" />
                             </Button>
