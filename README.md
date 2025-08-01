@@ -50,13 +50,17 @@ QuantumPDF ChatApp enables intelligent conversations with PDF documents. Built w
 ---
 
 ## How to use this
-### Step-1:
+### Step-1: Setup api keys
+![Step 1](/Step-1.gif)
 
-### Step-2:
+### Step-2: Connect to Local(slow) or other Vector Databases
+![Step 2](/Step-2.gif)
 
-### Step-3:
+### Step-3: Upload PDF Files 1 or 10(max tested)
+![Step 3](/Step-3.gif)
 
-### Step-4:
+### Step-4: Ask your questions
+![Step 4](/Step-4.gif)
 
 
 ## 🔧 How It Works
