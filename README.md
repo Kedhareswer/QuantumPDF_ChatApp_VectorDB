@@ -49,6 +49,16 @@ QuantumPDF ChatApp enables intelligent conversations with PDF documents. Built w
 
 ---
 
+## How to use this
+### Step-1:
+
+### Step-2:
+
+### Step-3:
+
+### Step-4:
+
+
 ## 🔧 How It Works
 
 ### Core Processing Flow
