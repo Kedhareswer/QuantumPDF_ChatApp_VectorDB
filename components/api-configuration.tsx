@@ -29,10 +29,10 @@ const PROVIDER_MODELS = {
     "deepseek-ai/DeepSeek-R1",
     "google/gemma-2-2b-it",
   ],
-  openai: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo"],
+  openai: ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini", "gpt-4-turbo"],
   anthropic: [
+    "claude-sonnet-4-20250514",
     "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
     "claude-3-opus-20240229",
     "claude-3-sonnet-20240229",
   ],
@@ -50,7 +50,7 @@ const PROVIDER_MODELS = {
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
     "gemma2-9b-it",
-    "deepseek-r1-distill-llama-70b"
+    "openai/gpt-oss-120b"
   ],
 }
 

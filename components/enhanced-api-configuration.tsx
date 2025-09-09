@@ -35,7 +35,7 @@ const PROVIDER_INFO = {
   openai: {
     name: "OpenAI",
     description: "Premium API with high-quality models",
-    models: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo"],
+    models: ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini", "gpt-4-turbo"],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.openai.com/v1",
     features: ["High Quality", "Fast Response", "Latest Models"],
@@ -47,8 +47,8 @@ const PROVIDER_INFO = {
   anthropic: {
     name: "Anthropic",
     description: "Claude models with strong reasoning",
-    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
-    defaultModel: "claude-3-5-sonnet-20241022",
+    models: ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
+    defaultModel: "claude-sonnet-4-20250514",
     baseUrl: "https://api.anthropic.com",
     features: ["Strong Reasoning", "Long Context", "Safety Focused"],
     limitations: ["Paid Service", "No Embeddings", "Limited Availability"],
@@ -84,7 +84,7 @@ const PROVIDER_INFO = {
       "llama-3.3-70b-versatile", 
       "llama-3.1-8b-instant", 
       "gemma2-9b-it",
-      "deepseek-r1-distill-llama-70b"
+      "openai/gpt-oss-120b"
     ],
     defaultModel: "llama-3.1-8b-instant",
     baseUrl: "https://api.groq.com/openai/v1",
@@ -100,11 +100,11 @@ const PROVIDER_INFO = {
     models: [
       "openai/gpt-4o",
       "openai/gpt-4o-mini", 
-      "anthropic/claude-3.5-sonnet",
+      "anthropic/claude-sonnet-4",
       "meta-llama/llama-3.3-70b-instruct",
-      "google/gemini-2.0-flash-exp",
+      "google/gemini-2.5-flash",
       "deepseek/deepseek-v3",
-      "openai/o1-preview"
+      "openai/o3-mini"
     ],
     defaultModel: "openai/gpt-4o-mini",
     baseUrl: "https://openrouter.ai/api/v1",
@@ -120,7 +120,7 @@ const PROVIDER_INFO = {
     description: "Serverless open-source models",
     models: [
       "meta-llama/Meta-Llama-3.3-70B-Instruct", 
-      "Qwen/Qwen2.5-72B-Instruct",
+      "Qwen/Qwen3-72B-Instruct",
       "deepseek-ai/DeepSeek-V3"
     ],
     defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
@@ -163,7 +163,7 @@ const PROVIDER_INFO = {
   vertex: {
     name: "Google Vertex AI",
     description: "Enterprise AI platform with embeddings",
-    models: ["gemini-2.5-pro", "gemini-2.5-flash", "text-embedding-gecko"],
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "text-embedding-004"],
     defaultModel: "gemini-2.5-pro",
     baseUrl: "https://us-central1-aiplatform.googleapis.com/v1",
     features: ["Enterprise Grade", "Embeddings", "Google Cloud Integration"],
@@ -204,8 +204,8 @@ const PROVIDER_INFO = {
   xai: {
     name: "xAI (Grok)",
     description: "Real-time knowledge models",
-    models: ["grok-3-beta", "grok-3-mini-beta", "grok-beta"],
-    defaultModel: "grok-3-mini-beta",
+    models: ["grok-4-0709", "grok-3", "grok-3-mini"],
+    defaultModel: "grok-4-0709",
     baseUrl: "https://api.xai.com/v1",
     features: ["Real-time Knowledge", "Strong Reasoning", "Fast Response"],
     limitations: ["No Embeddings", "Limited Availability", "API Costs"],
@@ -216,8 +216,8 @@ const PROVIDER_INFO = {
   alibaba: {
     name: "Alibaba Cloud",
     description: "Qwen models with multilingual capabilities",
-    models: ["qwen-max", "qwen-plus", "qwen-turbo"],
-    defaultModel: "qwen-turbo",
+    models: ["qwen2.5-max", "qwen-max", "qwen-turbo"],
+    defaultModel: "qwen2.5-max",
     baseUrl: "https://dashscope.aliyuncs.com/api/v1",
     features: ["Multilingual", "Chinese Excellence", "Cloud Integration"],
     limitations: ["No Embeddings", "Limited Global Availability", "API Costs"],
@@ -228,8 +228,8 @@ const PROVIDER_INFO = {
   minimax: {
     name: "MiniMax",
     description: "Chinese conversational AI models",
-    models: ["abab5.5-chat", "abab5-chat", "abab4-chat"],
-    defaultModel: "abab5.5-chat",
+    models: ["abab6-chat", "abab5.5-chat", "abab5-chat"],
+    defaultModel: "abab6-chat",
     baseUrl: "https://api.minimax.chat/v1",
     features: ["Chinese Excellence", "Conversational Focus", "Cultural Context"],
     limitations: ["No Embeddings", "Limited Global Availability", "API Costs"],

@@ -73,7 +73,7 @@ interface AIConfig {
 }
 
 interface VectorDBConfig {
-  provider: "pinecone" | "weaviate" | "chroma" | "local"
+  provider: "pinecone" | "local"
   apiKey?: string
   environment?: string
   indexName?: string
@@ -251,17 +251,16 @@ export const useAppStore = create<AppState>()(
         activeTab: state.activeTab,
       }),
       // Add version and migration logic
-      version: 1,
+      version: 2,
       migrate: (persistedState: any, version: number) => {
+        // v0 -> v1: validate AI provider
         if (version === 0) {
-          // Migration from version 0 to 1: fix invalid providers
           if (persistedState.aiConfig) {
             const validProviders = [
               "huggingface", "openai", "anthropic", "aiml", "groq", "openrouter",
               "deepinfra", "deepseek", "googleai", "vertex", "mistral", "perplexity",
               "xai", "alibaba", "minimax", "fireworks", "cerebras", "replicate", "anyscale"
             ];
-            
             if (!validProviders.includes(persistedState.aiConfig.provider)) {
               console.warn(`Migrating invalid provider "${persistedState.aiConfig.provider}" to "openai"`);
               persistedState.aiConfig = {
@@ -273,6 +272,26 @@ export const useAppStore = create<AppState>()(
             }
           }
         }
+
+        // v1 -> v2: remove deprecated vector DB providers (weaviate, chroma)
+        if (version <= 1) {
+          if (persistedState.vectorDBConfig) {
+            const prov = persistedState.vectorDBConfig.provider;
+            if (prov === "weaviate" || prov === "chroma") {
+              const hasApiKey = !!persistedState.vectorDBConfig.apiKey;
+              const newProvider = hasApiKey ? "pinecone" : "local";
+              console.warn(`Migrating deprecated vector DB provider "${prov}" to "${newProvider}"`);
+              persistedState.vectorDBConfig = {
+                ...persistedState.vectorDBConfig,
+                provider: newProvider,
+                // cleanup fields that no longer apply
+                url: newProvider === "local" ? "" : persistedState.vectorDBConfig.url,
+                collection: undefined,
+              };
+            }
+          }
+        }
+
         return persistedState;
       },
     },
