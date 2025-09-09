@@ -9,10 +9,20 @@ export interface OCRResult {
 export class BrowserOCRProcessor {
   private tesseract: any = null
   private isInitialized = false
+  private currentLanguage = 'eng'
 
-  private async initializeTesseract() {
-    if (this.isInitialized && this.tesseract) {
+  constructor(private options: { language?: string } = {}) {
+    this.currentLanguage = options.language || 'eng'
+  }
+
+  private async initializeTesseract(language: string = this.currentLanguage) {
+    if (this.isInitialized && this.tesseract && this.currentLanguage === language) {
       return this.tesseract
+    }
+
+    // Clean up existing worker if language changed
+    if (this.tesseract && this.currentLanguage !== language) {
+      await this.cleanup()
     }
 
     try {
@@ -23,7 +33,8 @@ export class BrowserOCRProcessor {
         throw new Error("Tesseract.js is not available")
       }
       
-      const worker = await tesseractModule.createWorker('eng', 1, {
+      console.log(`Initializing OCR worker for language: ${language}`)
+      const worker = await tesseractModule.createWorker(language, 1, {
         logger: (m: any) => {
           if (m.status === 'recognizing text') {
             console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`)
@@ -33,17 +44,18 @@ export class BrowserOCRProcessor {
 
       this.tesseract = worker
       this.isInitialized = true
-      console.log("Tesseract.js OCR worker initialized successfully")
+      this.currentLanguage = language
+      console.log(`Tesseract.js OCR worker initialized successfully for ${language}`)
       return worker
     } catch (error) {
       console.error("OCR module not available:", error)
-      throw new Error("OCR functionality is not available in this configuration.")
+      throw new Error(`OCR functionality is not available for language ${language}. ${error instanceof Error ? error.message : ''}`)
     }
   }
 
-  async processImage(imageData: ImageData | Blob): Promise<OCRResult> {
+  async processImage(imageData: ImageData | Blob, language?: string): Promise<OCRResult> {
     try {
-      const worker = await this.initializeTesseract()
+      const worker = await this.initializeTesseract(language)
       
       console.log("Starting OCR processing...")
       const { data } = await worker.recognize(imageData)
@@ -51,7 +63,7 @@ export class BrowserOCRProcessor {
       return {
         text: data.text || "No text detected in the image.",
         confidence: data.confidence || 0,
-        language: "eng",
+        language: language || this.currentLanguage,
       }
     } catch (error) {
       console.error("OCR processing failed:", error)
@@ -68,14 +80,14 @@ export class BrowserOCRProcessor {
     }
   }
 
-  async processCanvas(canvas: HTMLCanvasElement): Promise<OCRResult> {
+  async processCanvas(canvas: HTMLCanvasElement, language?: string): Promise<OCRResult> {
     const ctx = canvas.getContext("2d")
     if (!ctx) {
       throw new Error("Cannot get canvas context")
     }
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    return this.processImage(imageData)
+    return this.processImage(imageData, language)
   }
 
   async processFile(file: File): Promise<OCRResult> {

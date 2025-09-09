@@ -308,9 +308,9 @@ export class AdvancedPDFProcessor {
     let successfulPages = 0
     let failedPages = 0
     const totalPages = pdf.numPages
-    const ocrUsed = false
-    const totalOcrConfidence = 0
-    const ocrPageCount = 0
+    let ocrUsed = false
+    let totalOcrConfidence = 0
+    let ocrPageCount = 0
 
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
       try {
@@ -342,10 +342,30 @@ export class AdvancedPDFProcessor {
           fullText += `\n\n=== Page ${pageNum} ===\n${pageText}`
           successfulPages++
         } else {
-          // Skip OCR processing - mark as failed page
-          failedPages++
-          console.warn(`No text found on page ${pageNum} - OCR disabled`)
-          fullText += `\n\n=== Page ${pageNum} (No Text) ===\n[This page appears to be image-based. Please use a text-based PDF or manual text entry.]`
+          // Try OCR fallback for pages without text
+          console.log(`No text found on page ${pageNum}, attempting OCR fallback...`)
+          try {
+            const ocrResult = await this.extractTextWithOCR(page, pageNum, onProgress)
+            if (ocrResult.text.trim() && ocrResult.confidence > 30) {
+              fullText += `\n\n=== Page ${pageNum} (OCR) ===\n${ocrResult.text}`
+              successfulPages++
+              ocrUsed = true
+              totalOcrConfidence += ocrResult.confidence
+              ocrPageCount++
+              console.log(`OCR successful for page ${pageNum}, confidence: ${ocrResult.confidence}%`)
+            } else {
+              failedPages++
+              ocrUsed = true
+              ocrPageCount++
+              totalOcrConfidence += ocrResult.confidence
+              console.warn(`OCR failed or low confidence for page ${pageNum}: ${ocrResult.confidence}%`)
+              fullText += `\n\n=== Page ${pageNum} (OCR Failed) ===\n[This page appears to be image-based with poor OCR results. Manual text entry recommended.]`
+            }
+          } catch (ocrError) {
+            failedPages++
+            console.error(`OCR processing failed for page ${pageNum}:`, ocrError)
+            fullText += `\n\n=== Page ${pageNum} (OCR Error) ===\n[OCR processing failed. This page may contain images or complex formatting.]`
+          }
         }
       } catch (pageError) {
         failedPages++
@@ -438,9 +458,56 @@ export class AdvancedPDFProcessor {
     pageNum: number,
     onProgress?: (progress: ProcessingProgress) => void,
   ): Promise<{ text: string; confidence: number }> {
-    // Skip OCR processing to avoid version conflicts
-    console.warn(`Skipping OCR for page ${pageNum} - OCR disabled`)
-    return { text: "", confidence: 0 }
+    try {
+      console.log(`Starting OCR processing for page ${pageNum}`)
+      
+      onProgress?.({
+        stage: `OCR processing page ${pageNum}...`,
+        progress: 50,
+        method: "OCR",
+        details: "Rendering page to canvas"
+      })
+
+      // Create canvas and render page at higher resolution for better OCR
+      const viewport = page.getViewport({ scale: 2.0 })
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+      
+      if (!context) {
+        throw new Error('Cannot create canvas context for OCR')
+      }
+
+      canvas.height = viewport.height
+      canvas.width = viewport.width
+
+      // Render page to canvas
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport,
+      }
+
+      await page.render(renderContext).promise
+
+      onProgress?.({
+        stage: `OCR processing page ${pageNum}...`,
+        progress: 70,
+        method: "OCR",
+        details: "Running text recognition"
+      })
+
+      // Process canvas with OCR
+      const ocrResult = await this.ocrProcessor.processCanvas(canvas)
+      
+      console.log(`OCR completed for page ${pageNum}, confidence: ${ocrResult.confidence}%`)
+      
+      return {
+        text: ocrResult.text || "",
+        confidence: ocrResult.confidence || 0
+      }
+    } catch (error) {
+      console.error(`OCR processing failed for page ${pageNum}:`, error)
+      return { text: "", confidence: 0 }
+    }
   }
 
   private async processWithServer(
