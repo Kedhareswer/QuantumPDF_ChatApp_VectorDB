@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Zap, Database, Eye, EyeOff, Check, X, ExternalLink, Info, AlertTriangle, Settings, Loader2, Globe, Cpu, Sparkles, Brain, Search } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
 import { 
   ConfigurationTestingSkeleton, 
@@ -261,7 +262,7 @@ interface UnifiedConfigurationProps {
 }
 
 export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfigurationProps) {
-  const { aiConfig, setAIConfig, vectorDBConfig, setVectorDBConfig, addError } =
+  const { aiConfig, setAIConfig, vectorDBConfig, setVectorDBConfig, addError, ragSettings, setRagSettings } =
     useAppStore()
 
   const [showApiKeys, setShowApiKeys] = useState({
@@ -644,6 +645,38 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
                     Test Connection
                 </Button>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* RAG Settings */}
+            <Card className="border-2 border-black shadow-none">
+              <CardHeader className="border-b border-black">
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <span>RAG SETTINGS</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium">Enable Pre-Compression</div>
+                    <div className="text-xs text-gray-500">Condense retrieved chunks to only the most relevant sentences before sending to the model</div>
+                  </div>
+                  <Switch
+                    checked={ragSettings.preCompressionEnabled}
+                    onCheckedChange={(v) => setRagSettings({ preCompressionEnabled: v })}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium">Use Vector DB for Retrieval</div>
+                    <div className="text-xs text-gray-500">Retrieve relevant chunks through the configured vector database (falls back to in-memory if disabled/unavailable)</div>
+                  </div>
+                  <Switch
+                    checked={ragSettings.useVectorDBRetrieval}
+                    onCheckedChange={(v) => setRagSettings({ useVectorDBRetrieval: v })}
+                  />
+                </div>
               </CardContent>
             </Card>
           </div>

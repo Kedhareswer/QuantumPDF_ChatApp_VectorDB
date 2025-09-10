@@ -116,6 +116,12 @@ interface AppState {
   sidebarOpen: boolean
   sidebarCollapsed: boolean
 
+  // RAG settings
+  ragSettings: {
+    preCompressionEnabled: boolean
+    useVectorDBRetrieval: boolean
+  }
+
   // Error handling
   errors: AppError[]
 
@@ -134,6 +140,7 @@ interface AppState {
   setActiveTab: (tab: string) => void
   setSidebarOpen: (open: boolean) => void
   setSidebarCollapsed: (collapsed: boolean) => void
+  setRagSettings: (partial: Partial<AppState["ragSettings"]>) => void
   addError: (error: Omit<AppError, "id" | "timestamp">) => void
   removeError: (id: string) => void
   clearErrors: () => void
@@ -168,6 +175,11 @@ export const useAppStore = create<AppState>()(
       sidebarOpen: false,
       sidebarCollapsed: false,
       errors: [],
+
+      ragSettings: {
+        preCompressionEnabled: true,
+        useVectorDBRetrieval: true,
+      },
 
       // Actions
       addMessage: (message) =>
@@ -222,6 +234,9 @@ export const useAppStore = create<AppState>()(
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
 
+      setRagSettings: (partial) =>
+        set((state) => ({ ragSettings: { ...state.ragSettings, ...partial } })),
+
       addError: (error) =>
         set((state) => ({
           errors: [
@@ -249,9 +264,10 @@ export const useAppStore = create<AppState>()(
         wandbConfig: state.wandbConfig,
         sidebarCollapsed: state.sidebarCollapsed,
         activeTab: state.activeTab,
+        ragSettings: state.ragSettings,
       }),
       // Add version and migration logic
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
         // v0 -> v1: validate AI provider
         if (version === 0) {
@@ -288,6 +304,16 @@ export const useAppStore = create<AppState>()(
                 url: newProvider === "local" ? "" : persistedState.vectorDBConfig.url,
                 collection: undefined,
               };
+            }
+          }
+        }
+
+        // v2 -> v3: add RAG settings defaults
+        if (version <= 2) {
+          if (!persistedState.ragSettings) {
+            persistedState.ragSettings = {
+              preCompressionEnabled: true,
+              useVectorDBRetrieval: true,
             }
           }
         }

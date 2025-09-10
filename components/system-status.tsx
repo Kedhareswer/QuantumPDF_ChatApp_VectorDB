@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react"
 import { Activity, Zap, Database, Clock, Target, Cpu, Wifi, AlertTriangle, CheckCircle, XCircle, TrendingUp, Server, Network, BarChart3, Gauge } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -15,6 +16,8 @@ interface SystemStatusProps {
   documents: any[]
   messages: any[]
   ragEngine: { isHealthy?: () => boolean } | any
+  ragEngineInstance?: any
+  ragSettings?: { preCompressionEnabled: boolean; useVectorDBRetrieval: boolean }
 }
 
 interface RealTimeMetrics {
@@ -57,6 +60,8 @@ export function SystemStatus({
   documents = [],
   messages = [],
   ragEngine = {},
+  ragEngineInstance,
+  ragSettings,
 }: SystemStatusProps) {
   const { toast } = useToast()
   const [realTimeMetrics, setRealTimeMetrics] = useState<RealTimeMetrics>({
@@ -412,6 +417,36 @@ export function SystemStatus({
     alerts: true
   })
 
+  // RAG diagnostics state
+  const [retrievalDiag, setRetrievalDiag] = useState<{
+    path: 'vector' | 'local' | 'unknown'
+    sources: string[]
+  }>({ path: 'unknown', sources: [] })
+  const [isTestingRetrieval, setIsTestingRetrieval] = useState(false)
+
+  const desiredRetrievalMode: 'vector' | 'local' = ragSettings?.useVectorDBRetrieval ? 'vector' : 'local'
+
+  const handleTestRetrievalPath = async () => {
+    if (!ragEngineInstance?.testRetrievalPath) {
+      setRetrievalDiag({ path: 'unknown', sources: [] })
+      return
+    }
+    try {
+      setIsTestingRetrieval(true)
+      const res = await ragEngineInstance.testRetrievalPath('diagnostic retrieval test', 5)
+      setRetrievalDiag({
+        path: res.path,
+        sources: (res.chunks || []).map((c: any) => c.source).slice(0, 5)
+      })
+      toast({ description: `Retrieval test used ${res.path.toUpperCase()} path` })
+    } catch (err) {
+      console.error('Retrieval test failed:', err)
+      setRetrievalDiag({ path: 'unknown', sources: [] })
+    } finally {
+      setIsTestingRetrieval(false)
+    }
+  }
+
   useEffect(() => {
     const initializeMetrics = async () => {
       setIsInitializing(true)
@@ -469,6 +504,13 @@ export function SystemStatus({
             <span>SYSTEM HEALTH</span>
           </CardTitle>
             <div className="flex items-center space-x-2">
+              {/* RAG diagnostics badge showing intended retrieval mode */}
+              <Badge
+                variant="outline"
+                className={`text-xs ${desiredRetrievalMode === 'vector' ? 'border-blue-600 text-blue-600' : 'border-gray-600 text-gray-600'}`}
+              >
+                RAG: {desiredRetrievalMode.toUpperCase()}
+              </Badge>
               <Badge 
                 variant="outline" 
                 className={`border-black ${getPerformanceColor(realTimeMetrics.performanceScore)}`}
@@ -627,6 +669,43 @@ export function SystemStatus({
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Test Retrieval Path */}
+          <div className="mt-4 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm">
+                <div className="font-medium">RAG Retrieval Path Test</div>
+                <div className="text-xs text-gray-600">Verify whether retrieval uses Vector DB or local search and view top sources.</div>
+              </div>
+              <Button
+                variant="outline"
+                className="border-2 border-black"
+                onClick={handleTestRetrievalPath}
+                disabled={isTestingRetrieval}
+              >
+                {isTestingRetrieval ? 'Testing...' : 'Test Retrieval Path'}
+              </Button>
+            </div>
+
+            {retrievalDiag.path !== 'unknown' && (
+              <div className="mt-3 text-xs text-gray-700">
+                <div>
+                  <Badge variant="outline" className="mr-2">Result</Badge>
+                  Used <strong>{retrievalDiag.path.toUpperCase()}</strong> path
+                </div>
+                {retrievalDiag.sources.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-gray-600">Top Sources:</div>
+                    <ul className="list-disc pl-5">
+                      {retrievalDiag.sources.slice(0, 5).map((s, i) => (
+                        <li key={`${s}-${i}`} className="truncate">{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

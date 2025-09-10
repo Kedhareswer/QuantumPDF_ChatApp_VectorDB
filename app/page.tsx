@@ -52,6 +52,7 @@ export default function QuantumPDFChatbot() {
     aiConfig,
     vectorDBConfig,
     wandbConfig,
+    ragSettings,
     isProcessing,
     modelStatus,
     activeTab,
@@ -133,7 +134,23 @@ export default function QuantumPDFChatbot() {
         message: `Using local storage: ${error.message}`,
       })
     })
+    // Pass vector DB to RAG engine
+    try {
+      ragEngine.setVectorDBClient(newVectorDB)
+    } catch (e) {
+      console.warn("Could not attach vector DB client to RAG engine", e)
+    }
   }, [vectorDBConfig, addError])
+
+  // Keep RAGEngine runtime settings (toggles) in sync with store
+  useEffect(() => {
+    try {
+      ragEngine.setPreCompressionEnabled(ragSettings.preCompressionEnabled)
+      ragEngine.setUseVectorDBRetrieval(ragSettings.useVectorDBRetrieval)
+    } catch (e) {
+      console.warn("Failed to sync RAG engine settings", e)
+    }
+  }, [ragEngine, ragSettings.preCompressionEnabled, ragSettings.useVectorDBRetrieval])
 
   const handleSendMessage = async (content: string, options?: {
     showThinking?: boolean,
@@ -305,23 +322,8 @@ export default function QuantumPDFChatbot() {
       console.log("✅ Document successfully added to store")
 
       // Add to vector database
-      console.log("🔄 Preparing vector database documents...")
-      const vectorDocuments = document.chunks.map((chunk: string, index: number) => ({
-        id: `${document.id}_${index}`,
-        content: chunk,
-        embedding: document.embeddings[index] || [],
-        metadata: {
-          source: document.name,
-          chunkIndex: index,
-          documentId: document.id,
-          timestamp: document.uploadedAt,
-        },
-      }))
-      console.log("- Vector documents prepared:", vectorDocuments.length)
-
-      console.log("🔄 Adding documents to vector database...")
-      await vectorDB.addDocuments(vectorDocuments)
-      console.log("✅ Documents successfully added to vector database")
+      // Persistence to vector DB is handled inside RAGEngine.addDocument when a client is attached.
+      // Avoid duplicating adds here.
 
       // If this is the first document and AI is configured, switch to chat
       if (documents.length === 0 && modelStatus === "ready") {
@@ -807,6 +809,8 @@ export default function QuantumPDFChatbot() {
                         documents={documents}
                         messages={messages}
                         ragEngine={ragEngine ? ragEngine.getStatus() : {}}
+                        ragEngineInstance={ragEngine}
+                        ragSettings={ragSettings}
                       />
                     </div>
                     )}

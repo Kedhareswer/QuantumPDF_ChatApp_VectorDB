@@ -60,6 +60,8 @@ interface QualityGate {
 
 import { AIClient } from "./ai-client"
 import { PDFParser } from "./pdf-parser"
+import { VectorDatabaseClient } from "./vector-database-client"
+import type { SearchOptions, VectorDocument } from "./vector-database-types"
 
 interface Document {
   id: string
@@ -130,9 +132,24 @@ export class RAGEngine {
   private currentConfig: AIConfig | null = null
   private tokenBudget = 4000 // Default token budget
   private showThinking = false // Option to show/hide thinking process
+  private vectorDB: VectorDatabaseClient | null = null
+  private enablePreCompression = true
+  private useVectorDBRetrieval = true
 
   constructor() {
     this.pdfParser = new PDFParser()
+  }
+
+  setVectorDBClient(client: VectorDatabaseClient | null) {
+    this.vectorDB = client
+  }
+
+  setPreCompressionEnabled(enabled: boolean) {
+    this.enablePreCompression = !!enabled
+  }
+
+  setUseVectorDBRetrieval(enabled: boolean) {
+    this.useVectorDBRetrieval = !!enabled
   }
 
   async initialize(config?: AIConfig): Promise<void> {
@@ -216,6 +233,57 @@ export class RAGEngine {
       this.isInitialized = false
       throw new Error(`RAG Engine initialization failed: ${errorMessage}`)
     }
+  }
+
+  private async retrieveRelevantChunks(
+    question: string,
+    questionEmbedding: number[],
+    topK: number,
+    filters?: RAGFilterOptions
+  ): Promise<Array<{ content: string; source: string; similarity: number }>> {
+    try {
+      if (this.vectorDB && this.useVectorDBRetrieval) {
+        console.log("retrieveRelevantChunks: Using Vector DB retrieval")
+        const dbFilters: Record<string, any> = {}
+        if (filters?.documentIds && filters.documentIds.length > 0) {
+          dbFilters.documentId = { $in: filters.documentIds }
+        }
+        if (filters?.authors && filters.authors.length > 0) {
+          dbFilters.author = { $in: filters.authors }
+        }
+        if (filters?.tags && filters.tags.length > 0) {
+          dbFilters.tags = { $in: filters.tags }
+        }
+        if (filters?.dateRange) {
+          dbFilters.date = {
+            ...(filters.dateRange.start ? { $gte: filters.dateRange.start } : {}),
+            ...(filters.dateRange.end ? { $lte: filters.dateRange.end } : {}),
+          }
+        }
+
+        const options: SearchOptions = {
+          mode: "hybrid",
+          limit: topK,
+          threshold: filters?.minSimilarity ?? 0.05,
+          filters: Object.keys(dbFilters).length > 0 ? dbFilters : undefined,
+        }
+
+        const results = await this.vectorDB.search(question, questionEmbedding, options)
+        console.log("Vector DB results:", results.length)
+        const mapped = results.slice(0, topK).map((r) => ({
+          content: r.content,
+          source: r.metadata?.source || "Unknown Document",
+          similarity: typeof r.score === 'number' ? r.score : 0,
+        }))
+        return mapped
+      }
+    } catch (error) {
+      console.error("Vector DB retrieval failed; falling back to local:", error)
+    }
+
+    // Fallback to local in-memory retrieval
+    console.log("retrieveRelevantChunks: Falling back to local similarity search")
+    return this.findRelevantChunks(questionEmbedding, topK, filters)
   }
 
   async updateConfig(config: AIConfig) {
@@ -454,6 +522,31 @@ export class RAGEngine {
       console.log("- Document name:", document.name)
       console.log("- Chunks:", document.chunks.length)
       console.log("- Total documents in RAG engine:", this.documents.length)
+      
+      // Persist to vector database if available
+      if (this.vectorDB) {
+        try {
+          console.log("🔄 Persisting document chunks to vector DB via API route...")
+          const vectorDocs: VectorDocument[] = document.chunks.map((chunk, index) => ({
+            id: `${document.id}_${index}`,
+            content: chunk,
+            embedding: document.embeddings[index] || [],
+            metadata: {
+              source: document.name,
+              chunkIndex: index,
+              documentId: document.id,
+              timestamp: document.uploadedAt,
+              ...(document.metadata || {})
+            }
+          }))
+          await this.vectorDB.addDocuments(vectorDocs)
+          console.log("✅ Persisted to vector DB: ", vectorDocs.length, "chunks")
+        } catch (persistError) {
+          console.error("❌ Failed to persist document to vector DB:", persistError)
+        }
+      } else {
+        console.log("ℹ️ Vector DB client not set; skipping persistence")
+      }
       
       // Verify the document was actually added
       const addedDoc = this.documents.find(d => d.id === document.id)
@@ -812,15 +905,15 @@ export class RAGEngine {
       const chunkLimit = this.getOptimalChunkLimit(questionType)
       console.log(`Question type: ${questionType}, chunk limit: ${chunkLimit}`)
       
-      // Find relevant chunks
+      // Find relevant chunks (prefer vector DB when available)
       console.log("Finding relevant chunks...")
-      let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit, filters);
+      let relevantChunks = await this.retrieveRelevantChunks(question, questionEmbedding, chunkLimit, filters);
       console.log(`Found ${relevantChunks.length} relevant chunks`)
       
       // Debug: Log chunk similarities
       if (relevantChunks.length > 0) {
         console.log("Top chunks:")
-        relevantChunks.slice(0, 3).forEach((chunk, i) => {
+        relevantChunks.slice(0, 3).forEach((chunk: { content: string; source: string; similarity: number }, i: number) => {
           console.log(`  ${i + 1}. Similarity: ${chunk.similarity.toFixed(3)}, Source: ${chunk.source}`)
           console.log(`     Content preview: ${chunk.content.substring(0, 100)}...`)
         })
@@ -859,20 +952,30 @@ export class RAGEngine {
         }
       }
 
-      // Pre-compress chunks to keep only the most relevant sentences before optimizing for tokens
-      console.log("Pre-compressing chunks for token budget:", tokenBudget * 0.7)
-      const preCompressed = this.preCompressChunks(relevantChunks, question, Math.floor(tokenBudget * 0.7))
-      console.log(
-        `Pre-compressed chunks (avg length): ${
-          preCompressed.length > 0
-            ? Math.floor(preCompressed.reduce((s, c) => s + (c.content?.length || 0), 0) / preCompressed.length)
-            : 0
-        } chars`
-      )
+      // Optionally pre-compress chunks to keep only the most relevant sentences before optimizing for tokens
+      const contextBudget = Math.floor(tokenBudget * 0.7)
+      let preparedChunks = relevantChunks
+      if (this.enablePreCompression) {
+        console.log("Pre-compressing chunks for token budget:", contextBudget)
+        preparedChunks = this.preCompressChunks(relevantChunks, question, contextBudget)
+        console.log(
+          `Pre-compressed chunks (avg length): ${preparedChunks.length > 0
+              ? Math.floor(
+                  preparedChunks.reduce(
+                    (sum: number, ch: { content: string }) => sum + (ch.content?.length || 0),
+                    0,
+                  ) / preparedChunks.length,
+                )
+              : 0
+          } chars`,
+        )
+      } else {
+        console.log("Pre-compression disabled; using raw chunks")
+      }
 
       // Optimize chunks for token budget
-      console.log("Optimizing chunks for token budget:", tokenBudget * 0.7)
-      const optimizedChunks = this.optimizeChunksForTokens(preCompressed, tokenBudget * 0.7)
+      console.log("Optimizing chunks for token budget:", contextBudget)
+      const optimizedChunks = this.optimizeChunksForTokens(preparedChunks, contextBudget)
       console.log(`Optimized to ${optimizedChunks.length} chunks`)
       
       const context = optimizedChunks.map(chunk => chunk.content).join("\n\n");
@@ -1378,6 +1481,55 @@ Provide ONLY the final response - no explanations about changes made.`
     }
   }
 
+  // Diagnostics helper to test current retrieval path and list top sources
+  async testRetrievalPath(
+    question: string = "diagnostic retrieval test",
+    topK: number = 5,
+    filters?: RAGFilterOptions
+  ): Promise<{ path: 'vector' | 'local'; chunks: Array<{ content: string; source: string; similarity: number }> }> {
+    if (!this.isInitialized || !this.aiClient) {
+      throw new Error("RAG engine not initialized")
+    }
+
+    const embedding = await this.aiClient.generateEmbedding(question)
+
+    if (this.vectorDB && this.useVectorDBRetrieval) {
+      try {
+        const dbFilters: Record<string, any> = {}
+        if (filters?.documentIds && filters.documentIds.length > 0) dbFilters.documentId = { $in: filters.documentIds }
+        if (filters?.authors && filters.authors.length > 0) dbFilters.author = { $in: filters.authors }
+        if (filters?.tags && filters.tags.length > 0) dbFilters.tags = { $in: filters.tags }
+        if (filters?.dateRange) {
+          dbFilters.date = {
+            ...(filters.dateRange.start ? { $gte: filters.dateRange.start } : {}),
+            ...(filters.dateRange.end ? { $lte: filters.dateRange.end } : {}),
+          }
+        }
+
+        const options: SearchOptions = {
+          mode: 'hybrid',
+          limit: topK,
+          threshold: filters?.minSimilarity ?? 0.05,
+          filters: Object.keys(dbFilters).length > 0 ? dbFilters : undefined,
+        }
+
+        const results = await this.vectorDB.search(question, embedding, options)
+        const chunks = results.slice(0, topK).map((r) => ({
+          content: r.content,
+          source: r.metadata?.source || 'Unknown Document',
+          similarity: typeof r.score === 'number' ? r.score : 0,
+        }))
+        return { path: 'vector', chunks }
+      } catch (err) {
+        console.warn('testRetrievalPath: Vector DB path failed, falling back to local', err)
+      }
+    }
+
+    // Fallback to local
+    const localChunks = this.findRelevantChunks(embedding, topK, filters)
+    return { path: 'local', chunks: localChunks }
+  }
+
   getDocuments(): Document[] {
     return Array.isArray(this.documents) ? this.documents : []
   }
@@ -1393,6 +1545,13 @@ Provide ONLY the final response - no explanations about changes made.`
 
       const removedCount = initialLength - this.documents.length
       console.log(`Removed ${removedCount} document(s) with ID: ${documentId}`)
+
+      // Also remove from vector DB if available
+      if (this.vectorDB) {
+        this.vectorDB.deleteDocument(documentId).catch((err) => {
+          console.error("Failed to delete document from vector DB:", err)
+        })
+      }
     } catch (error) {
       console.error("Error removing document:", error)
     }
@@ -1402,6 +1561,13 @@ Provide ONLY the final response - no explanations about changes made.`
     try {
       this.documents = []
       console.log("Cleared all documents from RAG engine")
+
+      // Clear vector DB as well if available
+      if (this.vectorDB) {
+        this.vectorDB.clear().catch((err) => {
+          console.error("Failed to clear vector DB:", err)
+        })
+      }
     } catch (error) {
       console.error("Error clearing documents:", error)
     }
