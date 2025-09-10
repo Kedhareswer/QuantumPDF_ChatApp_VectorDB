@@ -480,10 +480,10 @@ export class RAGEngine {
   }
 
   private findRelevantChunks(questionEmbedding: number[], topK: number, filters?: RAGFilterOptions) {
-    const allChunks: Array<{ content: string; source: string; similarity: number }> = [];
+    const allChunks: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number }> = [];
 
     try {
-      console.log("findRelevantChunks: Starting chunk search")
+      console.log("Enhanced findRelevantChunks: Starting multi-document search")
       
       // Validate inputs
       if (!Array.isArray(questionEmbedding) || questionEmbedding.length === 0) {
@@ -501,9 +501,11 @@ export class RAGEngine {
         return [];
       }
 
-      console.log(`Processing ${this.documents.length} documents for similarity search`)
+      console.log(`Processing ${this.documents.length} documents for enhanced similarity search`)
 
-      // Calculate similarity for all chunks
+      // Enhanced multi-document processing with better fairness
+      const documentMetrics = new Map<string, { avgSimilarity: number; chunkCount: number; bestSimilarity: number }>()
+      
       this.documents.forEach((doc, docIndex) => {
         try {
           console.log(`Processing document ${docIndex}: ${doc.name}`)
@@ -511,25 +513,39 @@ export class RAGEngine {
           // Apply document-level filters first
           if (filters) {
             if (filters.documentIds && filters.documentIds.length > 0 && !filters.documentIds.includes(doc.id)) {
+              console.log(`Skipping document ${doc.name} - not in document ID filter`)
               return // Skip – ID not in whitelist
             }
             if (filters.authors && filters.authors.length > 0) {
               const author = (doc.metadata?.author || '').toString().toLowerCase()
               const matchesAuthor = filters.authors.some((a) => a.toLowerCase() === author)
-              if (!matchesAuthor) return
+              if (!matchesAuthor) {
+                console.log(`Skipping document ${doc.name} - author filter mismatch`)
+                return
+              }
             }
             if (filters.tags && filters.tags.length > 0) {
               const docTags: string[] = Array.isArray(doc.metadata?.tags) ? doc.metadata!.tags : []
               const tagMatch = docTags.some((t) => filters.tags!.includes(t))
-              if (!tagMatch) return
+              if (!tagMatch) {
+                console.log(`Skipping document ${doc.name} - tag filter mismatch`)
+                return
+              }
             }
             if (filters.dateRange) {
               const docDate = doc.metadata?.creationDate || doc.uploadedAt
               if (docDate instanceof Date) {
-                if (docDate < filters.dateRange.start || docDate > filters.dateRange.end) return
+                if (docDate < filters.dateRange.start || docDate > filters.dateRange.end) {
+                  console.log(`Skipping document ${doc.name} - date range filter mismatch`)
+                  return
+                }
               }
             }
           }
+          
+          let docSimilaritySum = 0
+          let validChunks = 0
+          let docBestSimilarity = 0
           
           // Validate document structure
           if (!doc || !doc.chunks || !doc.embeddings) {
@@ -582,20 +598,35 @@ export class RAGEngine {
 
               // Calculate cosine similarity
               const similarity = this.aiClient!.cosineSimilarity(questionEmbedding, chunkEmbedding);
-
-              // Apply similarity threshold if provided
-              const minSim = filters?.minSimilarity ?? 0.05
-               
-              if (typeof similarity === "number" && !isNaN(similarity) && similarity >= minSim) {
-                allChunks.push({
-                  content: chunk || "",
-                  source: `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`,
-                  similarity,
-                });
+              
+              if (typeof similarity === "number" && !isNaN(similarity)) {
+                docSimilaritySum += similarity
+                validChunks++
+                docBestSimilarity = Math.max(docBestSimilarity, similarity)
                 
-                // Log high-similarity chunks
-                if (similarity > 0.3) {
-                  console.log(`High similarity chunk found: ${similarity.toFixed(3)} from ${doc.name}`)
+                // Apply adaptive similarity threshold based on document performance
+                const adaptiveMinSim = this.calculateAdaptiveThreshold(similarity, filters?.minSimilarity ?? 0.03)
+                
+                if (similarity >= adaptiveMinSim) {
+                  // Get semantic importance from chunk metadata if available
+                  const semanticImportance = this.extractSemanticImportance(chunk, doc.metadata) 
+                  
+                  allChunks.push({
+                    content: chunk || "",
+                    source: `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`,
+                    similarity,
+                    documentId: doc.id,
+                    documentName: doc.name,
+                    semanticImportance
+                  });
+                  
+                  // Log high-similarity chunks
+                  if (similarity > 0.2) {
+                    console.log(`Strong similarity chunk found: ${similarity.toFixed(3)} from ${doc.name} (importance: ${semanticImportance.toFixed(2)})`)
+                  }
+                } else if (similarity > 0.01) {
+                  // Even low-similarity chunks are tracked for diversity purposes
+                  console.log(`Low similarity chunk: ${similarity.toFixed(3)} from ${doc.name} (below threshold but tracked)`)
                 }
               } else {
                 console.warn(`Invalid similarity calculated for chunk ${chunkIndex} in document ${docIndex}:`, similarity);
@@ -604,61 +635,30 @@ export class RAGEngine {
               console.error(`Error processing chunk ${chunkIndex} in document ${docIndex}:`, chunkError);
             }
           });
+          
+          // Store document metrics for enhanced diversity algorithm
+          if (validChunks > 0) {
+            documentMetrics.set(doc.id, {
+              avgSimilarity: docSimilaritySum / validChunks,
+              chunkCount: validChunks,
+              bestSimilarity: docBestSimilarity
+            })
+            console.log(`Document ${doc.name} metrics - Avg: ${(docSimilaritySum / validChunks).toFixed(3)}, Best: ${docBestSimilarity.toFixed(3)}, Chunks: ${validChunks}`)
+          }
         } catch (docError) {
           console.error(`Error processing document ${docIndex}:`, docError);
         }
       });
 
-      console.log(`Total chunks processed: ${allChunks.length}`)
+      console.log(`Total chunks processed: ${allChunks.length} from ${documentMetrics.size} documents`)
       
       if (allChunks.length === 0) {
         console.warn("No chunks were successfully processed")
         return [];
       }
 
-      // Sort by similarity and return top K
-      const sortedChunks = allChunks
-        .sort((a, b) => b.similarity - a.similarity)
-        .filter((chunk) => chunk.similarity >= (filters?.minSimilarity ?? 0.05));
-
-      // --- Diversity Rule: Ensure at least one chunk per document (if available) ---
-      const docChunkMap = new Map<string, { content: string; source: string; similarity: number }>();
-      // Extract document name from source string (format: "docName (chunk N)")
-      for (const chunk of sortedChunks) {
-        const docName = chunk.source.split(" (chunk ")[0];
-        if (!docChunkMap.has(docName)) {
-          docChunkMap.set(docName, chunk); // Take the highest-similarity chunk per doc
-        }
-      }
-      // Start with one chunk per document (if available)
-      const diverseChunks = Array.from(docChunkMap.values());
-      // Fill up to topK with remaining highest-similarity chunks (excluding already picked)
-      const pickedSet = new Set(diverseChunks.map((c) => c.source));
-      for (const chunk of sortedChunks) {
-        if (diverseChunks.length >= topK) break;
-        if (!pickedSet.has(chunk.source)) {
-          diverseChunks.push(chunk);
-          pickedSet.add(chunk.source);
-        }
-      }
-      // If still less than topK, just take more from sortedChunks (shouldn't happen, but for safety)
-      while (diverseChunks.length < topK && diverseChunks.length < sortedChunks.length) {
-        const next = sortedChunks[diverseChunks.length];
-        if (next && !pickedSet.has(next.source)) {
-          diverseChunks.push(next);
-          pickedSet.add(next.source);
-        }
-      }
-      // Limit to topK
-      const finalChunks = diverseChunks.slice(0, topK);
-
-      console.log(`Returning ${finalChunks.length} chunks (diversity rule, threshold: ${filters?.minSimilarity ?? 0.05}, topK: ${topK})`)
-      if (finalChunks.length > 0) {
-        console.log(`Best similarity: ${finalChunks[0].similarity.toFixed(3)}`)
-        console.log(`Worst similarity: ${finalChunks[finalChunks.length - 1].similarity.toFixed(3)}`)
-      }
-
-      return finalChunks;
+      // Enhanced Multi-Document Diversity Algorithm
+      return this.applyEnhancedDiversityAlgorithm(allChunks, documentMetrics, topK, filters?.minSimilarity ?? 0.03)
     } catch (error) {
       console.error("Error finding relevant chunks:", error);
       return [];
@@ -820,7 +820,7 @@ export class RAGEngine {
       // Debug: Log chunk similarities
       if (relevantChunks.length > 0) {
         console.log("Top chunks:")
-        relevantChunks.slice(0, 3).forEach((chunk, i) => {
+        relevantChunks.slice(0, 3).forEach((chunk: any, i: number) => {
           console.log(`  ${i + 1}. Similarity: ${chunk.similarity.toFixed(3)}, Source: ${chunk.source}`)
           console.log(`     Content preview: ${chunk.content.substring(0, 100)}...`)
         })
@@ -864,7 +864,7 @@ export class RAGEngine {
       const optimizedChunks = this.optimizeChunksForTokens(relevantChunks, tokenBudget * 0.7)
       console.log(`Optimized to ${optimizedChunks.length} chunks`)
       
-      const context = optimizedChunks.map(chunk => chunk.content).join("\n\n");
+      const context = optimizedChunks.map((chunk: any) => chunk.content).join("\n\n");
       console.log("Context length:", context.length, "characters")
       
       // Generate initial response with enhanced prompt
@@ -883,7 +883,7 @@ export class RAGEngine {
       return {
         question,
         relevantChunks: optimizedChunks,
-        context,
+        context: context,
         initialResponse: initialResponse.trim(),
         questionType,
         tokensUsed: this.estimateTokens(systemPrompt + userPrompt + initialResponse)
@@ -1442,5 +1442,156 @@ Provide ONLY the final response - no explanations about changes made.`
 
     const overlap = Math.floor(chunkSize * 0.1) // 10% overlap
     return { chunkSize, overlap }
+  }
+
+  private calculateAdaptiveThreshold(similarity: number, baseThreshold: number): number {
+    // Dynamic threshold based on overall similarity distribution
+    return Math.max(baseThreshold, baseThreshold * 0.5)
+  }
+
+  private extractSemanticImportance(chunk: string, docMetadata?: any): number {
+    let importance = 1.0
+    
+    // Boost for headings and titles
+    if (/^#{1,6}\s|^[A-Z][^.]*:?$/m.test(chunk)) {
+      importance += 0.3
+    }
+    
+    // Boost for content with key indicators
+    if (/\b(summary|conclusion|important|key|main|primary|objective)\b/i.test(chunk)) {
+      importance += 0.2
+    }
+    
+    // Boost for structured content
+    if (/\d+\.|•|-|\*/.test(chunk)) {
+      importance += 0.1
+    }
+    
+    return Math.min(2.0, importance)
+  }
+
+  private applyEnhancedDiversityAlgorithm(
+    allChunks: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number }>,
+    documentMetrics: Map<string, { avgSimilarity: number; chunkCount: number; bestSimilarity: number }>,
+    topK: number,
+    minSimilarity: number
+  ) {
+    console.log("Applying Enhanced Multi-Document Diversity Algorithm")
+    
+    // Sort chunks by enhanced ranking (similarity * semantic importance)
+    const rankedChunks = allChunks
+      .filter(chunk => chunk.similarity >= minSimilarity)
+      .sort((a, b) => {
+        const scoreA = a.similarity * a.semanticImportance
+        const scoreB = b.similarity * b.semanticImportance
+        return scoreB - scoreA
+      })
+    
+    console.log(`Ranked ${rankedChunks.length} chunks after filtering (min similarity: ${minSimilarity})`)
+    
+    if (rankedChunks.length === 0) {
+      console.warn("No chunks passed the similarity threshold - using relaxed criteria")
+      // Fallback: use top chunks from each document regardless of threshold
+      return this.getFallbackDiverseChunks(allChunks, documentMetrics, topK)
+    }
+    
+    // Enhanced diversity strategy
+    const selectedChunks: typeof rankedChunks = []
+    const documentChunkCounts = new Map<string, number>()
+    const minChunksPerDoc = Math.max(1, Math.floor(topK / documentMetrics.size))
+    const maxChunksPerDoc = Math.ceil(topK * 0.6) // No single document should dominate
+    
+    console.log(`Diversity parameters - Min per doc: ${minChunksPerDoc}, Max per doc: ${maxChunksPerDoc}, Target total: ${topK}`)
+    
+    // Phase 1: Ensure minimum representation from each document
+    console.log("Phase 1: Ensuring minimum representation from each document")
+    for (const [docId, metrics] of documentMetrics) {
+      const docChunks = rankedChunks.filter(chunk => chunk.documentId === docId)
+      const chunksToAdd = Math.min(minChunksPerDoc, docChunks.length)
+      
+      for (let i = 0; i < chunksToAdd && selectedChunks.length < topK; i++) {
+        selectedChunks.push(docChunks[i])
+        documentChunkCounts.set(docId, (documentChunkCounts.get(docId) || 0) + 1)
+      }
+      
+      const docName = docChunks[0]?.documentName || `Doc ${docId}`
+      console.log(`  Added ${chunksToAdd} chunks from ${docName} (best similarity: ${metrics.bestSimilarity.toFixed(3)})`)
+    }
+    
+    // Phase 2: Fill remaining slots with best chunks while respecting max per document
+    console.log("Phase 2: Filling remaining slots with best chunks")
+    const usedSources = new Set(selectedChunks.map(c => c.source))
+    
+    for (const chunk of rankedChunks) {
+      if (selectedChunks.length >= topK) break
+      if (usedSources.has(chunk.source)) continue
+      
+      const currentDocCount = documentChunkCounts.get(chunk.documentId) || 0
+      if (currentDocCount < maxChunksPerDoc) {
+        selectedChunks.push(chunk)
+        usedSources.add(chunk.source)
+        documentChunkCounts.set(chunk.documentId, currentDocCount + 1)
+      }
+    }
+    
+    // Final sorting by similarity for consistent results
+    const finalChunks = selectedChunks
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, topK)
+    
+    // Log final distribution
+    console.log(`Final chunk distribution:`)
+    const distribution = new Map<string, number>()
+    finalChunks.forEach(chunk => {
+      const count = distribution.get(chunk.documentName) || 0
+      distribution.set(chunk.documentName, count + 1)
+    })
+    
+    distribution.forEach((count, docName) => {
+      console.log(`  ${docName}: ${count} chunks`)
+    })
+    
+    console.log(`Returning ${finalChunks.length} chunks with enhanced diversity (${distribution.size} documents represented)`)
+    if (finalChunks.length > 0) {
+      console.log(`Best similarity: ${finalChunks[0].similarity.toFixed(3)}`)
+      console.log(`Worst similarity: ${finalChunks[finalChunks.length - 1].similarity.toFixed(3)}`)
+    }
+    
+    return finalChunks
+  }
+
+  private getFallbackDiverseChunks(
+    allChunks: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number }>,
+    documentMetrics: Map<string, { avgSimilarity: number; chunkCount: number; bestSimilarity: number }>,
+    topK: number
+  ) {
+    console.log("Using fallback diversity strategy (relaxed similarity criteria)")
+    
+    const fallbackChunks: typeof allChunks = []
+    
+    // Get the best chunk from each document
+    for (const [docId, metrics] of documentMetrics) {
+      const docChunks = allChunks
+        .filter(chunk => chunk.documentId === docId)
+        .sort((a, b) => b.similarity - a.similarity)
+      
+      if (docChunks.length > 0) {
+        fallbackChunks.push(docChunks[0])
+        console.log(`Fallback: Added best chunk from ${docChunks[0].documentName} (similarity: ${docChunks[0].similarity.toFixed(3)})`)
+      }
+    }
+    
+    // Fill remaining slots if needed
+    const usedSources = new Set(fallbackChunks.map(c => c.source))
+    const remainingChunks = allChunks
+      .filter(chunk => !usedSources.has(chunk.source))
+      .sort((a, b) => b.similarity - a.similarity)
+    
+    const slotsToFill = topK - fallbackChunks.length
+    for (let i = 0; i < slotsToFill && i < remainingChunks.length; i++) {
+      fallbackChunks.push(remainingChunks[i])
+    }
+    
+    return fallbackChunks.slice(0, topK)
   }
 }

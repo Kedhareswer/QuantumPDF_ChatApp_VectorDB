@@ -64,6 +64,8 @@ export class EnhancedPDFProcessor {
       overlap: 150,
       preserveStructure: true,
       semanticSplitting: true,
+      documentAware: true,
+      adaptiveThreshold: true,
     })
   }
 
@@ -136,7 +138,7 @@ export class EnhancedPDFProcessor {
       const processingTime = Date.now() - startTime
       const fallbackText = this.createDetailedFallbackContent(file, error, processingTime)
 
-      const advancedChunks = this.chunker.chunkText(fallbackText)
+      const advancedChunks = this.chunker.chunkText(fallbackText, Date.now().toString(), file.name)
       const chunks = advancedChunks.map((chunk) => chunk.content)
 
       return {
@@ -308,7 +310,7 @@ export class EnhancedPDFProcessor {
       throw new Error("No readable text content found in PDF")
     }
 
-    const advancedChunks = this.chunker.chunkText(textExtractionResult.fullText.trim())
+    const advancedChunks = this.chunker.chunkText(textExtractionResult.fullText.trim(), Date.now().toString(), file.name)
     const chunks = advancedChunks.map((chunk) => chunk.content)
 
     onProgress?.({
