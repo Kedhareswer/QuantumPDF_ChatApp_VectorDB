@@ -26,11 +26,14 @@ const AI_PROVIDERS = {
     category: "Major",
     models: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo", "gpt-4.1", "gpt-realtime"],
     defaultModel: "gpt-4o-mini",
-    baseUrl: "https://api.openai.com/v1",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.openai.com/v1",
     signupUrl: "https://platform.openai.com/api-keys",
-    embeddingSupport: true,
-    icon: <Sparkles className="w-4 h-4" />,
-    pricing: "$$",
+    supportsEmbeddings: true,
+    icon: "✨",
+    pricing: "Pay-per-token",
+    features: ["Chat completion", "Embeddings", "Function calling", "Vision", "Audio"]
   },
   anthropic: {
     name: "Anthropic",
@@ -38,11 +41,14 @@ const AI_PROVIDERS = {
     category: "Major",
     models: ["claude-4-opus", "claude-4.1-opus", "claude-4-sonnet", "claude-3.7-sonnet", "claude-3.5-haiku"],
     defaultModel: "claude-4-sonnet",
-    baseUrl: "https://api.anthropic.com",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.anthropic.com",
     signupUrl: "https://console.anthropic.com/",
-    embeddingSupport: false,
-    icon: <Brain className="w-4 h-4" />,
-    pricing: "$$",
+    supportsEmbeddings: false,
+    icon: "🧠",
+    pricing: "Pay-per-token",
+    features: ["Chat completion", "Function calling", "Vision", "Large context"]
   },
   googleai: {
     name: "Google AI",
@@ -50,37 +56,77 @@ const AI_PROVIDERS = {
     category: "Major",
     models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-image-preview", "gemini-2.0-flash-exp"],
     defaultModel: "gemini-2.5-flash",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
     signupUrl: "https://makersuite.google.com/app/apikey",
-    embeddingSupport: true,
-    icon: <Globe className="w-4 h-4" />,
-    pricing: "$",
+    supportsEmbeddings: true,
+    icon: "⚡",
+    pricing: "Pay-per-token",
+    features: ["Chat completion", "Embeddings", "Vision", "Multimodal"]
   },
-
-  // Fast & Affordable
   groq: {
     name: "Groq",
     description: "Ultra-fast inference with specialized hardware",
     category: "Fast",
     models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "kimi-k2-instruct", "qwen3-32b"],
     defaultModel: "llama-3.1-8b-instant",
-    baseUrl: "https://api.groq.com/openai/v1",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.groq.com/openai/v1",
     signupUrl: "https://console.groq.com/keys",
-    embeddingSupport: false,
-    icon: <Cpu className="w-4 h-4" />,
-    pricing: "$",
+    supportsEmbeddings: false,
+    icon: "🚀",
+    pricing: "Pay-per-token",
+    features: ["Ultra-fast inference", "Open source models", "Low latency"]
   },
   fireworks: {
     name: "Fireworks AI",
-    description: "Fast and cost-effective model serving",
-    category: "Fast",
+    description: "Fast inference platform with competitive pricing",
+    category: "Commercial",
     models: ["fireworks/kimi-k2-instruct-0905", "llama-v3p3-70b-instruct", "deepseek-v3", "qwen2p5-72b-instruct", "llama-v3p1-8b-instruct"],
     defaultModel: "fireworks/kimi-k2-instruct-0905",
-    baseUrl: "https://api.fireworks.ai/inference/v1",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.fireworks.ai/inference/v1",
     signupUrl: "https://fireworks.ai/",
-    embeddingSupport: true,
-    icon: <Zap className="w-4 h-4" />,
-    pricing: "$",
+    supportsEmbeddings: false,
+    icon: "🔥",
+    pricing: "Pay-per-token",
+    features: ["Fast inference", "Multiple models", "Competitive pricing"]
+  },
+  mistral: {
+    name: "Mistral AI",
+    description: "Advanced open-source and commercial LLMs with reasoning capabilities",
+    category: "Commercial",
+    models: [
+      "mistral-large-latest",
+      "mistral-medium-latest", 
+      "mistral-small-latest",
+      "magistral-medium-latest",
+      "magistral-small-latest",
+      "pixtral-large-latest",
+      "ministral-8b-latest",
+      "ministral-3b-latest",
+      "devstral-medium-latest",
+      "devstral-small-latest",
+      "codestral-latest",
+      "voxtral-small-latest",
+      "voxtral-mini-latest",
+      "open-mistral-nemo",
+      "pixtral-12b-2409",
+      "mistral-ocr-latest",
+      "mistral-moderation-latest"
+    ],
+    defaultModel: "mistral-large-latest",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.mistral.ai/v1",
+    signupUrl: "https://console.mistral.ai/",
+    supportsEmbeddings: true,
+    icon: "🌟",
+    pricing: "Pay-per-token",
+    features: ["Function calling", "Vision capabilities", "Audio input", "Code generation", "Reasoning models", "Multimodal"]
   },
   cerebras: {
     name: "Cerebras",
@@ -88,33 +134,37 @@ const AI_PROVIDERS = {
     category: "Fast",
     models: ["llama3.3-70b", "llama3.1-8b", "llama3.1-70b"],
     defaultModel: "llama3.1-8b",
-    baseUrl: "https://api.cerebras.ai/v1",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.cerebras.ai/v1",
     signupUrl: "https://cloud.cerebras.ai/",
-    embeddingSupport: false,
-    icon: <Cpu className="w-4 h-4" />,
-    pricing: "$",
+    supportsEmbeddings: false,
+    icon: "🧠",
+    pricing: "Pay-per-token",
+    features: ["Ultra-fast inference", "Specialized hardware", "Low latency"]
   },
 
   // Aggregators
   openrouter: {
     name: "OpenRouter",
-    description: "Access to 400+ AI models through one API",
+    description: "Access to multiple AI models through one API",
     category: "Aggregator",
     models: [
-      "openai/gpt-4o", 
+      "openai/gpt-4o",
       "openai/gpt-4o-mini",
-      "anthropic/claude-3.5-sonnet", 
-      "meta-llama/llama-3.3-70b-instruct", 
-      "google/gemini-2.0-flash-exp",
-      "deepseek/deepseek-v3",
-      "openai/o1-preview"
+      "anthropic/claude-3.5-sonnet",
+      "google/gemini-pro-1.5",
+      "meta-llama/llama-3.1-405b-instruct",
     ],
     defaultModel: "openai/gpt-4o-mini",
-    baseUrl: "https://openrouter.ai/api/v1",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://openrouter.ai/api/v1",
     signupUrl: "https://openrouter.ai/keys",
-    embeddingSupport: true,
-    icon: <Globe className="w-4 h-4" />,
-    pricing: "$$",
+    supportsEmbeddings: true,
+    icon: "🌐",
+    pricing: "Pay-per-token",
+    features: ["Multiple models", "Single API", "Model routing"]
   },
   aiml: {
     name: "AI/ML API",
@@ -125,102 +175,104 @@ const AI_PROVIDERS = {
       "gpt-4o-mini", 
       "claude-3-5-sonnet",
       "deepseek-v3",
-      "deepseek-r1",
-      "llama-3.3-70b",
-      "gemini-2.5-pro",
-      "gemini-2.5-flash"
+      "llama-3.3-70b-instruct",
     ],
     defaultModel: "gpt-4o-mini",
-    baseUrl: "https://api.aimlapi.com/v1",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.aimlapi.com/v1",
     signupUrl: "https://aimlapi.com/",
-    embeddingSupport: true,
-    icon: <Globe className="w-4 h-4" />,
-    pricing: "$$",
+    supportsEmbeddings: true,
+    icon: "🌐",
+    pricing: "Pay-per-token",
+    features: ["200+ models", "Unified API", "Multiple providers"]
   },
 
   // Specialized
   huggingface: {
     name: "Hugging Face",
-    description: "Open-source models via Inference Providers",
-    category: "Specialized",
+    description: "Open source models and inference API",
+    category: "Open Source",
     models: [
-      "meta-llama/Meta-Llama-3.3-70B-Instruct", 
-      "Qwen/Qwen2.5-7B-Instruct-1M", 
-      "microsoft/Phi-4", 
-      "deepseek-ai/DeepSeek-R1",
-      "google/gemma-2-2b-it"
+      "meta-llama/Meta-Llama-3.3-70B-Instruct",
+      "microsoft/DialoGPT-medium",
+      "google/flan-t5-large",
     ],
     defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    baseUrl: "https://api-inference.huggingface.co",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api-inference.huggingface.co",
     signupUrl: "https://huggingface.co/settings/tokens",
-    embeddingSupport: true,
-    icon: <Globe className="w-4 h-4" />,
-    pricing: "$",
+    supportsEmbeddings: true,
+    icon: "🤗",
+    pricing: "Free/Pay-per-token",
+    features: ["Open source models", "Free tier", "Community models"]
   },
   perplexity: {
     name: "Perplexity",
     description: "Search-augmented language models",
     category: "Specialized",
-    models: [
-      "llama-3.1-sonar-large-128k-online", 
-      "llama-3.1-sonar-small-128k-online", 
-      "llama-3.1-sonar-huge-128k-online"
-    ],
+    models: ["llama-3.1-sonar-small-128k-online", "llama-3.1-sonar-large-128k-online"],
     defaultModel: "llama-3.1-sonar-small-128k-online",
-    baseUrl: "https://api.perplexity.ai",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.perplexity.ai",
     signupUrl: "https://www.perplexity.ai/settings/api",
-    embeddingSupport: false,
-    icon: <Search className="w-4 h-4" />,
-    pricing: "$$",
+    supportsEmbeddings: false,
+    icon: "🔍",
+    pricing: "Pay-per-token",
+    features: ["Search-augmented", "Real-time data", "Online information"]
   },
 
   // Additional providers
   deepinfra: {
     name: "DeepInfra",
-    description: "Serverless inference for open-source models",
-    category: "Cloud",
+    description: "Serverless inference for open source models",
+    category: "Open Source",
     models: [
-      "meta-llama/Meta-Llama-3.3-70B-Instruct", 
-      "Qwen/Qwen2.5-72B-Instruct", 
-      "deepseek-ai/DeepSeek-V3"
+      "meta-llama/Meta-Llama-3.3-70B-Instruct",
+      "microsoft/WizardLM-2-8x22B",
+      "mistralai/Mixtral-8x7B-Instruct-v0.1",
     ],
     defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    baseUrl: "https://api.deepinfra.com/v1/openai",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.deepinfra.com/v1/openai",
     signupUrl: "https://deepinfra.com/",
-    embeddingSupport: true,
-    icon: <Cpu className="w-4 h-4" />,
-    pricing: "$",
+    supportsEmbeddings: true,
+    icon: "⚡",
+    pricing: "Pay-per-token",
+    features: ["Serverless", "Open source models", "Cost effective"]
   },
   replicate: {
     name: "Replicate",
-    description: "Run machine learning models in the cloud",
-    category: "Cloud",
-    models: [
-      "meta/llama-3.3-70b-instruct", 
-      "deepseek-ai/deepseek-v3", 
-      "qwen/qwen2.5-72b-instruct"
-    ],
+    description: "Run open source models via API",
+    category: "Open Source",
+    models: ["meta/llama-3.3-70b-instruct", "mistralai/mixtral-8x7b-instruct-v0.1"],
     defaultModel: "meta/llama-3.3-70b-instruct",
-    baseUrl: "https://api.replicate.com/v1",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.replicate.com/v1",
     signupUrl: "https://replicate.com/account/api-tokens",
-    embeddingSupport: false,
-    icon: <Cpu className="w-4 h-4" />,
-    pricing: "$$",
+    supportsEmbeddings: false,
+    icon: "🔄",
+    pricing: "Pay-per-token",
+    features: ["Open source models", "Easy deployment", "Version control"]
   },
   anyscale: {
     name: "Anyscale",
-    description: "Scalable AI model serving",
-    category: "Cloud",
-    models: [
-      "meta-llama/Llama-3.3-70b-instruct", 
-      "mistralai/Mistral-7B-Instruct-v0.3"
-    ],
+    description: "Scalable AI infrastructure",
+    category: "Infrastructure",
+    models: ["meta-llama/Llama-3.3-70b-instruct", "mistralai/Mixtral-8x7B-Instruct-v0.1"],
     defaultModel: "meta-llama/Llama-3.3-70b-instruct",
-    baseUrl: "https://api.endpoints.anyscale.com/v1",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.endpoints.anyscale.com/v1",
     signupUrl: "https://console.anyscale.com/",
-    embeddingSupport: false,
-    icon: <Globe className="w-4 h-4" />,
-    pricing: "$$",
+    supportsEmbeddings: false,
+    icon: "🏗️",
+    pricing: "Pay-per-token",
+    features: ["Scalable infrastructure", "Ray ecosystem", "Enterprise ready"]
   },
 }
 
@@ -282,7 +334,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
       ...aiConfig,
       provider: provider as any,
       model: providerInfo.defaultModel,
-      baseUrl: providerInfo.baseUrl,
+      baseUrl: providerInfo.defaultBaseUrl,
       apiKey: "",
     })
     setTestingStatus((prev) => ({ ...prev, ai: "idle" }))
@@ -500,7 +552,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
                             <Badge variant="outline" className="text-xs">
                               {info.pricing}
                             </Badge>
-                            {info.embeddingSupport && (
+                            {info.supportsEmbeddings && (
                               <Badge variant="outline" className="text-xs border-green-600 text-green-600">
                                 Embeddings
                               </Badge>
@@ -545,7 +597,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
                 </Alert>
 
                 {/* Embedding Warning */}
-                {AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS] && !AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].embeddingSupport && (
+                {AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS] && !AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS].supportsEmbeddings && (
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>

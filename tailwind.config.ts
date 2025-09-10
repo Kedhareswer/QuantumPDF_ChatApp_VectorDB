@@ -68,10 +68,27 @@ const config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "letterSlideIn": {
+          "0%": {
+            transform: "translateY(-100%)",
+            opacity: "0",
+            clipPath: "inset(0 0 100% 0)",
+          },
+          "50%": {
+            opacity: "0.5",
+            clipPath: "inset(0 0 50% 0)",
+          },
+          "100%": {
+            transform: "translateY(0)",
+            opacity: "1",
+            clipPath: "inset(0 0 0% 0)",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "letterSlideIn": "letterSlideIn 0.8s ease-out forwards",
       },
       fontFamily: {
         mono: ["Courier New", "Courier", "monospace"],

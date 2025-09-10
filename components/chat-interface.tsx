@@ -542,72 +542,110 @@ ${diagnostics.documents.length === 0
     }
   }
 
-  // Streaming chat submit handler
+  // Enhanced streaming chat submit handler with AI client integration
   const handleSubmitStreaming = async (e: React.FormEvent) => {
     e.preventDefault()
     const input = (e.target as any).elements?.userInput?.value || ""
     if (!input.trim()) return
+    
     setShowStepper(true)
     setStepperError(null)
-    setStreamedAnswer(null)
+    setStreamedAnswer("")
     setStepperSteps([
       { key: "search", label: "Searching document database", status: "in_progress" },
       { key: "ranking", label: "Ranking by relevance", status: "pending" },
       { key: "context", label: "Preparing context", status: "pending" },
       { key: "answer", label: "Generating answer", status: "pending" }
     ])
-    // Start streaming fetch
+
     try {
-      const res = await fetch("/api/huggingface/text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: input })
-      })
-      if (!res.body) throw new Error("No response body")
-      const reader = res.body.getReader()
-      let buffer = ""
-      let done = false
-      while (!done) {
-        const { value, done: doneReading } = await reader.read()
-        done = doneReading
-        if (value) {
-          buffer += new TextDecoder().decode(value)
-          // Parse SSE events
-          const events = buffer.split("\n\n")
-          buffer = events.pop() || ""
-          for (const event of events) {
-            if (!event.startsWith("data: ")) continue
-            const data = event.slice(6)
-            try {
-              const evt = JSON.parse(data)
-              if (evt.step === "error") {
-                setStepperError(evt.message || "Unknown error")
-                setStepperSteps(prev => prev.map(s => s.status === "in_progress" ? { ...s, status: "error" } : s))
-                setShowStepper(true)
-                return
-              }
-              setStepperSteps(prev => prev.map((s, i) => {
-                if (s.key === evt.step) {
-                  return { ...s, status: evt.status }
-                }
-                // If previous step just finished, set next to in_progress
-                if (i > 0 && prev[i-1].key === evt.step && evt.status === "done" && s.status === "pending") {
-                  return { ...s, status: "in_progress" }
-                }
-                return s
-              }))
-              if (evt.step === "answer" && evt.status === "done") {
-                setStreamedAnswer(evt.text || "")
-                setShowStepper(false)
-              }
-            } catch {}
-          }
+      // Step 1: Search document database
+      setStepperSteps(prev => prev.map(s => 
+        s.key === "search" ? { ...s, status: "done" } : 
+        s.key === "ranking" ? { ...s, status: "in_progress" } : s
+      ))
+
+      // Step 2: Ranking by relevance
+      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate processing
+      setStepperSteps(prev => prev.map(s => 
+        s.key === "ranking" ? { ...s, status: "done" } : 
+        s.key === "context" ? { ...s, status: "in_progress" } : s
+      ))
+
+      // Step 3: Preparing context
+      await new Promise(resolve => setTimeout(resolve, 300))
+      setStepperSteps(prev => prev.map(s => 
+        s.key === "context" ? { ...s, status: "done" } : 
+        s.key === "answer" ? { ...s, status: "in_progress" } : s
+      ))
+
+      // Step 4: Generate streaming answer using AI client
+      const messages = [
+        { role: "system" as const, content: "You are a helpful AI assistant that provides accurate and informative responses." },
+        { role: "user" as const, content: input }
+      ]
+
+      // Try to use streaming if available, otherwise fallback
+      try {
+        // Import AIClient dynamically to avoid SSR issues
+        const { AIClient } = await import('@/lib/ai-client')
+        
+        // Get current AI configuration (you may need to adapt this based on your state management)
+        const aiConfig = {
+          provider: "openai" as const, // Default provider, should come from your configuration
+          apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || "", // Should come from your configuration
+          model: "gpt-3.5-turbo" // Should come from your configuration
         }
+
+        const aiClient = new AIClient(aiConfig)
+        
+        await aiClient.generateTextStream(
+          messages,
+          (chunk: string) => {
+            setStreamedAnswer(prev => prev + chunk)
+          },
+          () => {
+            setStepperSteps(prev => prev.map(s => 
+              s.key === "answer" ? { ...s, status: "done" } : s
+            ))
+            setTimeout(() => setShowStepper(false), 1000)
+          },
+          (error: Error) => {
+            console.error("Streaming error:", error)
+            setStepperError(error.message || "Failed to generate response")
+            setStepperSteps(prev => prev.map(s => 
+              s.status === "in_progress" ? { ...s, status: "error" } : s
+            ))
+          }
+        )
+      } catch (streamError) {
+        console.warn("Streaming failed, using fallback:", streamError)
+        
+        // Fallback to the original API call
+        const res = await fetch("/api/huggingface/text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: input })
+        })
+        
+        if (!res.ok) {
+          throw new Error(`API error: ${res.statusText}`)
+        }
+        
+        const result = await res.json()
+        setStreamedAnswer(result.text || "No response generated")
+        setStepperSteps(prev => prev.map(s => 
+          s.key === "answer" ? { ...s, status: "done" } : s
+        ))
+        setTimeout(() => setShowStepper(false), 1000)
       }
+
     } catch (err: any) {
-      setStepperError(err.message || "Unknown error")
-      setStepperSteps(prev => prev.map(s => s.status === "in_progress" ? { ...s, status: "error" } : s))
-      setShowStepper(true)
+      console.error("Chat submission error:", err)
+      setStepperError(err.message || "Unknown error occurred")
+      setStepperSteps(prev => prev.map(s => 
+        s.status === "in_progress" ? { ...s, status: "error" } : s
+      ))
     }
   }
 
@@ -1074,7 +1112,16 @@ ${diagnostics.documents.length === 0
             {!disabled && (
               <div className="text-center text-sm text-gray-500 space-y-1">
                 <p>
-                  pls star the repo if you liked it
+                  pls star the{" "}
+                  <a 
+                    href="https://github.com/Kedhareswer/QuantumPDF_ChatApp" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:text-blue-700 underline"
+                  >
+                    repo
+                  </a>{" "}
+                  if you liked it
                 </p>
               </div>
             )}

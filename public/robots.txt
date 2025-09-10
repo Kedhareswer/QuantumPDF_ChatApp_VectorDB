@@ -1,0 +1,255 @@
+# robots.txt for QuantumPDF ChatApp
+# https://quantumpdf-chatapp.vercel.app/robots.txt
+
+# Default rule for all bots - allow public content only
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /private/
+Disallow: /user/
+Disallow: /temp/
+Disallow: /uploads/
+Disallow: /cache/
+Disallow: /logs/
+Disallow: /.env
+Disallow: /.git/
+Disallow: /node_modules/
+Disallow: /build/
+Disallow: /dist/
+Crawl-delay: 2
+
+# Major Search Engines - Allow with specific crawl delays
+User-agent: Googlebot
+Allow: /
+Allow: /sitemap.xml
+Allow: /manifest.json
+Allow: /robots.txt
+Allow: /favicon.ico
+Allow: /og-image.png
+Allow: /logo.png
+Disallow: /api/
+Disallow: /_next/static/chunks/
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /private/
+Disallow: /uploads/
+Disallow: /temp/
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Allow: /sitemap.xml
+Allow: /manifest.json
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
+Disallow: /private/
+Disallow: /uploads/
+Crawl-delay: 1
+
+User-agent: Slurp
+Allow: /
+Allow: /sitemap.xml
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 2
+
+User-agent: DuckDuckBot
+Allow: /
+Allow: /sitemap.xml
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 1
+
+User-agent: Baiduspider
+Allow: /
+Allow: /sitemap.xml
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 3
+
+User-agent: YandexBot
+Allow: /
+Allow: /sitemap.xml
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 2
+
+User-agent: facebookexternalhit
+Allow: /
+Allow: /og-image.png
+Allow: /logo.png
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+
+User-agent: Twitterbot
+Allow: /
+Allow: /twitter-image.png
+Allow: /og-image.png
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+
+User-agent: LinkedInBot
+Allow: /
+Allow: /og-image.png
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+
+# AI Training Bots - Restrict access to protect intellectual property
+User-agent: GPTBot
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: Google-Extended
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: CCBot
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: anthropic-ai
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: Claude-Web
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: ChatGPT-User
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: PerplexityBot
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: YouBot
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: Meta-ExternalAgent
+Disallow: /
+Crawl-delay: 86400
+
+# Aggressive crawlers and scrapers
+User-agent: SemrushBot
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: AhrefsBot
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: MJ12bot
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: DotBot
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: Sogou
+Disallow: /
+Crawl-delay: 86400
+
+User-agent: 360Spider
+Disallow: /
+Crawl-delay: 86400
+
+# Archive crawlers - Allow but with heavy restrictions
+User-agent: ia_archiver
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+Disallow: /uploads/
+Crawl-delay: 10
+
+User-agent: Wayback
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 10
+
+# Academic and research bots - Limited access
+User-agent: ScholarsBot
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 5
+
+# Security scanners - Block completely
+User-agent: Nmap
+Disallow: /
+
+User-agent: masscan
+Disallow: /
+
+User-agent: ZmEu
+Disallow: /
+
+User-agent: nikto
+Disallow: /
+
+# Malicious bots patterns
+User-agent: *bot*
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 10
+
+User-agent: *crawler*
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 10
+
+User-agent: *scraper*
+Disallow: /
+
+User-agent: *spider*
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 5
+
+# Explicitly allow important public resources
+Allow: /favicon.ico
+Allow: /robots.txt
+Allow: /sitemap.xml
+Allow: /manifest.json
+Allow: /og-image.png
+Allow: /twitter-image.png
+Allow: /logo.png
+Allow: /apple-touch-icon.png
+Allow: /icon-*.png
+Allow: /browserconfig.xml
+Allow: /.well-known/
+
+# Sitemap locations
+Sitemap: https://quantumpdf-chatapp.vercel.app/sitemap.xml
+Sitemap: https://quantumpdf-chatapp.vercel.app/sitemap-index.xml
+
+# Host declaration
+Host: https://quantumpdf-chatapp.vercel.app
+
+# Clean-param directive for search engines
+Clean-param: utm_source&utm_medium&utm_campaign&utm_term&utm_content
+Clean-param: fbclid&gclid&dclid&msclkid
+Clean-param: ref&source&medium&campaign

@@ -482,6 +482,295 @@ export class AIClient {
     }
   }
 
+  // Streaming text generation with fallback to non-streaming
+  async generateTextStream(
+    messages: ChatMessage[], 
+    onChunk: (chunk: string) => void,
+    onComplete?: () => void,
+    onError?: (error: Error) => void
+  ): Promise<void> {
+    try {
+      if (!Array.isArray(messages) || messages.length === 0) {
+        throw new Error("Invalid messages array")
+      }
+
+      // Check if provider supports streaming
+      const streamingSupportedProviders = [
+        "openai", "anthropic", "groq", "openrouter", "deepinfra", 
+        "deepseek", "mistral", "perplexity", "xai", "fireworks", 
+        "cerebras", "anyscale", "aiml"
+      ]
+
+      if (streamingSupportedProviders.includes(this.config.provider)) {
+        try {
+          await this.generateTextStreamInternal(messages, onChunk, onComplete, onError)
+          return
+        } catch (streamError) {
+          console.warn(`Streaming failed for ${this.config.provider}, falling back to non-streaming:`, streamError)
+        }
+      }
+
+      // Fallback to non-streaming
+      console.log(`Using non-streaming fallback for provider: ${this.config.provider}`)
+      try {
+        const response = await this.generateText(messages)
+        onChunk(response)
+        onComplete?.()
+      } catch (fallbackError) {
+        console.error("Fallback text generation failed:", fallbackError)
+        onError?.(fallbackError as Error)
+      }
+    } catch (error) {
+      console.error("Error in generateTextStream:", error)
+      onError?.(error as Error)
+    }
+  }
+
+  private async generateTextStreamInternal(
+    messages: ChatMessage[], 
+    onChunk: (chunk: string) => void,
+    onComplete?: () => void,
+    onError?: (error: Error) => void
+  ): Promise<void> {
+    switch (this.config.provider) {
+      case "openai":
+        return await this.generateOpenAITextStream(messages, onChunk, onComplete, onError)
+      case "groq":
+        return await this.generateGroqTextStream(messages, onChunk, onComplete, onError)
+      case "anthropic":
+      case "openrouter":
+      case "deepinfra":
+      case "deepseek":
+      case "mistral":
+      case "perplexity":
+      case "xai":
+      case "fireworks":
+      case "cerebras":
+      case "anyscale":
+      case "aiml":
+        return await this.generateGenericOpenAICompatibleStream(messages, onChunk, onComplete, onError)
+      default:
+        throw new Error(`Streaming not supported for provider: ${this.config.provider}`)
+    }
+  }
+
+  // Generic streaming method for OpenAI-compatible APIs
+  private async generateGenericOpenAICompatibleStream(
+    messages: ChatMessage[], 
+    onChunk: (chunk: string) => void,
+    onComplete?: () => void,
+    onError?: (error: Error) => void
+  ): Promise<void> {
+    try {
+      const { baseUrl, headers, requestBody } = this.getProviderConfig(messages)
+      
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...requestBody, stream: true }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`${this.config.provider} API error (${response.status}): ${response.statusText} - ${errorText}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("No response body reader available")
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') {
+              onComplete?.()
+              return
+            }
+            try {
+              const parsed = JSON.parse(data)
+              const content = parsed.choices?.[0]?.delta?.content
+              if (content) {
+                onChunk(content)
+              }
+            } catch (e) {
+              // Skip invalid JSON lines
+            }
+          }
+        }
+      }
+      onComplete?.()
+    } catch (error) {
+      onError?.(error as Error)
+    }
+  }
+
+  private getProviderConfig(messages: ChatMessage[]) {
+    const baseConfigs = {
+      anthropic: {
+        baseUrl: this.config.baseUrl || "https://api.anthropic.com",
+        headers: {
+          "x-api-key": this.config.apiKey,
+          "Content-Type": "application/json",
+          "anthropic-version": "2023-06-01",
+        },
+        requestBody: {
+          model: this.config.model,
+          max_tokens: 2048,
+          messages: messages.filter((m) => m.role !== "system"),
+          system: messages.find((m) => m.role === "system")?.content,
+        }
+      },
+      openrouter: {
+        baseUrl: this.config.baseUrl || "https://openrouter.ai/api/v1",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://quantumpdf-chatapp.com",
+          "X-Title": "QuantumPDF ChatApp"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      },
+      deepinfra: {
+        baseUrl: this.config.baseUrl || "https://api.deepinfra.com/v1/openai",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      },
+      deepseek: {
+        baseUrl: this.config.baseUrl || "https://api.deepseek.com/v1",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      },
+      mistral: {
+        baseUrl: this.config.baseUrl || "https://api.mistral.ai/v1",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      },
+      perplexity: {
+        baseUrl: this.config.baseUrl || "https://api.perplexity.ai",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      },
+      xai: {
+        baseUrl: this.config.baseUrl || "https://api.x.ai/v1",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      },
+      fireworks: {
+        baseUrl: this.config.baseUrl || "https://api.fireworks.ai/inference/v1",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json",
+          "User-Agent": "QuantumPDF-ChatApp/1.0"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      },
+      cerebras: {
+        baseUrl: this.config.baseUrl || "https://api.cerebras.ai/v1",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      },
+      anyscale: {
+        baseUrl: this.config.baseUrl || "https://api.endpoints.anyscale.com/v1",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      },
+      aiml: {
+        baseUrl: this.config.baseUrl || "https://api.aimlapi.com/v1",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json",
+          "User-Agent": "QuantumPDF-ChatApp/1.0"
+        },
+        requestBody: {
+          model: this.config.model,
+          messages,
+          max_tokens: 2048,
+          temperature: 0.7
+        }
+      }
+    }
+
+    return baseConfigs[this.config.provider as keyof typeof baseConfigs] || baseConfigs.openrouter
+  }
+
   async testConnection(): Promise<boolean> {
     try {
       console.log(`Testing connection for provider: ${this.config.provider}`)
@@ -664,6 +953,71 @@ export class AIClient {
     return result.choices[0].message.content
   }
 
+  private async generateOpenAITextStream(
+    messages: ChatMessage[], 
+    onChunk: (chunk: string) => void,
+    onComplete?: () => void,
+    onError?: (error: Error) => void
+  ): Promise<void> {
+    try {
+      const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          model: this.config.model, 
+          messages: messages, 
+          max_tokens: 2048, 
+          temperature: 0.7,
+          stream: true
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.statusText}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("No response body reader available")
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') {
+              onComplete?.()
+              return
+            }
+            try {
+              const parsed = JSON.parse(data)
+              const content = parsed.choices?.[0]?.delta?.content
+              if (content) {
+                onChunk(content)
+              }
+            } catch (e) {
+              // Skip invalid JSON lines
+            }
+          }
+        }
+      }
+      onComplete?.()
+    } catch (error) {
+      onError?.(error as Error)
+    }
+  }
+
   private async testOpenAIConnection(): Promise<boolean> {
     try {
       await this.generateOpenAIText([{ role: "user", content: "test" }])
@@ -799,6 +1153,83 @@ export class AIClient {
     } catch (error) {
       console.error("Error in generateGroqText:", error)
       throw error // Re-throw to be handled by the caller
+    }
+  }
+
+  private async generateGroqTextStream(
+    messages: ChatMessage[], 
+    onChunk: (chunk: string) => void,
+    onComplete?: () => void,
+    onError?: (error: Error) => void
+  ): Promise<void> {
+    try {
+      const baseUrl = this.config.baseUrl || "https://api.groq.com/openai/v1"
+      const apiKey = this.config.apiKey.trim()
+      
+      if (!apiKey) {
+        throw new Error("Groq API key is not configured")
+      }
+
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: { 
+          "Authorization": `Bearer ${apiKey}`, 
+          "Content-Type": "application/json",
+          "User-Agent": "QuantumPDF-ChatApp/1.0"
+        },
+        body: JSON.stringify({ 
+          model: this.config.model, 
+          messages: messages,
+          max_tokens: 2048,
+          temperature: 0.7,
+          top_p: 1,
+          stream: true
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Groq API error (${response.status}): ${response.statusText} - ${errorText}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("No response body reader available")
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') {
+              onComplete?.()
+              return
+            }
+            try {
+              const parsed = JSON.parse(data)
+              const content = parsed.choices?.[0]?.delta?.content
+              if (content) {
+                onChunk(content)
+              }
+            } catch (e) {
+              // Skip invalid JSON lines
+            }
+          }
+        }
+      }
+      onComplete?.()
+    } catch (error) {
+      onError?.(error as Error)
     }
   }
 
@@ -1272,49 +1703,4 @@ export class AIClient {
     }
   }
 
-  async generateTextStream(messages: ChatMessage[], onToken: (token: string)=>void): Promise<void> {
-    if (this.config.provider !== "openai") {
-      // Fallback to non-stream call
-      const full = await this.generateText(messages)
-      onToken(full)
-      return
-    }
-    const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.config.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: this.config.model,
-        stream: true,
-        messages,
-      }),
-    })
-    if (!response.ok || !response.body) {
-      throw new Error(`OpenAI stream error: ${response.status}`)
-    }
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder("utf-8")
-    let buffer = ""
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split("\n\n")
-      buffer = parts.pop() || ""
-      for (const part of parts) {
-        if (part.startsWith("data: ")) {
-          const payload = part.replace("data: ", "").trim()
-          if (payload === "[DONE]") return
-          try {
-            const json = JSON.parse(payload)
-            const token = json.choices?.[0]?.delta?.content
-            if (token) onToken(token)
-          } catch {}
-        }
-      }
-    }
-  }
 }
