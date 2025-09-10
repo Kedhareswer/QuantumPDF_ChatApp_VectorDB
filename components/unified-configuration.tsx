@@ -31,8 +31,7 @@ const AI_PROVIDERS = {
     defaultBaseUrl: "https://api.openai.com/v1",
     signupUrl: "https://platform.openai.com/api-keys",
     supportsEmbeddings: true,
-    icon: "✨",
-    pricing: "Pay-per-token",
+    icon: "",
     features: ["Chat completion", "Embeddings", "Function calling", "Vision", "Audio"]
   },
   anthropic: {
@@ -76,8 +75,7 @@ const AI_PROVIDERS = {
     defaultBaseUrl: "https://api.groq.com/openai/v1",
     signupUrl: "https://console.groq.com/keys",
     supportsEmbeddings: false,
-    icon: "🚀",
-    pricing: "Pay-per-token",
+    icon: "",
     features: ["Ultra-fast inference", "Open source models", "Low latency"]
   },
   fireworks: {
@@ -91,8 +89,7 @@ const AI_PROVIDERS = {
     defaultBaseUrl: "https://api.fireworks.ai/inference/v1",
     signupUrl: "https://fireworks.ai/",
     supportsEmbeddings: false,
-    icon: "🔥",
-    pricing: "Pay-per-token",
+    icon: "",
     features: ["Fast inference", "Multiple models", "Competitive pricing"]
   },
   mistral: {
@@ -124,8 +121,7 @@ const AI_PROVIDERS = {
     defaultBaseUrl: "https://api.mistral.ai/v1",
     signupUrl: "https://console.mistral.ai/",
     supportsEmbeddings: true,
-    icon: "🌟",
-    pricing: "Pay-per-token",
+    icon: "",
     features: ["Function calling", "Vision capabilities", "Audio input", "Code generation", "Reasoning models", "Multimodal"]
   },
   cerebras: {
@@ -204,8 +200,7 @@ const AI_PROVIDERS = {
     defaultBaseUrl: "https://api-inference.huggingface.co",
     signupUrl: "https://huggingface.co/settings/tokens",
     supportsEmbeddings: true,
-    icon: "🤗",
-    pricing: "Free/Pay-per-token",
+    icon: "",
     features: ["Open source models", "Free tier", "Community models"]
   },
   perplexity: {
@@ -219,8 +214,7 @@ const AI_PROVIDERS = {
     defaultBaseUrl: "https://api.perplexity.ai",
     signupUrl: "https://www.perplexity.ai/settings/api",
     supportsEmbeddings: false,
-    icon: "🔍",
-    pricing: "Pay-per-token",
+    icon: "",
     features: ["Search-augmented", "Real-time data", "Online information"]
   },
 
@@ -255,8 +249,7 @@ const AI_PROVIDERS = {
     defaultBaseUrl: "https://api.replicate.com/v1",
     signupUrl: "https://replicate.com/account/api-tokens",
     supportsEmbeddings: false,
-    icon: "🔄",
-    pricing: "Pay-per-token",
+    icon: "",
     features: ["Open source models", "Easy deployment", "Version control"]
   },
   anyscale: {
@@ -270,8 +263,7 @@ const AI_PROVIDERS = {
     defaultBaseUrl: "https://api.endpoints.anyscale.com/v1",
     signupUrl: "https://console.anyscale.com/",
     supportsEmbeddings: false,
-    icon: "🏗️",
-    pricing: "Pay-per-token",
+    icon: "",
     features: ["Scalable infrastructure", "Ray ecosystem", "Enterprise ready"]
   },
 }
@@ -547,11 +539,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
                       {filteredProviders.map(([key, info]) => (
                         <SelectItem key={key} value={key}>
                           <div className="flex items-center space-x-2">
-                            {info.icon}
                             <span>{info.name}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {info.pricing}
-                            </Badge>
                             {info.supportsEmbeddings && (
                               <Badge variant="outline" className="text-xs border-green-600 text-green-600">
                                 Embeddings
@@ -588,9 +576,6 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
                           <ExternalLink className="w-3 h-3 mr-1" />
                           Get API Key
                         </Button>
-                        <Badge variant="outline" className="text-xs">
-                          {AI_PROVIDERS[aiConfig.provider as keyof typeof AI_PROVIDERS]?.pricing || '?'} pricing
-                        </Badge>
                       </div>
                     </div>
                   </AlertDescription>

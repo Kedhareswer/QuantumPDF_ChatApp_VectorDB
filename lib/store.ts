@@ -164,7 +164,7 @@ export const useAppStore = create<AppState>()(
       },
       isProcessing: false,
       modelStatus: "config",
-      activeTab: "documents",
+      activeTab: "settings",
       sidebarOpen: false,
       sidebarCollapsed: false,
       errors: [],
