@@ -859,9 +859,20 @@ export class RAGEngine {
         }
       }
 
+      // Pre-compress chunks to keep only the most relevant sentences before optimizing for tokens
+      console.log("Pre-compressing chunks for token budget:", tokenBudget * 0.7)
+      const preCompressed = this.preCompressChunks(relevantChunks, question, Math.floor(tokenBudget * 0.7))
+      console.log(
+        `Pre-compressed chunks (avg length): ${
+          preCompressed.length > 0
+            ? Math.floor(preCompressed.reduce((s, c) => s + (c.content?.length || 0), 0) / preCompressed.length)
+            : 0
+        } chars`
+      )
+
       // Optimize chunks for token budget
       console.log("Optimizing chunks for token budget:", tokenBudget * 0.7)
-      const optimizedChunks = this.optimizeChunksForTokens(relevantChunks, tokenBudget * 0.7)
+      const optimizedChunks = this.optimizeChunksForTokens(preCompressed, tokenBudget * 0.7)
       console.log(`Optimized to ${optimizedChunks.length} chunks`)
       
       const context = optimizedChunks.map(chunk => chunk.content).join("\n\n");
@@ -1093,6 +1104,117 @@ Applied improvements based on critical review to ensure accuracy and clarity.
     }
     
     return optimizedChunks
+  }
+
+  // --- Phase 5: Pre-compression and token optimization helpers ---
+  private extractKeywords(text: string, maxKeywords = 12): string[] {
+    if (!text) return []
+    const cleaned = text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s_-]/g, ' ')
+      .replace(/\s+/g, ' ') 
+      .trim()
+
+    const stopwords = new Set<string>([
+      'the','and','a','an','of','to','in','on','for','by','with','as','is','are','was','were','be','been','it','this','that','these','those','from','or','at','we','you','they','i','he','she','not','but','if','then','else','so','than','can','could','should','would','may','might','will','just','about','into','over','under','between','within','without','across','per','each'
+    ])
+
+    const terms = cleaned.split(' ').filter(Boolean)
+    const freq = new Map<string, number>()
+    for (const term of terms) {
+      if (stopwords.has(term)) continue
+      if (term.length < 3 && !/^[0-9]+$/.test(term)) continue
+      freq.set(term, (freq.get(term) || 0) + 1)
+    }
+
+    // Boost numeric and camel/snake-case-like tokens
+    const scored = Array.from(freq.entries()).map(([t, c]) => {
+      let score = c
+      if (/^[0-9]+(\.[0-9]+)?$/.test(t)) score += 2
+      if (t.includes('_') || t.includes('-')) score += 1
+      return { term: t, score }
+    })
+
+    scored.sort((a, b) => b.score - a.score)
+    return scored.slice(0, maxKeywords).map(s => s.term)
+  }
+
+  private splitIntoSentences(text: string): string[] {
+    if (!text) return []
+    // Naive sentence splitter with line breaks respected
+    const normalized = text.replace(/\r\n/g, '\n')
+    const rough = normalized
+      .split(/(?<=[\.!?])\s+|\n+/g)
+      .map(s => this.normalizeLine(s))
+      .filter(s => s.length > 0)
+    return rough
+  }
+
+  private normalizeLine(line: string): string {
+    return (line || '')
+      .replace(/\s+/g, ' ')
+      .replace(/^\s+|\s+$/g, '')
+      .trim()
+  }
+
+  private compressTextByKeywords(text: string, keywords: string[], maxTokens: number): string {
+    if (!text) return ''
+    const sentences = this.splitIntoSentences(text)
+    if (sentences.length === 0) return ''
+
+    // Score sentences by keyword overlap and position
+    const kwSet = new Set(keywords.map(k => k.toLowerCase()))
+    const scored = sentences.map((s, idx) => {
+      const tokens = s.toLowerCase().split(/[^a-z0-9_\-]+/).filter(Boolean)
+      let score = 0
+      for (const t of tokens) {
+        if (kwSet.has(t)) score += 1
+      }
+      // Boost earlier sentences slightly
+      const positionBoost = Math.max(0, (sentences.length - idx) / sentences.length) * 0.25
+      score += positionBoost
+      return { s, score, tokens: this.estimateTokens(s) }
+    })
+
+    scored.sort((a, b) => b.score - a.score)
+
+    // Greedily add sentences until we hit the token cap
+    const selected: string[] = []
+    let used = 0
+    for (const entry of scored) {
+      if (used + entry.tokens > maxTokens) continue
+      selected.push(entry.s)
+      used += entry.tokens
+      if (used >= maxTokens) break
+    }
+
+    // Fallback: if nothing selected, take the highest-scoring sentence regardless
+    if (selected.length === 0) {
+      selected.push(scored[0].s)
+    }
+
+    return selected.join(' ')
+  }
+
+  private preCompressChunks(
+    chunks: Array<{ content: string; source: string; similarity: number }>,
+    question: string,
+    tokenBudget: number
+  ): Array<{ content: string; source: string; similarity: number }> {
+    if (!Array.isArray(chunks) || chunks.length === 0) return []
+    // Allocate tokens across chunks proportionally to similarity (min floor)
+    const minPerChunk = Math.max(64, Math.floor(tokenBudget / Math.max(8, chunks.length)))
+    const simSum = chunks.reduce((s, c) => s + Math.max(0.01, c.similarity || 0), 0)
+    const keywords = this.extractKeywords(question)
+
+    const compressed = chunks.map((c) => {
+      const share = Math.max(minPerChunk, Math.floor((Math.max(0.01, c.similarity || 0) / simSum) * tokenBudget))
+      const compressedText = this.compressTextByKeywords(c.content || '', keywords, share)
+      const finalText = compressedText && compressedText.length > 0 ? compressedText : (c.content || '').slice(0, 500)
+      return { content: finalText, source: c.source, similarity: c.similarity }
+    })
+
+    return compressed
   }
 
   private createEnhancedSystemPrompt(questionType: string): string {
