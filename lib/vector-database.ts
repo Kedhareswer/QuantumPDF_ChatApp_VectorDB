@@ -1,5 +1,5 @@
 interface VectorDBConfig {
-  provider: "pinecone" | "local"
+  provider: "pinecone" | "weaviate" | "chroma" | "local"
   apiKey?: string
   environment?: string
   indexName?: string
@@ -1197,6 +1197,10 @@ export function createVectorDatabase(config: VectorDBConfig): VectorDatabase {
   switch (config.provider) {
     case "pinecone":
       return new PineconeDatabase(config)
+    case "weaviate":
+      return new WeaviateDatabase(config) // Keep existing implementation
+    case "chroma":
+      return new ChromaDatabase(config)
     case "local":
     default:
       return new LocalVectorDatabase(config)

@@ -11,7 +11,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
 import { Zap, Database, Eye, EyeOff, Check, X, ExternalLink, Info, AlertTriangle, Settings, Loader2, Globe, Cpu, Sparkles, Brain, Search } from "lucide-react"
-import { Switch } from "@/components/ui/switch"
 import { useAppStore } from "@/lib/store"
 import { 
   ConfigurationTestingSkeleton, 
@@ -25,7 +24,7 @@ const AI_PROVIDERS = {
     name: "OpenAI",
     description: "Industry-leading GPT models with high quality responses",
     category: "Major",
-    models: ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini", "gpt-4-turbo"],
+    models: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo", "gpt-4.1", "gpt-realtime"],
     defaultModel: "gpt-4o-mini",
     baseUrl: "https://api.openai.com/v1",
     signupUrl: "https://platform.openai.com/api-keys",
@@ -37,8 +36,8 @@ const AI_PROVIDERS = {
     name: "Anthropic",
     description: "Claude models with strong reasoning and safety focus",
     category: "Major",
-    models: ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229"],
-    defaultModel: "claude-sonnet-4-20250514",
+    models: ["claude-4-opus", "claude-4.1-opus", "claude-4-sonnet", "claude-3.7-sonnet", "claude-3.5-haiku"],
+    defaultModel: "claude-4-sonnet",
     baseUrl: "https://api.anthropic.com",
     signupUrl: "https://console.anthropic.com/",
     embeddingSupport: false,
@@ -49,7 +48,7 @@ const AI_PROVIDERS = {
     name: "Google AI",
     description: "Gemini models with multimodal capabilities",
     category: "Major",
-    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-pro"],
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-image-preview", "gemini-2.0-flash-exp"],
     defaultModel: "gemini-2.5-flash",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     signupUrl: "https://makersuite.google.com/app/apikey",
@@ -63,7 +62,7 @@ const AI_PROVIDERS = {
     name: "Groq",
     description: "Ultra-fast inference with specialized hardware",
     category: "Fast",
-    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "openai/gpt-oss-120b"],
+    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "kimi-k2-instruct", "qwen3-32b"],
     defaultModel: "llama-3.1-8b-instant",
     baseUrl: "https://api.groq.com/openai/v1",
     signupUrl: "https://console.groq.com/keys",
@@ -75,8 +74,8 @@ const AI_PROVIDERS = {
     name: "Fireworks AI",
     description: "Fast and cost-effective model serving",
     category: "Fast",
-    models: ["llama-v3p3-70b-instruct", "llama-v3p1-8b-instruct", "qwen2p5-72b-instruct", "deepseek-v3"],
-    defaultModel: "llama-v3p1-8b-instruct",
+    models: ["fireworks/kimi-k2-instruct-0905", "llama-v3p3-70b-instruct", "deepseek-v3", "qwen2p5-72b-instruct", "llama-v3p1-8b-instruct"],
+    defaultModel: "fireworks/kimi-k2-instruct-0905",
     baseUrl: "https://api.fireworks.ai/inference/v1",
     signupUrl: "https://fireworks.ai/",
     embeddingSupport: true,
@@ -104,11 +103,11 @@ const AI_PROVIDERS = {
     models: [
       "openai/gpt-4o", 
       "openai/gpt-4o-mini",
-      "anthropic/claude-sonnet-4", 
+      "anthropic/claude-3.5-sonnet", 
       "meta-llama/llama-3.3-70b-instruct", 
-      "google/gemini-2.5-flash",
+      "google/gemini-2.0-flash-exp",
       "deepseek/deepseek-v3",
-      "openai/o3-mini"
+      "openai/o1-preview"
     ],
     defaultModel: "openai/gpt-4o-mini",
     baseUrl: "https://openrouter.ai/api/v1",
@@ -262,7 +261,7 @@ interface UnifiedConfigurationProps {
 }
 
 export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfigurationProps) {
-  const { aiConfig, setAIConfig, vectorDBConfig, setVectorDBConfig, addError, ragSettings, setRagSettings } =
+  const { aiConfig, setAIConfig, vectorDBConfig, setVectorDBConfig, addError } =
     useAppStore()
 
   const [showApiKeys, setShowApiKeys] = useState({
@@ -645,38 +644,6 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
                     Test Connection
                 </Button>
                 )}
-              </CardContent>
-            </Card>
-
-            {/* RAG Settings */}
-            <Card className="border-2 border-black shadow-none">
-              <CardHeader className="border-b border-black">
-                <CardTitle className="text-sm flex items-center justify-between">
-                  <span>RAG SETTINGS</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">Enable Pre-Compression</div>
-                    <div className="text-xs text-gray-500">Condense retrieved chunks to only the most relevant sentences before sending to the model</div>
-                  </div>
-                  <Switch
-                    checked={ragSettings.preCompressionEnabled}
-                    onCheckedChange={(v) => setRagSettings({ preCompressionEnabled: v })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">Use Vector DB for Retrieval</div>
-                    <div className="text-xs text-gray-500">Retrieve relevant chunks through the configured vector database (falls back to in-memory if disabled/unavailable)</div>
-                  </div>
-                  <Switch
-                    checked={ragSettings.useVectorDBRetrieval}
-                    onCheckedChange={(v) => setRagSettings({ useVectorDBRetrieval: v })}
-                  />
-                </div>
               </CardContent>
             </Card>
           </div>

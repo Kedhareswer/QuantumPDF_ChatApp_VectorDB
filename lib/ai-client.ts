@@ -29,26 +29,7 @@ interface AIConfig {
 
 interface ChatMessage {
   role: "system" | "user" | "assistant"
-  content: string | MessageContent[]
-}
-
-interface MessageContent {
-  type: "text" | "image"
-  text?: string
-  image_url?: {
-    url: string
-    detail?: "low" | "high" | "auto"
-  }
-}
-
-interface VisionCapabilities {
-  supportsVision: boolean
-  maxImageSize?: number
-  supportedFormats?: string[]
-}
-
-interface AIProviderConfig {
-  vision?: VisionCapabilities
+  content: string
 }
 
 export class AIClient {
@@ -56,143 +37,9 @@ export class AIClient {
   private text: string = ''
   private prompt: string = ''
   private context: string = ''
-  private visionCapabilities: Map<string, VisionCapabilities> = new Map()
 
   constructor(config: AIConfig) {
     this.config = config
-    this.initializeVisionCapabilities()
-  }
-
-  private initializeVisionCapabilities(): void {
-    // Initialize vision capabilities for supported providers
-    this.visionCapabilities.set('openai', {
-      supportsVision: true,
-      maxImageSize: 20 * 1024 * 1024, // 20MB
-      supportedFormats: ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
-    })
-    
-    this.visionCapabilities.set('anthropic', {
-      supportsVision: true,
-      maxImageSize: 5 * 1024 * 1024, // 5MB
-      supportedFormats: ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
-    })
-    
-    this.visionCapabilities.set('googleai', {
-      supportsVision: true,
-      maxImageSize: 4 * 1024 * 1024, // 4MB
-      supportedFormats: ['image/png', 'image/jpeg', 'image/webp']
-    })
-    
-    this.visionCapabilities.set('vertex', {
-      supportsVision: true,
-      maxImageSize: 4 * 1024 * 1024, // 4MB
-      supportedFormats: ['image/png', 'image/jpeg', 'image/webp']
-    })
-  }
-
-  // Vision support methods
-  public supportsVision(): boolean {
-    const capabilities = this.visionCapabilities.get(this.config.provider)
-    return capabilities?.supportsVision ?? false
-  }
-
-  public getVisionCapabilities(): VisionCapabilities | null {
-    return this.visionCapabilities.get(this.config.provider) || null
-  }
-
-  public async generateTextWithVision(messages: ChatMessage[], images?: string[]): Promise<string> {
-    if (!this.supportsVision()) {
-      // Fall back to text-only generation
-      return this.generateText(messages)
-    }
-
-    // Convert messages to support vision if images are provided
-    const visionMessages = this.prepareVisionMessages(messages, images)
-    
-    switch (this.config.provider) {
-      case "openai":
-        return await this.generateOpenAIVisionText(visionMessages)
-      case "anthropic":
-        return await this.generateAnthropicVisionText(visionMessages)
-      case "googleai":
-        return await this.generateGoogleAIVisionText(visionMessages)
-      case "vertex":
-        return await this.generateVertexVisionText(visionMessages)
-      default:
-        // Fall back to text-only for unsupported providers
-        return this.generateText(messages)
-    }
-  }
-
-  private prepareVisionMessages(messages: ChatMessage[], images?: string[]): ChatMessage[] {
-    if (!images || images.length === 0) {
-      return messages
-    }
-
-    // Add images to the last user message
-    const visionMessages = [...messages]
-    const lastUserMessageIndex = visionMessages.findLastIndex(msg => msg.role === 'user')
-    
-    if (lastUserMessageIndex !== -1) {
-      const lastUserMessage = visionMessages[lastUserMessageIndex]
-      const content: MessageContent[] = []
-      
-      // Add text content if exists
-      if (typeof lastUserMessage.content === 'string') {
-        content.push({ type: 'text', text: lastUserMessage.content })
-      } else if (Array.isArray(lastUserMessage.content)) {
-        content.push(...lastUserMessage.content)
-      }
-      
-      // Add images
-      images.forEach(imageUrl => {
-        content.push({
-          type: 'image',
-          image_url: {
-            url: imageUrl,
-            detail: 'high'
-          }
-        })
-      })
-      
-      visionMessages[lastUserMessageIndex] = {
-        ...lastUserMessage,
-        content: content
-      }
-    }
-
-    return visionMessages
-  }
-
-  private getMessageText(content: string | MessageContent[]): string {
-    if (typeof content === 'string') {
-      return content
-    }
-    
-    return content
-      .filter(item => item.type === 'text')
-      .map(item => item.text || '')
-      .join(' ')
-  }
-
-  private convertContentToParts(content: string | MessageContent[]): any[] {
-    if (typeof content === 'string') {
-      return [{ text: content }]
-    }
-    
-    return content.map(item => {
-      if (item.type === 'text') {
-        return { text: item.text || '' }
-      } else if (item.type === 'image' && item.image_url) {
-        return {
-          inlineData: {
-            mimeType: 'image/jpeg', // Default, should be determined from actual image
-            data: item.image_url.url // Base64 encoded image data
-          }
-        }
-      }
-      return { text: '' }
-    })
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
@@ -684,7 +531,7 @@ export class AIClient {
   // ... (These are unchanged)
 
   private formatMessagesForHuggingFace(messages: ChatMessage[]): string {
-    return messages.map((msg) => `${msg.role}: ${this.getMessageText(msg.content)}`).join("\n")
+    return messages.map((msg) => `${msg.role}: ${msg.content}`).join("\n")
   }
 
   private generateFallbackEmbedding(text: string): number[] {
@@ -764,8 +611,7 @@ export class AIClient {
   // (These remain as they were, ensure generateHuggingFaceText, generateOpenAIText, etc. are present)
   private async generateHuggingFaceText(messages: ChatMessage[]): Promise<string> {
     const prompt = this.formatMessagesForHuggingFace(messages)
-    const systemMessage = messages.find((m) => m.role === "system")
-    const context = systemMessage ? this.getMessageText(systemMessage.content) : ""
+    const context = messages.find((m) => m.role === "system")?.content || ""
     const requestBody: { prompt: string; context: string; model: string; apiKey?: string } = {
       prompt,
       context,
@@ -814,38 +660,6 @@ export class AIClient {
       body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
     })
     if (!response.ok) throw new Error(`OpenAI API error: ${response.statusText}`)
-    const result = await response.json()
-    return result.choices[0].message.content
-  }
-
-  private async generateOpenAIVisionText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
-    
-    // Ensure we're using a vision-capable model
-    let model = this.config.model
-    if (!model.includes('vision') && !model.includes('gpt-4')) {
-      model = 'gpt-4-vision-preview'
-    }
-    
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { 
-        Authorization: `Bearer ${this.config.apiKey}`, 
-        "Content-Type": "application/json" 
-      },
-      body: JSON.stringify({ 
-        model: model, 
-        messages: messages, 
-        max_tokens: 1000, 
-        temperature: 0.7 
-      }),
-    })
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`OpenAI Vision API error: ${response.status} ${errorText}`)
-    }
-    
     const result = await response.json()
     return result.choices[0].message.content
   }
@@ -908,9 +722,6 @@ export class AIClient {
 
   private async generateAnthropicText(messages: ChatMessage[]): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.anthropic.com"
-    const systemMessage = messages.find((m) => m.role === "system")
-    const systemContent = systemMessage ? this.getMessageText(systemMessage.content) : undefined
-    
     const response = await fetch(`${baseUrl}/v1/messages`, {
       method: "POST",
       headers: {
@@ -922,45 +733,10 @@ export class AIClient {
         model: this.config.model,
         max_tokens: 500,
         messages: messages.filter((m) => m.role !== "system"),
-        system: systemContent,
+        system: messages.find((m) => m.role === "system")?.content,
       }),
     })
     if (!response.ok) throw new Error(`Anthropic API error: ${response.statusText}`)
-    const result = await response.json()
-    return result.content[0].text
-  }
-
-  private async generateAnthropicVisionText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://api.anthropic.com"
-    const systemMessage = messages.find((m) => m.role === "system")
-    const systemContent = systemMessage ? this.getMessageText(systemMessage.content) : undefined
-    
-    // Ensure we're using a vision-capable model
-    let model = this.config.model
-    if (!model.includes('vision') && !model.includes('claude-3')) {
-      model = 'claude-3-sonnet-20240229'
-    }
-    
-    const response = await fetch(`${baseUrl}/v1/messages`, {
-      method: "POST",
-      headers: {
-        "x-api-key": this.config.apiKey,
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: model,
-        max_tokens: 1000,
-        messages: messages.filter((m) => m.role !== "system"),
-        system: systemContent,
-      }),
-    })
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Anthropic Vision API error: ${response.status} ${errorText}`)
-    }
-    
     const result = await response.json()
     return result.content[0].text
   }
@@ -1152,35 +928,6 @@ export class AIClient {
     return result.candidates[0].content.parts[0].text
   }
 
-  private async generateGoogleAIVisionText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://generativelanguage.googleapis.com/v1beta"
-    
-    // Ensure we're using a vision-capable model
-    let model = this.config.model
-    if (!model.includes('vision') && !model.includes('gemini-pro-vision')) {
-      model = 'gemini-pro-vision'
-    }
-    
-    const response = await fetch(`${baseUrl}/models/${model}:generateContent?key=${this.config.apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: messages.map(msg => ({
-          role: msg.role === "assistant" ? "model" : msg.role,
-          parts: this.convertContentToParts(msg.content)
-        }))
-      }),
-    })
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Google AI Vision API error: ${response.status} ${errorText}`)
-    }
-    
-    const result = await response.json()
-    return result.candidates[0].content.parts[0].text
-  }
-
   private async testGoogleAIConnection(): Promise<boolean> {
     try {
       await this.generateGoogleAIText([{ role: "user", content: "test" }])
@@ -1295,32 +1042,9 @@ export class AIClient {
   }
 
   private async generateVertexText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://us-central1-aiplatform.googleapis.com"
-    const response = await fetch(`${baseUrl}/v1/projects/{PROJECT_ID}/locations/us-central1/publishers/google/models/${this.config.model}:generateContent`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: messages.map(msg => ({
-          role: msg.role === "assistant" ? "model" : msg.role,
-          parts: [{ text: this.getMessageText(msg.content) }]
-        }))
-      }),
-    })
-    if (!response.ok) throw new Error(`Vertex AI API error: ${response.statusText}`)
-    const result = await response.json()
-    return result.candidates[0].content.parts[0].text
-  }
-
-  private async generateVertexVisionText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://us-central1-aiplatform.googleapis.com"
-    
-    // Ensure we're using a vision-capable model
-    let model = this.config.model
-    if (!model.includes('vision') && !model.includes('gemini-pro-vision')) {
-      model = 'gemini-pro-vision'
-    }
-    
-    const response = await fetch(`${baseUrl}/v1/projects/{PROJECT_ID}/locations/us-central1/publishers/google/models/${model}:generateContent`, {
+    const baseUrl = this.config.baseUrl || "https://us-central1-aiplatform.googleapis.com/v1"
+    // Note: Vertex AI requires more complex authentication, this is a simplified version
+    const response = await fetch(`${baseUrl}/projects/YOUR_PROJECT/locations/us-central1/publishers/google/models/${this.config.model}:generateContent`, {
       method: "POST",
       headers: { 
         Authorization: `Bearer ${this.config.apiKey}`, 
@@ -1328,17 +1052,12 @@ export class AIClient {
       },
       body: JSON.stringify({
         contents: messages.map(msg => ({
-          role: msg.role === "assistant" ? "model" : msg.role,
-          parts: this.convertContentToParts(msg.content)
+          role: msg.role === "assistant" ? "model" : "user",
+          parts: [{ text: msg.content }]
         }))
       }),
     })
-    
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Vertex AI Vision API error: ${response.status} ${errorText}`)
-    }
-    
+    if (!response.ok) throw new Error(`Vertex AI API error: ${response.statusText}`)
     const result = await response.json()
     return result.candidates[0].content.parts[0].text
   }
@@ -1491,21 +1210,19 @@ export class AIClient {
     if (!this.config.apiKey) throw new Error(`${provider} API key not provided`)
     
     // Construct a helpful response based on the input
-    const userMessageContent = messages.find((m) => m.role === 'user')?.content ?? ''
-    const systemMessageContent = messages.find((m) => m.role === 'system')?.content ?? ''
-    const userMessageText = this.getMessageText(userMessageContent)
-    const systemMessageText = this.getMessageText(systemMessageContent)
+    const userMessage = messages.find(m => m.role === 'user')?.content || ''
+    const systemMessage = messages.find(m => m.role === 'system')?.content || ''
     
     // Simple keyword-based response generation
-    const keywords: string[] = userMessageText.toLowerCase().split(/\s+/)
-    let response = `I understand you're asking about: "${userMessageText.substring(0, 100)}${userMessageText.length > 100 ? '...' : ''}"\n\n`
+    const keywords = userMessage.toLowerCase().split(/\s+/)
+    let response = `I understand you're asking about: "${userMessage.substring(0, 100)}${userMessage.length > 100 ? '...' : ''}"\n\n`
     
-    if (keywords.some((k: string) => ['summary', 'summarize', 'overview'].includes(k))) {
+    if (keywords.some(k => ['summary', 'summarize', 'overview'].includes(k))) {
       response += "Based on the available documents, here are the key points I can identify:\n\n"
       response += "• This appears to be a request for summarization\n"
       response += "• I'm currently using a fallback response system\n"
       response += "• For more detailed analysis, please ensure your AI provider is properly configured\n\n"
-    } else if (keywords.some((k: string) => ['find', 'search', 'locate', 'where'].includes(k))) {
+    } else if (keywords.some(k => ['find', 'search', 'locate', 'where'].includes(k))) {
       response += "I can help you search through the documents. However, I'm currently operating in fallback mode.\n\n"
       response += "To get more accurate search results:\n"
       response += "• Verify your AI provider configuration\n"

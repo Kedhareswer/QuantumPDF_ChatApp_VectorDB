@@ -49,18 +49,6 @@ export interface ProcessingProgress {
   totalPages?: number
 }
 
-// Interface for detected table structures
-interface DetectedTable {
-  startRow: number;
-  endRow: number;
-  columns: number[];
-  rows: Array<{
-    y: number;
-    cells: Array<{ text: string; x: number; width?: number }>
-  }>;
-  confidence: number;
-}
-
 export class EnhancedPDFProcessor {
   // Will be populated when initialized
   private pdfjsLib: PDFJSLib | null = null
@@ -349,6 +337,7 @@ export class EnhancedPDFProcessor {
           textExtractionResult.successfulPages,
           pdf.numPages,
           textExtractionResult.fullText,
+          textExtractionResult.confidence,
         ),
         language: this.detectLanguage(textExtractionResult.fullText),
         fileSize: file.size,
@@ -441,11 +430,7 @@ export class EnhancedPDFProcessor {
         return { text: "", confidence: 0 };
       }
 
-      // Detect tables using glyph positioning
-      const detectedTables = this.detectTablesFromTextContent(textContent, pageNum);
-      
-      // Format text with table detection
-      const formattedText = this.formatTextContentWithTables(textContent, detectedTables);
+      const formattedText = this.formatTextContentEnhanced(textContent);
       const confidence = this.calculateTextConfidence(formattedText, textContent.items.length);
 
       return {
@@ -456,260 +441,6 @@ export class EnhancedPDFProcessor {
       console.warn(`Enhanced text extraction failed for page ${pageNum}:`, error);
       return { text: "", confidence: 0 };
     }
-  }
-
-  // Interface for detected table structures
-
-  private detectTablesFromTextContent(textContent: any, pageNum: number): DetectedTable[] {
-    if (!textContent?.items || textContent.items.length === 0) {
-      return [];
-    }
-
-    try {
-      // Group text items by Y coordinate (rows)
-      const rowGroups = new Map<number, any[]>();
-      const yTolerance = 2; // pixels tolerance for same row
-
-      textContent.items.forEach((item: any) => {
-        if (!item.transform || item.transform.length < 6) return;
-        
-        const y = Math.round(item.transform[5]); // Y coordinate
-        let foundRow = false;
-
-        // Find existing row within tolerance
-        for (const [existingY, items] of rowGroups.entries()) {
-          if (Math.abs(y - existingY) <= yTolerance) {
-            items.push(item);
-            foundRow = true;
-            break;
-          }
-        }
-
-        if (!foundRow) {
-          rowGroups.set(y, [item]);
-        }
-      });
-
-      // Sort rows by Y coordinate (top to bottom)
-      const sortedRows = Array.from(rowGroups.entries())
-        .sort(([a], [b]) => b - a) // Higher Y values first (PDF coordinates)
-        .map(([y, items]) => ({
-          y,
-          items: items.sort((a, b) => a.transform[4] - b.transform[4]) // Sort by X coordinate
-        }));
-
-      // Detect potential table structures
-      const detectedTables: DetectedTable[] = [];
-      
-      // Look for rows with consistent column patterns
-      for (let i = 0; i < sortedRows.length - 2; i++) {
-        const tableCandidate = this.analyzeTableStructure(sortedRows, i);
-        if (tableCandidate && tableCandidate.confidence > 0.6) {
-          detectedTables.push(tableCandidate);
-        }
-      }
-
-      if (detectedTables.length > 0) {
-        console.log(`Detected ${detectedTables.length} potential tables on page ${pageNum}`);
-      }
-
-      return detectedTables;
-    } catch (error) {
-      console.warn(`Table detection failed for page ${pageNum}:`, error);
-      return [];
-    }
-  }
-
-  private analyzeTableStructure(rows: any[], startIndex: number): DetectedTable | null {
-    const minTableRows = 3;
-    const maxTableRows = 20;
-    
-    // Analyze column positions for consistency
-    const columnPositions = new Set<number>();
-    const tableRows: any[] = [];
-    
-    // Look ahead to find consistent column patterns
-    for (let i = startIndex; i < Math.min(startIndex + maxTableRows, rows.length); i++) {
-      const row = rows[i];
-      const rowXPositions = row.items.map((item: any) => Math.round(item.transform[4]));
-      
-      // Check if this row has a consistent column pattern
-      if (rowXPositions.length >= 2) {
-        rowXPositions.forEach((x: number) => columnPositions.add(x));
-        tableRows.push(row);
-      } else {
-        // Single column might indicate end of table
-        if (tableRows.length >= minTableRows) break;
-      }
-    }
-
-    if (tableRows.length < minTableRows) {
-      return null;
-    }
-
-    // Calculate table confidence based on column consistency
-    const uniqueColumns = Array.from(columnPositions).sort((a, b) => a - b);
-    let totalAlignedCells = 0;
-    let totalCells = 0;
-
-    const processedRows = tableRows.map(row => {
-      const cells = row.items.map((item: any) => {
-        const x = Math.round(item.transform[4]);
-        const text = item.str || '';
-        totalCells++;
-        
-        // Check if this cell aligns with detected columns
-        const alignsWithColumn = uniqueColumns.some(colX => Math.abs(x - colX) <= 5);
-        if (alignsWithColumn) totalAlignedCells++;
-        
-        return { text, x };
-      });
-
-      return {
-        y: row.y,
-        cells
-      };
-    });
-
-    const confidence = totalCells > 0 ? totalAlignedCells / totalCells : 0;
-    
-    return {
-      startRow: startIndex,
-      endRow: startIndex + tableRows.length - 1,
-      columns: uniqueColumns,
-      rows: processedRows,
-      confidence
-    };
-  }
-
-  private formatTextContentWithTables(textContent: any, detectedTables: DetectedTable[]): string {
-    if (!textContent?.items) return "";
-    
-    // If no tables detected, use standard formatting
-    if (detectedTables.length === 0) {
-      return this.formatTextContentEnhanced(textContent);
-    }
-
-    // Process tables and convert to markdown format
-    let result = "";
-    let processedItems = new Set<number>();
-
-    detectedTables.forEach((table: DetectedTable, tableIndex: number) => {
-      result += `\n\n**Table ${tableIndex + 1}** (Confidence: ${Math.round(table.confidence * 100)}%)\n\n`;
-      
-      // Convert table to markdown
-      const markdownTable = this.convertTableToMarkdown(table);
-      result += markdownTable + "\n";
-      
-      // Mark items as processed
-      table.rows.forEach((row: any) => {
-        row.cells.forEach((cell: any) => {
-          // This is a simplified approach - in a real implementation,
-          // you'd need to track which original text items correspond to table cells
-        });
-      });
-    });
-
-    // Add any remaining non-table text
-    const remainingText = this.formatTextContentEnhanced(textContent);
-    if (remainingText.trim()) {
-      result += "\n\n" + remainingText;
-    }
-
-    return result.trim();
-  }
-
-  private convertTableToMarkdown(table: DetectedTable): string {
-    if (table.rows.length === 0) return "";
-
-    let markdown = "";
-    
-    // Process each row
-    table.rows.forEach((row: any, rowIndex: number) => {
-      if (row.cells.length === 0) return;
-      
-      // Sort cells by X position
-      const sortedCells = row.cells.sort((a: any, b: any) => a.x - b.x);
-      
-      // Create table row
-      const cellTexts = sortedCells.map((cell: any) => cell.text.trim() || " ");
-      markdown += "| " + cellTexts.join(" | ") + " |\n";
-      
-      // Add header separator after first row
-      if (rowIndex === 0) {
-        markdown += "|" + cellTexts.map(() => "---").join("|") + "|\n";
-      }
-    });
-    
-    return markdown;
-  }
-
-  private calculateTextConfidence(text: string, itemCount: number): number {
-    if (!text || text.trim() === "") return 0;
-    
-    // Basic confidence calculation based on text characteristics
-    let confidence = 50; // Base confidence
-    
-    // Boost confidence for longer texts
-    if (text.length > 100) confidence += 20;
-    if (text.length > 500) confidence += 10;
-    
-    // Boost confidence for proper sentences
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    if (sentences.length > 1) confidence += 15;
-    
-    // Boost confidence for consistent spacing
-    const words = text.split(/\s+/).filter(w => w.length > 0);
-    if (words.length > itemCount * 0.8) confidence += 10;
-    
-    return Math.min(confidence, 95); // Cap at 95%
-  }
-
-  private determineExtractionQuality(
-    successfulPages: number, 
-    totalPages: number, 
-    text: string
-  ): "high" | "medium" | "low" {
-    const successRate = successfulPages / totalPages;
-    const avgWordsPerPage = text.split(/\s+/).length / totalPages;
-    
-    if (successRate >= 0.9 && avgWordsPerPage > 50) return "high";
-    if (successRate >= 0.7 && avgWordsPerPage > 20) return "medium";
-    return "low";
-  }
-
-  private detectLanguage(text: string): string {
-    if (!text || text.trim().length < 50) return "unknown";
-    
-    // Simple language detection based on common words
-    const english = /\b(the|and|or|but|in|on|at|to|for|of|with|by)\b/gi;
-    const englishMatches = (text.match(english) || []).length;
-    
-    if (englishMatches > text.split(/\s+/).length * 0.1) {
-      return "en";
-    }
-    
-    return "unknown";
-  }
-
-  private createDetailedFallbackContent(file: File, error: any, processingTime: number): string {
-    return `# PDF Processing Failed
-
-## File Information
-- **Filename**: ${file.name}
-- **Size**: ${(file.size / 1024 / 1024).toFixed(2)} MB
-- **Processing Time**: ${processingTime}ms
-
-## Error Details
-${error instanceof Error ? error.message : "Unknown processing error"}
-
-## Recommendations
-1. **Try a different PDF**: Some PDFs have complex formatting that may not be supported
-2. **Check file integrity**: Ensure the PDF file is not corrupted
-3. **Use text-based PDFs**: Scanned documents may require OCR processing
-4. **Manual text extraction**: Consider copying text directly from the PDF viewer
-
-This appears to be a complex PDF document that requires specialized processing tools.`;
   }
 
   private formatTextContentEnhanced(textContent: any): string {
@@ -757,11 +488,125 @@ This appears to be a complex PDF document that requires specialized processing t
       .trim();
   }
 
-  public abort(): void {
-    this.processingAborted = true;
+  
+  private calculateTextConfidence(text: string, itemCount: number): number {
+    if (!text || text.length === 0) return 0;
+
+    let confidence = 50;
+
+    if (text.length > 100) confidence += 20;
+    if (text.length > 500) confidence += 10;
+
+    const wordCount = text.split(/\s+/).length;
+    if (wordCount > 20) confidence += 10;
+    if (wordCount > 100) confidence += 5;
+
+    if (text.includes("\n\n")) confidence += 5;
+    if (/[.!?]/.test(text)) confidence += 5;
+    if (/[A-Z][a-z]/.test(text)) confidence += 5;
+
+    if (text.length < 50) confidence -= 20;
+    if (!/[a-zA-Z]/.test(text)) confidence -= 30;
+
+    return Math.max(0, Math.min(100, confidence));
   }
 
-  public get isProcessing(): boolean {
-    return !this.processingAborted;
+  private determineExtractionQuality(
+    successfulPages: number,
+    totalPages: number,
+    text: string,
+    confidence: number,
+  ): "high" | "medium" | "low" {
+    const successRate = successfulPages / totalPages;
+    const textDensity = text.length / totalPages;
+    const avgConfidence = confidence;
+
+    if (successRate >= 0.9 && textDensity > 800 && avgConfidence > 80) return "high";
+    if (successRate >= 0.7 && textDensity > 400 && avgConfidence > 60) return "medium";
+    return "low";
+  }
+
+  private detectLanguage(text: string): string {
+    if (!text) return 'en';
+    
+    const sample = text.slice(0, 2000).toLowerCase();
+    const languages: Record<string, string[]> = {
+      english: ["the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "is", "are"],
+      spanish: ["el", "la", "de", "que", "y", "en", "un", "es", "se", "no"],
+      french: ["le", "de", "et", "à", "un", "il", "être", "en", "avoir", "que"],
+      german: ["der", "die", "und", "in", "den", "von", "zu", "das", "mit", "sich"],
+    };
+
+    let bestMatch = "english";
+    let bestScore = 0;
+
+    for (const [language, words] of Object.entries(languages)) {
+      const score = words.reduce((count, word) => {
+        const regex = new RegExp(`\\b${word}\\b`, "gi")
+        const matches = sample.match(regex)
+        return count + (matches ? matches.length : 0)
+      }, 0)
+
+      if (score > bestScore) {
+        bestScore = score
+        bestMatch = language.charAt(0).toUpperCase() + language.slice(1)
+      }
+    }
+
+    return bestScore > 5 ? bestMatch : "Unknown"
+  }
+
+  private createDetailedFallbackContent(file: File, error: any, processingTime: number): string {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error"
+
+    return `# PDF Processing Report: ${file.name}
+
+## Processing Status: FAILED
+
+**Error**: ${errorMessage}
+**Processing Time**: ${(processingTime / 1000).toFixed(2)} seconds
+**File Size**: ${(file.size / 1024 / 1024).toFixed(2)} MB
+**Date**: ${new Date().toLocaleString()}
+
+## What Happened?
+The enhanced PDF processor encountered an issue while trying to extract text from your document.
+
+### Common Causes:
+1. **Scanned Documents**: The PDF contains images of text rather than actual text
+2. **Complex Formatting**: Advanced layouts, tables, or graphics that are difficult to parse
+3. **Encrypted Content**: Password-protected or secured documents
+4. **File Corruption**: The PDF file may be damaged or incomplete
+5. **Browser Compatibility**: Some browsers have limitations with PDF processing
+
+### Recommended Solutions:
+1. **Try a Different PDF**: Test with a simpler, text-based PDF document
+2. **Different Browser**: Try using Chrome, Firefox, or Safari
+3. **Manual Text Entry**: Copy and paste text directly from a PDF viewer
+4. **OCR Tools**: Use dedicated OCR software for scanned documents
+
+## System Information:
+- **Processor**: Enhanced PDF.js Engine (No Worker)
+- **Processing Method**: Client-side text extraction
+- **Fallback Status**: Active
+
+## Next Steps:
+This fallback document allows you to continue using the system. You can:
+
+1. Upload a different PDF file
+2. Use the manual text input feature
+3. Try the suggestions above
+
+The system remains fully functional for other operations and document types.
+
+---
+*This is an automatically generated fallback document to ensure system continuity.*`
+  }
+
+  public abort(): void {
+    this.processingAborted = true
+  }
+
+  public isProcessing(): boolean {
+    return !this.processingAborted
   }
 }

@@ -1074,11 +1074,7 @@ ${diagnostics.documents.length === 0
             {!disabled && (
               <div className="text-center text-sm text-gray-500 space-y-1">
                 <p>
-                  <span className="font-bold">TIP:</span> Ask specific questions about your documents for better results
-                </p>
-                <p className="text-xs">
-                  Use <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs">Shift+Enter</kbd>{" "}
-                  for new lines
+                  pls star the repo if you liked it
                 </p>
               </div>
             )}

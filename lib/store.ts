@@ -73,7 +73,7 @@ interface AIConfig {
 }
 
 interface VectorDBConfig {
-  provider: "pinecone" | "local"
+  provider: "pinecone" | "weaviate" | "chroma" | "local"
   apiKey?: string
   environment?: string
   indexName?: string
@@ -116,12 +116,6 @@ interface AppState {
   sidebarOpen: boolean
   sidebarCollapsed: boolean
 
-  // RAG settings
-  ragSettings: {
-    preCompressionEnabled: boolean
-    useVectorDBRetrieval: boolean
-  }
-
   // Error handling
   errors: AppError[]
 
@@ -140,7 +134,6 @@ interface AppState {
   setActiveTab: (tab: string) => void
   setSidebarOpen: (open: boolean) => void
   setSidebarCollapsed: (collapsed: boolean) => void
-  setRagSettings: (partial: Partial<AppState["ragSettings"]>) => void
   addError: (error: Omit<AppError, "id" | "timestamp">) => void
   removeError: (id: string) => void
   clearErrors: () => void
@@ -175,11 +168,6 @@ export const useAppStore = create<AppState>()(
       sidebarOpen: false,
       sidebarCollapsed: false,
       errors: [],
-
-      ragSettings: {
-        preCompressionEnabled: true,
-        useVectorDBRetrieval: true,
-      },
 
       // Actions
       addMessage: (message) =>
@@ -234,9 +222,6 @@ export const useAppStore = create<AppState>()(
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
 
-      setRagSettings: (partial) =>
-        set((state) => ({ ragSettings: { ...state.ragSettings, ...partial } })),
-
       addError: (error) =>
         set((state) => ({
           errors: [
@@ -264,19 +249,19 @@ export const useAppStore = create<AppState>()(
         wandbConfig: state.wandbConfig,
         sidebarCollapsed: state.sidebarCollapsed,
         activeTab: state.activeTab,
-        ragSettings: state.ragSettings,
       }),
       // Add version and migration logic
-      version: 3,
+      version: 1,
       migrate: (persistedState: any, version: number) => {
-        // v0 -> v1: validate AI provider
         if (version === 0) {
+          // Migration from version 0 to 1: fix invalid providers
           if (persistedState.aiConfig) {
             const validProviders = [
               "huggingface", "openai", "anthropic", "aiml", "groq", "openrouter",
               "deepinfra", "deepseek", "googleai", "vertex", "mistral", "perplexity",
               "xai", "alibaba", "minimax", "fireworks", "cerebras", "replicate", "anyscale"
             ];
+            
             if (!validProviders.includes(persistedState.aiConfig.provider)) {
               console.warn(`Migrating invalid provider "${persistedState.aiConfig.provider}" to "openai"`);
               persistedState.aiConfig = {
@@ -288,36 +273,6 @@ export const useAppStore = create<AppState>()(
             }
           }
         }
-
-        // v1 -> v2: remove deprecated vector DB providers (weaviate, chroma)
-        if (version <= 1) {
-          if (persistedState.vectorDBConfig) {
-            const prov = persistedState.vectorDBConfig.provider;
-            if (prov === "weaviate" || prov === "chroma") {
-              const hasApiKey = !!persistedState.vectorDBConfig.apiKey;
-              const newProvider = hasApiKey ? "pinecone" : "local";
-              console.warn(`Migrating deprecated vector DB provider "${prov}" to "${newProvider}"`);
-              persistedState.vectorDBConfig = {
-                ...persistedState.vectorDBConfig,
-                provider: newProvider,
-                // cleanup fields that no longer apply
-                url: newProvider === "local" ? "" : persistedState.vectorDBConfig.url,
-                collection: undefined,
-              };
-            }
-          }
-        }
-
-        // v2 -> v3: add RAG settings defaults
-        if (version <= 2) {
-          if (!persistedState.ragSettings) {
-            persistedState.ragSettings = {
-              preCompressionEnabled: true,
-              useVectorDBRetrieval: true,
-            }
-          }
-        }
-
         return persistedState;
       },
     },

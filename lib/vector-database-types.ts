@@ -3,7 +3,7 @@
  */
 
 export interface VectorDBConfig {
-  provider: "pinecone" | "local";
+  provider: "pinecone" | "weaviate" | "chroma" | "local";
   apiKey?: string;
   environment?: string;
   indexName?: string;
