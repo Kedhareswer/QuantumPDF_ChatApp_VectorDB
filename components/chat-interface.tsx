@@ -1141,17 +1141,15 @@ ${diagnostics.documents.length === 0
       <div className="border-t-2 border-black bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
-            <div className="flex items-center gap-3 flex-nowrap">
-              {/* Mode pill on the left */}
-              <div className="shrink-0">
-                <div className="flex items-center rounded-full border-2 border-black overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
+              {/* Mode selector - full width mobile, auto width desktop */}
+              <div className="shrink-0 w-full sm:w-auto">
+                <div className="flex items-center rounded-full border-2 border-black overflow-hidden w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={() => setChatMode('docs')}
                     className={`px-3 py-2 text-sm ${chatMode === 'docs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
                     aria-pressed={chatMode === 'docs'}
-                    aria-label="Documents mode"
-                    title="Use uploaded PDF context"
                   >
                     Docs
                   </button>
@@ -1160,19 +1158,14 @@ ${diagnostics.documents.length === 0
                     onClick={() => setChatMode('search')}
                     className={`px-3 py-2 text-sm border-l-2 border-black ${chatMode === 'search' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
                     aria-pressed={chatMode === 'search'}
-                    aria-label="Web Research mode"
-                    title="Search web, arXiv and news"
                   >
                     Search
                   </button>
                 </div>
               </div>
 
-              {/* Textarea in the middle */}
-              <div className="flex-1">
-                <label htmlFor="chat-input" className="sr-only">
-                  Ask a question about your documents
-                </label>
+              {/* Text input - full width always */}
+              <div className="flex-1 min-w-0 w-full">
                 <Textarea
                   id="chat-input"
                   ref={inputRef}
@@ -1187,17 +1180,17 @@ ${diagnostics.documents.length === 0
                         : "Ask a question about your documents... (Shift+Enter for new line)"
                   }
                   disabled={(chatMode === 'docs' ? (disabled || isProcessing) : isProcessing)}
-                  className="min-h-[3rem] max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed"
+                  className="min-h-[3rem] h-[3rem] sm:h-auto max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed w-full"
                   rows={1}
                 />
               </div>
 
-              {/* Submit button at right */}
-              <div className="shrink-0">
+              {/* Submit button - full width mobile, auto width desktop */}
+              <div className="shrink-0 w-full sm:w-auto">
                 <Button
                   type="submit"
                   disabled={(chatMode === 'docs' ? (disabled || isProcessing) : isProcessing) || !input.trim()}
-                  className="border-2 border-black bg-black text-white hover:bg-white hover:text-black px-6 h-12 btn-enhanced"
+                  className="w-full sm:w-auto border-2 border-black bg-black text-white hover:bg-white hover:text-black px-6 h-12 btn-enhanced"
                   aria-label={chatMode === 'search' ? 'Search' : 'Send message'}
                 >
                   {isProcessing ? (
