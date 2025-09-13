@@ -620,15 +620,23 @@ ${diagnostics.documents.length === 0
       // Step 4: Depending on mode, either Web Research (SSE) or AI client
       if (chatMode === 'search') {
         try {
-          const res = await fetch('/api/search/unified', {
+          // Extract number from query if user specified a count
+          const numberMatch = text.match(/(?:top\s+)?(\d+)(?:\s+(?:latest|recent|top))?/i)
+          const requestedCount = numberMatch ? parseInt(numberMatch[1]) : 10
+
+          const response = await fetch('/api/search/unified', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: text, maxResults: 10 })
+            body: JSON.stringify({ 
+              query: text,
+              maxResults: Math.min(requestedCount, 20), // Cap at 20 for performance
+              summaryLevel: 'detailed' // Use detailed for better formatting
+            })
           })
+
+          if (!response.ok || !response.body) throw new Error(`Search API error: ${response.status} ${response.statusText}`)
           
-          if (!res.ok || !res.body) throw new Error(`Search API error: ${res.status} ${res.statusText}`)
-          
-          const reader = res.body.getReader()
+          const reader = response.body.getReader()
           const decoder = new TextDecoder()
           let buffer = ""
           let accumulatedAnswer = ""
