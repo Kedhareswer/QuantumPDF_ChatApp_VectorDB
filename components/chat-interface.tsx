@@ -35,6 +35,7 @@ import {
   CheckCircle,
   XCircle,
   Circle,
+  Search,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -360,6 +361,7 @@ export function ChatInterface({
     complexityLevel: 'auto' as 'auto' | 'simple' | 'normal' | 'complex'
   })
   const [useContext, setUseContext] = useState(true)
+  const [chatMode, setChatMode] = useState<'docs' | 'search'>('docs')
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -405,7 +407,13 @@ export function ChatInterface({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSubmit(e)
+      if (chatMode === 'search') {
+        // Use streaming unified search submission when in Search mode
+        // @ts-ignore - reuse event to trigger streaming submit
+        handleSubmitStreaming(e as any)
+      } else {
+        handleSubmit(e)
+      }
     }
   }
 
@@ -545,17 +553,17 @@ ${diagnostics.documents.length === 0
   // Enhanced streaming chat submit handler with AI client integration
   const handleSubmitStreaming = async (e: React.FormEvent) => {
     e.preventDefault()
-    const input = (e.target as any).elements?.userInput?.value || ""
-    if (!input.trim()) return
+    const text = (input || "").trim()
+    if (!text) return
     
     setShowStepper(true)
     setStepperError(null)
     setStreamedAnswer("")
     setStepperSteps([
-      { key: "search", label: "Searching document database", status: "in_progress" },
-      { key: "ranking", label: "Ranking by relevance", status: "pending" },
-      { key: "context", label: "Preparing context", status: "pending" },
-      { key: "answer", label: "Generating answer", status: "pending" }
+      { key: "search", label: chatMode === 'search' ? "Searching sources" : "Searching document database", status: "in_progress" },
+      { key: "ranking", label: chatMode === 'search' ? "Fetching content" : "Ranking by relevance", status: "pending" },
+      { key: "context", label: chatMode === 'search' ? "Summarizing" : "Preparing context", status: "pending" },
+      { key: "answer", label: chatMode === 'search' ? "Synthesizing answer" : "Generating answer", status: "pending" }
     ])
 
     try {
@@ -572,17 +580,75 @@ ${diagnostics.documents.length === 0
         s.key === "context" ? { ...s, status: "in_progress" } : s
       ))
 
-      // Step 3: Preparing context
+      // Step 3: Preparing context / pre-summarization
       await new Promise(resolve => setTimeout(resolve, 300))
       setStepperSteps(prev => prev.map(s => 
         s.key === "context" ? { ...s, status: "done" } : 
         s.key === "answer" ? { ...s, status: "in_progress" } : s
       ))
 
+      // Step 4: Depending on mode, either Web Research (SSE) or AI client
+      if (chatMode === 'search') {
+        try {
+          const res = await fetch('/api/search/unified', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: text, maxResults: 10 })
+          })
+          
+          if (!res.ok || !res.body) throw new Error(`Search API error: ${res.status} ${res.statusText}`)
+          
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ""
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ""
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+              const data = line.slice(6)
+              if (!data) continue
+              let evt: any
+              try { evt = JSON.parse(data) } catch { continue }
+              const step = evt.step
+              const status = evt.status
+              
+              if (step === 'search') {
+                setStepperSteps(prev => prev.map(s => s.key === 'search' ? { ...s, status: status === 'done' ? 'done' : 'in_progress' } : s))
+                if (status === 'done') setStepperSteps(prev => prev.map(s => s.key === 'ranking' ? { ...s, status: 'in_progress' } : s))
+              } else if (step === 'fetch') {
+                setStepperSteps(prev => prev.map(s => s.key === 'ranking' ? { ...s, status: status === 'done' ? 'done' : 'in_progress' } : s))
+                if (status === 'done') setStepperSteps(prev => prev.map(s => s.key === 'context' ? { ...s, status: 'in_progress' } : s))
+              } else if (step === 'summarize') {
+                setStepperSteps(prev => prev.map(s => s.key === 'context' ? { ...s, status: status === 'done' ? 'done' : 'in_progress' } : s))
+                if (status === 'done') setStepperSteps(prev => prev.map(s => s.key === 'answer' ? { ...s, status: 'in_progress' } : s))
+              } else if (step === 'answer' && evt.text) {
+                setStreamedAnswer(prev => (prev || '') + evt.text)
+              } else if (step === 'done') {
+                setStepperSteps(prev => prev.map(s => s.key === 'answer' ? { ...s, status: 'done' } : s))
+              } else if (step === 'error') {
+                setStepperError(evt.message || 'Search failed')
+                setStepperSteps(prev => prev.map(s => s.status === 'in_progress' ? { ...s, status: 'error' } : s))
+              }
+            }
+          }
+          setTimeout(() => setShowStepper(false), 1000)
+          return
+        } catch (err) {
+          console.error('Unified search error:', err)
+          setStepperError(err instanceof Error ? err.message : 'Unified search failed')
+          setStepperSteps(prev => prev.map(s => s.status === 'in_progress' ? { ...s, status: 'error' } : s))
+          return
+        }
+      }
+
       // Step 4: Generate streaming answer using AI client
       const messages = [
         { role: "system" as const, content: "You are a helpful AI assistant that provides accurate and informative responses." },
-        { role: "user" as const, content: input }
+        { role: "user" as const, content: text }
       ]
 
       // Try to use streaming if available, otherwise fallback
@@ -625,7 +691,7 @@ ${diagnostics.documents.length === 0
         const res = await fetch("/api/huggingface/text", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: input })
+          body: JSON.stringify({ prompt: text })
         })
         
         if (!res.ok) {
@@ -752,9 +818,10 @@ ${diagnostics.documents.length === 0
                     id="context-toggle"
                     checked={useContext}
                     onCheckedChange={(checked) => setUseContext(checked)}
+                    disabled={chatMode === 'search'}
                   />
                   <Label htmlFor="context-toggle" className="text-sm">
-                    Use Document Context
+                    Use Document Context {chatMode === 'search' && <span className="text-xs text-gray-500">(disabled in Search mode)</span>}
                   </Label>
                 </div>
               </div>
@@ -1088,25 +1155,58 @@ ${diagnostics.documents.length === 0
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
+                  onKeyDown={(e) => {
+                    if (chatMode === 'search' && e.key === 'Enter' && !e.shiftKey) {
+                      handleSubmitStreaming(e);
+                    } else {
+                      handleKeyDown(e);
+                    }
+                  }}
                   placeholder={
                     disabled
                       ? "Configure AI provider and upload documents to start chatting..."
-                      : "Ask a question about your documents... (Shift+Enter for new line)"
+                      : chatMode === 'search'
+                        ? "Search the web, arXiv, and news... (Shift+Enter for new line)"
+                        : "Ask a question about your documents... (Shift+Enter for new line)"
                   }
                   disabled={disabled || isProcessing}
                   className="min-h-[3rem] max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed"
                   rows={1}
                 />
               </div>
-              <Button
-                type="submit"
-                disabled={disabled || isProcessing || !input.trim()}
-                className="border-2 border-black bg-black text-white hover:bg-white hover:text-black px-6 h-12 btn-enhanced self-end"
-                aria-label="Send message"
-              >
-                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-              </Button>
+              <div className="flex flex-col items-end space-y-2">
+                <div className="flex items-center rounded-full border-2 border-black overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setChatMode('docs')}
+                    className={`px-3 py-1 text-sm ${chatMode === 'docs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                    aria-pressed={chatMode === 'docs'}
+                    aria-label="Documents mode"
+                    title="Use uploaded PDF context"
+                  >
+                    Docs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatMode('search')}
+                    className={`px-3 py-1 text-sm border-l-2 border-black ${chatMode === 'search' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                    aria-pressed={chatMode === 'search'}
+                    aria-label="Web Research mode"
+                    title="Search web, arXiv and news"
+                  >
+                    Search
+                  </button>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={disabled || isProcessing || !input.trim()}
+                  className="border-2 border-black bg-black text-white hover:bg-white hover:text-black px-6 h-12 btn-enhanced"
+                  aria-label="Send message"
+                >
+                  {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                </Button>
+              </div>
             </div>
 
             {!disabled && (
