@@ -87,8 +87,10 @@ interface ChatInterfaceProps {
   messages: Message[]
   onSendMessage: (content: string, options?: {
     showThinking?: boolean,
-    complexityLevel?: 'simple' | 'normal' | 'complex'
+    complexityLevel?: 'simple' | 'normal' | 'complex',
+    useContext?: boolean
   }) => void
+  onAddMessage?: (message: Message) => void
   onClearChat: () => void
   onNewSession: () => void
   isProcessing: boolean
@@ -346,6 +348,7 @@ function Stepper({ steps }: { steps: { key: string, label: string, status: strin
 export function ChatInterface({ 
   messages, 
   onSendMessage, 
+  onAddMessage,
   onClearChat, 
   onNewSession, 
   isProcessing, 
@@ -552,6 +555,16 @@ ${diagnostics.documents.length === 0
     const text = (input || "").trim()
     if (!text) return
     
+    // Add user message immediately
+    const userMessage = {
+      id: Date.now().toString(),
+      role: "user" as const,
+      content: text,
+      timestamp: new Date()
+    }
+    
+    // Clear input and reset states
+    setInput("")
     setShowStepper(true)
     setStepperError(null)
     setStreamedAnswer("")
@@ -561,6 +574,17 @@ ${diagnostics.documents.length === 0
       { key: "context", label: chatMode === 'search' ? "Summarizing" : "Preparing context", status: "pending" },
       { key: "answer", label: chatMode === 'search' ? "Synthesizing answer" : "Generating answer", status: "pending" }
     ])
+
+    // For docs mode, use the parent's message handling
+    if (chatMode === 'docs') {
+      onSendMessage(text, { useContext, showThinking: enhancedOptions.showThinking, complexityLevel: enhancedOptions.complexityLevel === 'auto' ? undefined : enhancedOptions.complexityLevel as any })
+      return
+    }
+    
+    // For search mode, add user message immediately and handle response locally
+    if (onAddMessage) {
+      onAddMessage(userMessage)
+    }
 
     try {
       // Step 1: Search document database
@@ -597,6 +621,9 @@ ${diagnostics.documents.length === 0
           const reader = res.body.getReader()
           const decoder = new TextDecoder()
           let buffer = ""
+          let accumulatedAnswer = ""
+          let sources: string[] = []
+          
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
@@ -622,16 +649,45 @@ ${diagnostics.documents.length === 0
                 setStepperSteps(prev => prev.map(s => s.key === 'context' ? { ...s, status: status === 'done' ? 'done' : 'in_progress' } : s))
                 if (status === 'done') setStepperSteps(prev => prev.map(s => s.key === 'answer' ? { ...s, status: 'in_progress' } : s))
               } else if (step === 'answer' && evt.text) {
-                setStreamedAnswer(prev => (prev || '') + evt.text)
+                accumulatedAnswer += evt.text
+                setStreamedAnswer(accumulatedAnswer)
               } else if (step === 'done') {
                 setStepperSteps(prev => prev.map(s => s.key === 'answer' ? { ...s, status: 'done' } : s))
+                
+                // Extract sources if provided
+                if (evt.sources && Array.isArray(evt.sources)) {
+                  sources = evt.sources.map((s: any) => `${s.title} - ${s.url}`)
+                }
+                
+                // Create assistant message with the accumulated answer
+                const assistantMessage = {
+                  id: (Date.now() + 1).toString(),
+                  role: "assistant" as const,
+                  content: accumulatedAnswer,
+                  timestamp: new Date(),
+                  sources: sources.length > 0 ? sources : undefined,
+                  metadata: {
+                    responseTime: Date.now() - parseInt(userMessage.id),
+                    relevanceScore: 0.95,
+                    retrievedChunks: evt.sources?.length || 0
+                  }
+                }
+                
+                // Add the assistant message to chat history
+                if (onAddMessage) {
+                  onAddMessage(assistantMessage)
+                }
+                
               } else if (step === 'error') {
                 setStepperError(evt.message || 'Search failed')
                 setStepperSteps(prev => prev.map(s => s.status === 'in_progress' ? { ...s, status: 'error' } : s))
               }
             }
           }
-          setTimeout(() => setShowStepper(false), 1000)
+          setTimeout(() => {
+            setShowStepper(false)
+            setStreamedAnswer("")
+          }, 1000)
           return
         } catch (err) {
           console.error('Unified search error:', err)
@@ -641,66 +697,12 @@ ${diagnostics.documents.length === 0
         }
       }
 
-      // Step 4: Generate streaming answer using AI client
-      const messages = [
-        { role: "system" as const, content: "You are a helpful AI assistant that provides accurate and informative responses." },
-        { role: "user" as const, content: text }
-      ]
-
-      // Try to use streaming if available, otherwise fallback
-      try {
-        // Import AIClient dynamically to avoid SSR issues
-        const { AIClient } = await import('@/lib/ai-client')
-        
-        // Get current AI configuration (you may need to adapt this based on your state management)
-        const aiConfig = {
-          provider: "openai" as const, // Default provider, should come from your configuration
-          apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || "", // Should come from your configuration
-          model: "gpt-3.5-turbo" // Should come from your configuration
-        }
-
-        const aiClient = new AIClient(aiConfig)
-        
-        await aiClient.generateTextStream(
-          messages,
-          (chunk: string) => {
-            setStreamedAnswer(prev => prev + chunk)
-          },
-          () => {
-            setStepperSteps(prev => prev.map(s => 
-              s.key === "answer" ? { ...s, status: "done" } : s
-            ))
-            setTimeout(() => setShowStepper(false), 1000)
-          },
-          (error: Error) => {
-            console.error("Streaming error:", error)
-            setStepperError(error.message || "Failed to generate response")
-            setStepperSteps(prev => prev.map(s => 
-              s.status === "in_progress" ? { ...s, status: "error" } : s
-            ))
-          }
-        )
-      } catch (streamError) {
-        console.warn("Streaming failed, using fallback:", streamError)
-        
-        // Fallback to the original API call
-        const res = await fetch("/api/huggingface/text", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: text })
-        })
-        
-        if (!res.ok) {
-          throw new Error(`API error: ${res.statusText}`)
-        }
-        
-        const result = await res.json()
-        setStreamedAnswer(result.text || "No response generated")
-        setStepperSteps(prev => prev.map(s => 
-          s.key === "answer" ? { ...s, status: "done" } : s
-        ))
-        setTimeout(() => setShowStepper(false), 1000)
-      }
+      // This section should not be reached for search mode
+      console.error('Unexpected code path: docs mode should be handled by parent component')
+      setStepperError('Configuration error: docs mode should be handled by parent component')
+      setStepperSteps(prev => prev.map(s => 
+        s.status === 'in_progress' ? { ...s, status: 'error' } : s
+      ))
 
     } catch (err: any) {
       console.error("Chat submission error:", err)

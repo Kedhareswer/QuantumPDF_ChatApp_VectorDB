@@ -888,6 +888,7 @@ export default function QuantumPDFChatbot() {
             <ChatInterface
               messages={messages}
               onSendMessage={handleSendMessage}
+              onAddMessage={addMessage}
               onClearChat={handleClearChat}
               onNewSession={handleNewSession}
               isProcessing={isProcessing}
