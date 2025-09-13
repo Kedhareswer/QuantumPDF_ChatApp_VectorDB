@@ -51,6 +51,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { EnhancedChatProcessingSkeleton, ChatTypingIndicator } from "@/components/skeleton-loaders"
 import { ThinkingBubble } from "@/components/thinking-bubble"
 import { useToast } from "@/hooks/use-toast"
+import { useAppStore } from "@/lib/store"
+import { AIClient } from "@/lib/ai-client"
 
 interface Message {
   id: string
@@ -378,6 +380,9 @@ export function ChatInterface({
   const [streamedAnswer, setStreamedAnswer] = useState<string | null>(null)
   const [stepperError, setStepperError] = useState<string | null>(null)
   const { toast } = useToast();
+  // LLM configuration (for Search mode gating)
+  const { aiConfig, setActiveTab, modelStatus } = useAppStore()
+  const isLLMConfigured = !!(aiConfig?.provider && aiConfig?.apiKey && aiConfig?.model)
   // Typing pulse and metrics for Search mode
   const [typingPulse, setTypingPulse] = useState(false)
   const typingTimeoutRef = useRef<any>(null)
@@ -630,7 +635,8 @@ ${diagnostics.documents.length === 0
             body: JSON.stringify({ 
               query: text,
               maxResults: Math.min(requestedCount, 20), // Cap at 20 for performance
-              summaryLevel: 'detailed' // Use detailed for better formatting
+              summaryLevel: 'detailed', // Use detailed for better formatting
+              synthesis: 'client' // Let client perform LLM synthesis
             })
           })
 
@@ -641,7 +647,8 @@ ${diagnostics.documents.length === 0
           let buffer = ""
           let accumulatedAnswer = ""
           let sources: string[] = []
-          
+          let usedClientSynthesis = false
+
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
@@ -656,7 +663,7 @@ ${diagnostics.documents.length === 0
               try { evt = JSON.parse(data) } catch { continue }
               const step = evt.step
               const status = evt.status
-              
+
               if (step === 'search') {
                 setStepperSteps(prev => prev.map(s => s.key === 'search' ? { ...s, status: status === 'done' ? 'done' : 'in_progress' } : s))
                 if (status === 'done') setStepperSteps(prev => prev.map(s => s.key === 'ranking' ? { ...s, status: 'in_progress' } : s))
@@ -666,7 +673,60 @@ ${diagnostics.documents.length === 0
               } else if (step === 'summarize') {
                 setStepperSteps(prev => prev.map(s => s.key === 'context' ? { ...s, status: status === 'done' ? 'done' : 'in_progress' } : s))
                 if (status === 'done') setStepperSteps(prev => prev.map(s => s.key === 'answer' ? { ...s, status: 'in_progress' } : s))
+              } else if (step === 'context' && evt.context) {
+                // Client-side RAG synthesis
+                try {
+                  usedClientSynthesis = true
+                  const ctx = evt.context
+                  const srcs = Array.isArray(ctx.sources) ? ctx.sources : []
+                  // Capture sources for final assistant message
+                  sources = srcs.map((s: any) => `${s.title} - ${s.url}`)
+                  const requested = ctx.requestedCount || srcs.length
+                  const contextBlocks = srcs.map((s: any) => {
+                    const sn = (ctx.snippets || []).find((x: any) => x.id === s.id)
+                    const authors = Array.isArray(s.authors) && s.authors.length > 0 ? `Authors: ${s.authors.slice(0,3).join(', ')}${s.authors.length>3 ? ' et al.' : ''}` : ''
+                    const year = s.publishedAt ? `Year: ${new Date(s.publishedAt).getFullYear()}` : ''
+                    return `[#${s.id}] ${s.title}\n${authors}${authors && year ? ' | ' : ''}${year}\nURL: ${s.url}\nSnippet: ${(sn?.snippet || '').trim()}`
+                  }).join("\n\n")
+
+                  const systemPrompt = `You are an AI research assistant. Produce a professional, markdown-only report with the following sections:\n\n1) Executive Summary (2-4 sentences)\n2) Research Papers Overview (a single table with EXACTLY ${requested} rows and columns: # | Title | Authors | Year | Focus Area | URL)\n3) Detailed Analysis (one short paragraph per paper)\n4) Key Research Trends (bulleted)\n5) Clinical/Practical Implications (bulleted)\n\nRules:\n- Use ONLY the provided sources and snippets.\n- Cite papers consistently by their table number [#].\n- Return EXACTLY ${requested} papers in the table.\n- No HTML. Markdown only.`
+
+                  const userPrompt = `Query: ${ctx.query}\n\nSources:\n\n${contextBlocks}`
+
+                  const client = new AIClient(aiConfig)
+                  // Reset streamed answer
+                  accumulatedAnswer = ""
+                  setStreamedAnswer("")
+
+                  await client.generateTextStream([
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                  ], (token: string) => {
+                    accumulatedAnswer += token
+                    setStreamedAnswer(prev => (prev || "") + token)
+                  }, () => {
+                    // onComplete: finalize assistant message here
+                    const assistantMessage = {
+                      id: (Date.now() + 1).toString(),
+                      role: "assistant" as const,
+                      content: accumulatedAnswer,
+                      timestamp: new Date(),
+                      sources: sources.length > 0 ? sources : undefined,
+                      metadata: {
+                        responseTime: Date.now() - parseInt(userMessage.id),
+                        relevanceScore: 0.95,
+                        retrievedChunks: srcs.length
+                      }
+                    }
+                    onAddMessage?.(assistantMessage)
+                  }, (err: Error) => {
+                    console.error('Client synthesis failed:', err)
+                  })
+                } catch (e) {
+                  console.error('Error starting client synthesis:', e)
+                }
               } else if (step === 'answer' && evt.text) {
+                // Server-side streaming fallback (when synthesisMode === 'server')
                 accumulatedAnswer += evt.text
                 setStreamedAnswer(accumulatedAnswer)
               } else if (step === 'typing') {
@@ -698,28 +758,22 @@ ${diagnostics.documents.length === 0
                   setMetrics((prev) => ({ ...prev, queryEnhancement: evt.queryEnhancement }))
                 }
                 
-                // Create assistant message with the accumulated answer
-                const assistantMessage = {
-                  id: (Date.now() + 1).toString(),
-                  role: "assistant" as const,
-                  content: accumulatedAnswer,
-                  timestamp: new Date(),
-                  sources: sources.length > 0 ? sources : undefined,
-                  metadata: {
-                    responseTime: Date.now() - parseInt(userMessage.id),
-                    relevanceScore: 0.95,
-                    retrievedChunks: evt.sources?.length || 0
+                // If server handled synthesis, finalize here; otherwise client onComplete handles it
+                if (!usedClientSynthesis) {
+                  const assistantMessage = {
+                    id: (Date.now() + 1).toString(),
+                    role: "assistant" as const,
+                    content: accumulatedAnswer,
+                    timestamp: new Date(),
+                    sources: sources.length > 0 ? sources : undefined,
+                    metadata: {
+                      responseTime: Date.now() - parseInt(userMessage.id),
+                      relevanceScore: 0.95,
+                      retrievedChunks: evt.sources?.length || 0
+                    }
                   }
+                  onAddMessage?.(assistantMessage)
                 }
-                
-                // Add the assistant message to chat history
-                if (onAddMessage) {
-                  onAddMessage(assistantMessage)
-                }
-                
-              } else if (step === 'error') {
-                setStepperError(evt.message || 'Search failed')
-                setStepperSteps(prev => prev.map(s => s.status === 'in_progress' ? { ...s, status: 'error' } : s))
               }
             }
           }
@@ -1282,6 +1336,21 @@ ${diagnostics.documents.length === 0
       <div className="border-t-2 border-black bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
+            {chatMode === 'search' && !isLLMConfigured && (
+              <div className="flex items-center justify-between p-3 border-2 border-black bg-yellow-50 rounded">
+                <div className="text-sm text-black">
+                  Search mode requires an AI provider for summarization and analysis.
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-2 border-black"
+                  onClick={() => setActiveTab('settings')}
+                >
+                  <Settings className="w-4 h-4 mr-2" /> Configure Provider
+                </Button>
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
               {/* Mode selector - full width mobile, auto width desktop */}
               <div className="shrink-0 w-full sm:w-auto">
@@ -1317,10 +1386,13 @@ ${diagnostics.documents.length === 0
                     (chatMode === 'docs' && disabled)
                       ? "Configure AI provider and upload documents to start chatting..."
                       : chatMode === 'search'
-                        ? "Search the web, arXiv, and news... (Shift+Enter for new line)"
+                        ? (isLLMConfigured
+                            ? "Search the web, arXiv, and news... (Shift+Enter for new line)"
+                            : "Configure AI provider to enable web research summarization..."
+                          )
                         : "Ask a question about your documents... (Shift+Enter for new line)"
                   }
-                  disabled={(chatMode === 'docs' ? (disabled || isProcessing) : isProcessing)}
+                  disabled={(chatMode === 'docs' ? (disabled || isProcessing) : (isProcessing || !isLLMConfigured))}
                   className="min-h-[3rem] h-[3rem] sm:h-auto max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed w-full"
                   rows={1}
                 />
@@ -1330,7 +1402,7 @@ ${diagnostics.documents.length === 0
               <div className="shrink-0 w-full sm:w-auto">
                 <Button
                   type="submit"
-                  disabled={(chatMode === 'docs' ? (disabled || isProcessing) : isProcessing) || !input.trim()}
+                  disabled={(chatMode === 'docs' ? (disabled || isProcessing) : (isProcessing || !isLLMConfigured)) || !input.trim()}
                   className="w-full sm:w-auto border-2 border-black bg-black text-white hover:bg-white hover:text-black px-6 h-12 btn-enhanced"
                   aria-label={chatMode === 'search' ? 'Search' : 'Send message'}
                 >
