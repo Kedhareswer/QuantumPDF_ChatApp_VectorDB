@@ -378,6 +378,10 @@ export function ChatInterface({
   const [streamedAnswer, setStreamedAnswer] = useState<string | null>(null)
   const [stepperError, setStepperError] = useState<string | null>(null)
   const { toast } = useToast();
+  // Typing pulse and metrics for Search mode
+  const [typingPulse, setTypingPulse] = useState(false)
+  const typingTimeoutRef = useRef<any>(null)
+  const [metrics, setMetrics] = useState<{ confidence?: number; reliabilityScore?: number; biasIndicators?: any[]; sentiment?: 'pos' | 'neu' | 'neg'; intent?: string; relatedQueries?: string[]; factChecks?: any[]; trendAnalysis?: any; queryEnhancement?: any }>({})
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -568,6 +572,12 @@ ${diagnostics.documents.length === 0
     setShowStepper(true)
     setStepperError(null)
     setStreamedAnswer("")
+    setMetrics({})
+    setTypingPulse(false)
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = null
+    }
     setStepperSteps([
       { key: "search", label: chatMode === 'search' ? "Searching sources" : "Searching document database", status: "in_progress" },
       { key: "ranking", label: chatMode === 'search' ? "Fetching content" : "Ranking by relevance", status: "pending" },
@@ -651,12 +661,33 @@ ${diagnostics.documents.length === 0
               } else if (step === 'answer' && evt.text) {
                 accumulatedAnswer += evt.text
                 setStreamedAnswer(accumulatedAnswer)
+              } else if (step === 'typing') {
+                // Show brief typing pulse
+                setTypingPulse(true)
+                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+                typingTimeoutRef.current = setTimeout(() => setTypingPulse(false), 900)
+              } else if (step === 'metrics') {
+                // Merge incoming metrics
+                setMetrics((prev) => ({ ...prev, ...evt }))
               } else if (step === 'done') {
                 setStepperSteps(prev => prev.map(s => s.key === 'answer' ? { ...s, status: 'done' } : s))
                 
                 // Extract sources if provided
                 if (evt.sources && Array.isArray(evt.sources)) {
                   sources = evt.sources.map((s: any) => `${s.title} - ${s.url}`)
+                }
+                // Capture related queries, fact checks, trends, and query enhancements if present
+                if (evt.relatedQueries && Array.isArray(evt.relatedQueries)) {
+                  setMetrics((prev) => ({ ...prev, relatedQueries: evt.relatedQueries }))
+                }
+                if (evt.factChecks && Array.isArray(evt.factChecks)) {
+                  setMetrics((prev) => ({ ...prev, factChecks: evt.factChecks }))
+                }
+                if (evt.trendAnalysis) {
+                  setMetrics((prev) => ({ ...prev, trendAnalysis: evt.trendAnalysis }))
+                }
+                if (evt.queryEnhancement) {
+                  setMetrics((prev) => ({ ...prev, queryEnhancement: evt.queryEnhancement }))
                 }
                 
                 // Create assistant message with the accumulated answer
@@ -1106,7 +1137,26 @@ ${diagnostics.documents.length === 0
                 <Card className="mb-4">
                   <CardContent>
                     <Stepper steps={stepperSteps} />
+                    {typingPulse && (
+                      <div className="mt-2"><ChatTypingIndicator /></div>
+                    )}
                     {stepperError && <div className="text-red-600 mt-2">{stepperError}</div>}
+                    {(metrics.confidence !== undefined || metrics.reliabilityScore !== undefined || metrics.sentiment || metrics.intent) && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {metrics.intent && (
+                          <Badge variant="outline" className="text-xs">Intent: {String(metrics.intent).toUpperCase()}</Badge>
+                        )}
+                        {typeof metrics.confidence === 'number' && (
+                          <Badge variant="outline" className={`text-xs ${metrics.confidence >= 0.75 ? 'border-green-500 text-green-700' : metrics.confidence >= 0.5 ? 'border-yellow-500 text-yellow-700' : 'border-red-500 text-red-700'}`}>Confidence: {Math.round(metrics.confidence * 100)}%</Badge>
+                        )}
+                        {typeof metrics.reliabilityScore === 'number' && (
+                          <Badge variant="outline" className="text-xs">Reliability: {Math.round((metrics.reliabilityScore || 0) * 100)}%</Badge>
+                        )}
+                        {metrics.sentiment && (
+                          <Badge variant="outline" className="text-xs">Sentiment: {metrics.sentiment.toUpperCase()}</Badge>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -1116,6 +1166,19 @@ ${diagnostics.documents.length === 0
                   <Card>
                     <CardContent>
                       <div className="flex gap-2 items-center mb-2"><Brain className="w-4 h-4 text-blue-500" /><span className="font-semibold">Assistant</span></div>
+                      {(metrics.confidence !== undefined || metrics.reliabilityScore !== undefined || metrics.sentiment) && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {typeof metrics.confidence === 'number' && (
+                            <Badge variant="outline" className={`text-xs ${metrics.confidence >= 0.75 ? 'border-green-500 text-green-700' : metrics.confidence >= 0.5 ? 'border-yellow-500 text-yellow-700' : 'border-red-500 text-red-700'}`}>Confidence: {Math.round(metrics.confidence * 100)}%</Badge>
+                          )}
+                          {typeof metrics.reliabilityScore === 'number' && (
+                            <Badge variant="outline" className="text-xs">Reliability: {Math.round((metrics.reliabilityScore || 0) * 100)}%</Badge>
+                          )}
+                          {metrics.sentiment && (
+                            <Badge variant="outline" className="text-xs">Sentiment: {metrics.sentiment.toUpperCase()}</Badge>
+                          )}
+                        </div>
+                      )}
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkMath]}
                         rehypePlugins={[rehypeKatex as any]}
@@ -1128,11 +1191,79 @@ ${diagnostics.documents.length === 0
                           },
                         } as Components}
                       >{streamedAnswer}</ReactMarkdown>
+                      {metrics.relatedQueries && metrics.relatedQueries.length > 0 && (
+                        <div className="mt-3">
+                          <div className="text-sm font-semibold mb-1">Related searches:</div>
+                          <div className="flex flex-wrap gap-2">
+                            {metrics.relatedQueries.map((rq, idx) => (
+                              <Button key={idx} variant="outline" size="sm" className="h-7 text-xs" onClick={() => setInput(rq)}>
+                                {rq}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Fact-checking results */}
+                      {metrics.factChecks && metrics.factChecks.length > 0 && (
+                        <div className="mt-3 p-3 border border-purple-200 rounded bg-purple-50/30">
+                          <div className="text-sm font-semibold mb-2 text-purple-800">Fact-checking Results:</div>
+                          <div className="space-y-2">
+                            {metrics.factChecks.map((check: any, idx: number) => (
+                              <div key={idx} className="flex items-start gap-2 text-xs">
+                                <div className="flex-shrink-0 mt-0.5">
+                                  {check.status === 'verified' && <CheckCircle className="w-3 h-3 text-green-600" />}
+                                  {check.status === 'disputed' && <XCircle className="w-3 h-3 text-red-600" />}
+                                  {check.status === 'unverified' && <Circle className="w-3 h-3 text-yellow-600" />}
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-gray-800 mb-1">{check.claim}</p>
+                                  <div className="flex gap-2 text-gray-600">
+                                    <Badge variant="outline" className={`text-xs ${
+                                      check.status === 'verified' ? 'border-green-500 text-green-700' :
+                                      check.status === 'disputed' ? 'border-red-500 text-red-700' :
+                                      'border-yellow-500 text-yellow-700'
+                                    }`}>
+                                      {check.status.toUpperCase()}
+                                    </Badge>
+                                    <span>Sources: {check.sources.map((s: number) => `[${s}]`).join(', ')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Trend Analysis */}
+                      {metrics.trendAnalysis && (
+                        <div className="mt-3 p-3 border border-blue-200 rounded bg-blue-50/30">
+                          <div className="text-sm font-semibold mb-2 text-blue-800">Trend Analysis:</div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <Badge variant="outline" className="border-blue-500 text-blue-700">
+                              {metrics.trendAnalysis.trend}
+                            </Badge>
+                            <span className="text-gray-600">
+                              Momentum: {metrics.trendAnalysis.momentum} ({metrics.trendAnalysis.timeframe})
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Query Enhancement Suggestions */}
+                      {metrics.queryEnhancement && metrics.queryEnhancement.corrections.length > 0 && (
+                        <div className="mt-3 p-3 border border-yellow-200 rounded bg-yellow-50/30">
+                          <div className="text-sm font-semibold mb-2 text-yellow-800">Query Suggestions:</div>
+                          <div className="space-y-1">
+                            {metrics.queryEnhancement.corrections.map((correction: string, idx: number) => (
+                              <p key={idx} className="text-xs text-yellow-700">{correction}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
               )}
-
               <div ref={messagesEndRef} />
             </div>
           )}
