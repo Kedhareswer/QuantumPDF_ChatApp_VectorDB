@@ -407,13 +407,9 @@ export function ChatInterface({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      if (chatMode === 'search') {
-        // Use streaming unified search submission when in Search mode
-        // @ts-ignore - reuse event to trigger streaming submit
-        handleSubmitStreaming(e as any)
-      } else {
-        handleSubmit(e)
-      }
+      // Always use streaming path for both modes
+      // @ts-ignore - reuse event to trigger streaming submit
+      handleSubmitStreaming(e as any)
     }
   }
 
@@ -1023,7 +1019,7 @@ ${diagnostics.documents.length === 0
                         />
                       )}
                     <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                           <MessageContent
                             content={(() => {
                               if (message.role !== "assistant") return message.content
@@ -1145,41 +1141,14 @@ ${diagnostics.documents.length === 0
       <div className="border-t-2 border-black bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
-            <div className="flex space-x-4">
-              <div className="flex-1">
-                <label htmlFor="chat-input" className="sr-only">
-                  Ask a question about your documents
-                </label>
-                <Textarea
-                  id="chat-input"
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (chatMode === 'search' && e.key === 'Enter' && !e.shiftKey) {
-                      handleSubmitStreaming(e);
-                    } else {
-                      handleKeyDown(e);
-                    }
-                  }}
-                  placeholder={
-                    disabled
-                      ? "Configure AI provider and upload documents to start chatting..."
-                      : chatMode === 'search'
-                        ? "Search the web, arXiv, and news... (Shift+Enter for new line)"
-                        : "Ask a question about your documents... (Shift+Enter for new line)"
-                  }
-                  disabled={disabled || isProcessing}
-                  className="min-h-[3rem] max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed"
-                  rows={1}
-                />
-              </div>
-              <div className="flex flex-col items-end space-y-2">
+            <div className="flex items-center gap-3 flex-nowrap">
+              {/* Mode pill on the left */}
+              <div className="shrink-0">
                 <div className="flex items-center rounded-full border-2 border-black overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setChatMode('docs')}
-                    className={`px-3 py-1 text-sm ${chatMode === 'docs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                    className={`px-3 py-2 text-sm ${chatMode === 'docs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
                     aria-pressed={chatMode === 'docs'}
                     aria-label="Documents mode"
                     title="Use uploaded PDF context"
@@ -1189,7 +1158,7 @@ ${diagnostics.documents.length === 0
                   <button
                     type="button"
                     onClick={() => setChatMode('search')}
-                    className={`px-3 py-1 text-sm border-l-2 border-black ${chatMode === 'search' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
+                    className={`px-3 py-2 text-sm border-l-2 border-black ${chatMode === 'search' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
                     aria-pressed={chatMode === 'search'}
                     aria-label="Web Research mode"
                     title="Search web, arXiv and news"
@@ -1197,14 +1166,48 @@ ${diagnostics.documents.length === 0
                     Search
                   </button>
                 </div>
+              </div>
 
+              {/* Textarea in the middle */}
+              <div className="flex-1">
+                <label htmlFor="chat-input" className="sr-only">
+                  Ask a question about your documents
+                </label>
+                <Textarea
+                  id="chat-input"
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    (chatMode === 'docs' && disabled)
+                      ? "Configure AI provider and upload documents to start chatting..."
+                      : chatMode === 'search'
+                        ? "Search the web, arXiv, and news... (Shift+Enter for new line)"
+                        : "Ask a question about your documents... (Shift+Enter for new line)"
+                  }
+                  disabled={(chatMode === 'docs' ? (disabled || isProcessing) : isProcessing)}
+                  className="min-h-[3rem] max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed"
+                  rows={1}
+                />
+              </div>
+
+              {/* Submit button at right */}
+              <div className="shrink-0">
                 <Button
                   type="submit"
-                  disabled={disabled || isProcessing || !input.trim()}
+                  disabled={(chatMode === 'docs' ? (disabled || isProcessing) : isProcessing) || !input.trim()}
                   className="border-2 border-black bg-black text-white hover:bg-white hover:text-black px-6 h-12 btn-enhanced"
-                  aria-label="Send message"
+                  aria-label={chatMode === 'search' ? 'Search' : 'Send message'}
                 >
-                  {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  {isProcessing ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {chatMode === 'search' ? <Search className="w-5 h-5" /> : <Send className="w-5 h-5" />}
+                      <span className="hidden sm:inline">{chatMode === 'search' ? 'Search' : 'Send'}</span>
+                    </div>
+                  )}
                 </Button>
               </div>
             </div>
