@@ -62,6 +62,8 @@ export class AdvancedPDFProcessor {
       overlap: 100,
       preserveStructure: true,
       semanticSplitting: true,
+      documentAware: true,
+      adaptiveThreshold: true,
     })
     this.initializePDFJS()
   }
