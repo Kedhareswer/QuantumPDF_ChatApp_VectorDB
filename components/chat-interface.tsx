@@ -861,7 +861,7 @@ ${diagnostics.documents.length === 0
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full min-h-0 bg-white">
       {/* Chat Header with Controls */}
       <div className="border-b border-gray-200 p-4">
         <div className="flex items-center justify-between">
@@ -1014,7 +1014,7 @@ ${diagnostics.documents.length === 0
       </a>
 
       {/* Messages Area */}
-      <ScrollArea className="flex-1 px-4 sm:px-6 lg:px-8" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 h-0 px-4 sm:px-6 lg:px-8" ref={scrollAreaRef}>
         <div id="chat-messages" className="max-w-4xl mx-auto py-6 space-content-lg">
           {messages.length === 0 ? (
             <div className="flex items-center justify-center min-h-[60vh]">
@@ -1400,7 +1400,7 @@ ${diagnostics.documents.length === 0
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="border-t-2 border-black bg-white">
+      <div className="border-t-2 border-black bg-white sticky bottom-0 z-10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
             {chatMode === 'search' && !isLLMConfigured && (
@@ -1416,10 +1416,10 @@ ${diagnostics.documents.length === 0
               {/* Mode selector */}
               <div className="shrink-0 w-full sm:w-auto">
                 <div className="flex items-center rounded-full border-2 border-black overflow-hidden w-full sm:w-auto">
-                  <button type="button" onClick={() => setChatMode('docs')} className={`px-3 py-2 text-sm ${chatMode === 'docs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`} aria-pressed={chatMode === 'docs'}>
+                  <button type="button" onClick={() => setChatMode('docs')} className={`px-3 py-2 text-sm flex-1 sm:flex-none text-center ${chatMode === 'docs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`} aria-pressed={chatMode === 'docs'}>
                     Docs
                   </button>
-                  <button type="button" onClick={() => setChatMode('search')} className={`px-3 py-2 text-sm border-l-2 border-black ${chatMode === 'search' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`} aria-pressed={chatMode === 'search'}>
+                  <button type="button" onClick={() => setChatMode('search')} className={`px-3 py-2 text-sm border-l-2 border-black flex-1 sm:flex-none text-center ${chatMode === 'search' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`} aria-pressed={chatMode === 'search'}>
                     Search
                   </button>
                 </div>

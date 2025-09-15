@@ -625,7 +625,7 @@ export default function QuantumPDFChatbot() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="h-screen overflow-hidden bg-gray-50 flex">
         {/* Error Handler */}
         <ErrorHandler errors={errors} onDismiss={removeError} />
 
@@ -644,10 +644,10 @@ export default function QuantumPDFChatbot() {
         <div
           className={`
           fixed lg:relative inset-y-0 left-0 z-40 
-          ${sidebarCollapsed ? "w-16" : "w-80"} 
+          ${sidebarCollapsed ? "lg:w-16 w-72" : "w-80"} 
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
           transition-all duration-300 ease-in-out
-          bg-white border-r-2 border-black
+          bg-white border-r-2 border-black flex flex-col h-full
         `}
         >
           {/* Sidebar Header */}
@@ -672,7 +672,7 @@ export default function QuantumPDFChatbot() {
           </div>
 
           {/* Sidebar Content */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-auto">
             {!sidebarCollapsed ? (
               <Tabs value={activeTab} onValueChange={handleTabChange} className="h-full flex flex-col">
                 <TabsList className="grid w-full grid-cols-4 m-4 border-2 border-black bg-white">
@@ -706,7 +706,7 @@ export default function QuantumPDFChatbot() {
                   </TabsTrigger>
                 </TabsList>
 
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-auto">
                   <TabsContent value="chat" className="h-full m-0 p-4 space-y-4">
                     {isTabLoading ? (
                       <div className="p-4">
@@ -845,16 +845,14 @@ export default function QuantumPDFChatbot() {
         </div>
 
         {/* Overlay for mobile */}
-        {sidebarOpen && (
           <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+          className={`fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden transition-opacity ${sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
-        )}
 
         {/* Main Content */}
-        <main className="flex-1 flex flex-col min-w-0">
+        <main className="flex-1 flex flex-col min-w-0 min-h-0">
           <header className="bg-white border-b-2 border-black p-4 lg:p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4 ml-12 lg:ml-0">
@@ -862,6 +860,7 @@ export default function QuantumPDFChatbot() {
                   <Brain className="w-5 h-5 text-white" />
                 </div>
                 <div>
+                  <div className="text-xs font-semibold tracking-wide text-gray-600 uppercase">QUANTUM PDF</div>
                   <h1 className="font-bold text-xl">AI Document Chat</h1>
                   <p className="text-sm text-gray-600">
                     {isChatReady
@@ -884,7 +883,7 @@ export default function QuantumPDFChatbot() {
             </div>
           </header>
 
-          <div className="flex-1 bg-white">
+          <div className="flex-1 min-h-0 bg-white">
             <ChatInterface
               messages={messages}
               onSendMessage={handleSendMessage}
