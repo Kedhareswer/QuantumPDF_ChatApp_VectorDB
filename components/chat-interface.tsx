@@ -12,6 +12,7 @@ import Mermaid from '@/components/mermaid'
 import type { Components } from 'react-markdown'
 import {
   Send,
+  Search,
   Loader2,
   FileText,
   Brain,
@@ -35,24 +36,26 @@ import {
   CheckCircle,
   XCircle,
   Circle,
-  Search,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { QuickActions } from "@/components/quick-actions"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { QuickActions } from "@/components/quick-actions"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { EnhancedChatProcessingSkeleton, ChatTypingIndicator } from "@/components/skeleton-loaders"
 import { ThinkingBubble } from "@/components/thinking-bubble"
 import { useToast } from "@/hooks/use-toast"
 import { useAppStore } from "@/lib/store"
 import { AIClient } from "@/lib/ai-client"
+import { EnhancedSearchResults } from "./enhanced-search-results"
+import { Stepper } from "./stepper"
 
 interface Message {
   id: string
@@ -330,22 +333,7 @@ function MessageContent({ content }: { content: string }) {
   )
 }
 
-// Stepper UI component
-function Stepper({ steps }: { steps: { key: string, label: string, status: string }[] }) {
-  return (
-    <ul className="flex flex-col gap-2 my-4" aria-label="Progress steps">
-      {steps.map((step, idx) => (
-        <li key={step.key} className="flex items-center gap-2 text-sm">
-          {step.status === "done" && <CheckCircle className="text-green-600 w-5 h-5" aria-label="Done" />}
-          {step.status === "in_progress" && <Loader2 className="animate-spin text-blue-500 w-5 h-5" aria-label="In progress" />}
-          {step.status === "pending" && <Circle className="text-gray-300 w-5 h-5" aria-label="Pending" />}
-          {step.status === "error" && <XCircle className="text-red-500 w-5 h-5" aria-label="Error" />}
-          <span>{step.label}</span>
-        </li>
-      ))}
-    </ul>
-  )
-}
+// Local Stepper function removed - using imported Stepper component instead
 
 export function ChatInterface({ 
   messages, 
@@ -371,7 +359,7 @@ export function ChatInterface({
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [stepperSteps, setStepperSteps] = useState([
+  const [stepperSteps, setStepperSteps] = useState<Array<{ key: string; label: string; status: "pending" | "in_progress" | "done" | "error" }>>([
     { key: "search", label: "Searching document database", status: "pending" },
     { key: "ranking", label: "Ranking by relevance", status: "pending" },
     { key: "context", label: "Preparing context", status: "pending" },
@@ -382,12 +370,22 @@ export function ChatInterface({
   const [stepperError, setStepperError] = useState<string | null>(null)
   const { toast } = useToast();
   // LLM configuration (for Search mode gating)
+
   const { aiConfig, vectorDBConfig, setActiveTab, modelStatus } = useAppStore()
   const isLLMConfigured = !!(aiConfig?.provider && aiConfig?.apiKey && aiConfig?.model)
   // Typing pulse and metrics for Search mode
   const [typingPulse, setTypingPulse] = useState(false)
   const typingTimeoutRef = useRef<any>(null)
   const [metrics, setMetrics] = useState<{ confidence?: number; reliabilityScore?: number; biasIndicators?: any[]; sentiment?: 'pos' | 'neu' | 'neg'; intent?: string; relatedQueries?: string[]; factChecks?: any[]; trendAnalysis?: any; queryEnhancement?: any }>({})
+  const [searchMetrics, setSearchMetrics] = useState<{ totalSources?: number; providerCounts?: Record<string, number>; domainCoverage?: string[] }>({})
+
+  // Source filters for Search mode
+  const [sourceFilters, setSourceFilters] = useState({
+    tier1Only: false,
+    minCitationCount: 0,
+    dateRange: 'all' as 'recent' | 'last5years' | 'all',
+    openAccessOnly: true,
+  })
 
   // Helpers: detect local-docs intent and extract links from text
   const detectLocalDocsIntent = (q: string): boolean => {
@@ -594,7 +592,8 @@ ${diagnostics.documents.length === 0
     
     // Clear input and reset states
     setInput("")
-    setShowStepper(true)
+    // Only show stepper in Search mode
+    setShowStepper(chatMode === 'search')
     setStepperError(null)
     setStreamedAnswer("")
     setMetrics({})
@@ -667,6 +666,7 @@ ${diagnostics.documents.length === 0
               // New fields for Search Pill
               links: combinedLinks,
               useLocalDocs: useLocalDocsFlag,
+              sourceFilters,
               // Provide configs so server can perform local vector search and embeddings when enabled
               aiConfig: aiConfig ? {
                 provider: aiConfig.provider,
@@ -783,6 +783,12 @@ ${diagnostics.documents.length === 0
               } else if (step === 'metrics') {
                 // Merge incoming metrics
                 setMetrics((prev) => ({ ...prev, ...evt }))
+                setSearchMetrics((prev) => ({
+                  ...prev,
+                  totalSources: evt.totalSources ?? prev.totalSources,
+                  providerCounts: evt.providerCounts ?? prev.providerCounts,
+                  domainCoverage: evt.domainCoverage ?? prev.domainCoverage,
+                }))
               } else if (step === 'done') {
                 setStepperSteps(prev => prev.map(s => s.key === 'answer' ? { ...s, status: 'done' } : s))
                 
@@ -824,7 +830,9 @@ ${diagnostics.documents.length === 0
             }
           }
           setTimeout(() => {
-            setShowStepper(false)
+            if (chatMode === 'search') {
+              setShowStepper(false)
+            }
             setStreamedAnswer("")
           }, 1000)
           return
@@ -1219,22 +1227,31 @@ ${diagnostics.documents.length === 0
 
                     {message.sources && message.sources.length > 0 && (
                       <Card className="mt-6 border border-gray-200 bg-gray-50">
-                        <CardContent className="p-4">
-                          <div className="flex items-center space-x-2 mb-4">
-                            <FileText className="w-4 h-4 text-gray-600" />
-                            <span className="text-sm font-bold text-gray-700">SOURCES ({message.sources.length})</span>
-                          </div>
-                          <div className="space-y-3">
-                            {message.sources.map((source, index) => (
-                              <div
-                                key={index}
-                                className="text-sm bg-white p-3 border border-gray-200 font-mono rounded-sm"
-                              >
-                                <span className="text-gray-600 font-bold">#{index + 1}</span> {source}
+                        <Collapsible defaultOpen={false}>
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" className="w-full justify-between p-4 h-auto">
+                              <div className="flex items-center space-x-2">
+                                <FileText className="w-4 h-4 text-gray-600" />
+                                <span className="text-sm font-bold text-gray-700">SOURCES ({message.sources.length})</span>
                               </div>
-                            ))}
-                          </div>
-                        </CardContent>
+                              <ChevronDown className="w-4 h-4" />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <CardContent className="p-4 pt-0">
+                              <div className="space-y-3">
+                                {message.sources.map((source, index) => (
+                                  <div
+                                    key={index}
+                                    className="text-sm bg-white p-3 border border-gray-200 font-mono rounded-sm"
+                                  >
+                                    <span className="text-gray-600 font-bold">#{index + 1}</span> {source}
+                                  </div>
+                                ))}
+                              </div>
+                            </CardContent>
+                          </CollapsibleContent>
+                        </Collapsible>
                       </Card>
                     )}
                     </div>
@@ -1453,21 +1470,42 @@ ${diagnostics.documents.length === 0
               (() => {
                 const links = extractLinksFromText(input)
                 const wantsLocal = detectLocalDocsIntent(input)
-                if (links.length === 0 && !wantsLocal) return null
-                return (
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    {links.length > 0 && (
-                      <Badge variant="outline" className="border-2 border-black">
-                        {links.length} link{links.length>1?'s':''} detected
+                const badges: React.ReactNode[] = []
+                if (links.length > 0) {
+                  badges.push(
+                    <Badge key="links" variant="outline" className="border-2 border-black">
+                      {links.length} link{links.length>1?'s':''} detected
+                    </Badge>
+                  )
+                }
+                if (wantsLocal) {
+                  badges.push(
+                    <Badge key="local" variant="outline" className="border-2 border-green-600 text-green-700 bg-green-50">
+                      Local docs: ON
+                    </Badge>
+                  )
+                }
+                // Add metrics chips if available
+                if (searchMetrics?.totalSources) {
+                  badges.push(
+                    <Badge key="total" variant="outline" className="border-2 border-blue-600 text-blue-700 bg-blue-50">
+                      {searchMetrics.totalSources} sources
+                    </Badge>
+                  )
+                }
+                if (searchMetrics?.providerCounts) {
+                  const entries = Object.entries(searchMetrics.providerCounts)
+                  if (entries.length) {
+                    const [topProvider, count] = entries.sort((a,b)=>b[1]-a[1])[0]
+                    badges.push(
+                      <Badge key="topprov" variant="outline" className="border-2 border-purple-600 text-purple-700 bg-purple-50">
+                        Top: {topProvider} ({count})
                       </Badge>
-                    )}
-                    {wantsLocal && (
-                      <Badge variant="outline" className="border-2 border-green-600 text-green-700 bg-green-50">
-                        Local docs: ON
-                      </Badge>
-                    )}
-                  </div>
-                )
+                    )
+                  }
+                }
+                if (badges.length === 0) return null
+                return <div className="flex flex-wrap items-center gap-2 text-xs">{badges}</div>
               })()
             )}
 

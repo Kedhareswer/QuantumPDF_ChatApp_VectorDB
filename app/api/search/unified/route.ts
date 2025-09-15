@@ -19,6 +19,12 @@ interface UnifiedRequestBody {
   model?: string
   links?: string[]
   useLocalDocs?: boolean
+  sourceFilters?: {
+    tier1Only?: boolean
+    minCitationCount?: number
+    dateRange?: 'recent' | 'last5years' | 'all'
+    openAccessOnly?: boolean
+  }
   vectorDBConfig?: VectorDBConfig
   aiConfig?: {
     provider: string
@@ -26,6 +32,36 @@ interface UnifiedRequestBody {
     model: string
     baseUrl?: string
   }
+}
+
+// Apply user-provided source filters
+function applySourceFilters(items: SourceItem[], filters?: UnifiedRequestBody['sourceFilters']): SourceItem[] {
+  if (!filters) return items
+  let out = items.slice()
+  // Tier 1 filter: PubMed, arXiv, OpenAlex
+  if (filters.tier1Only) {
+    const tier1 = new Set(["pubmed","arxiv","openalex"]) as Set<SourceItem['provider']>
+    out = out.filter(it => tier1.has(it.provider))
+  }
+  // Min citations
+  if (typeof filters.minCitationCount === 'number' && filters.minCitationCount > 0) {
+    out = out.filter(it => (it.citations || 0) >= filters.minCitationCount!)
+  }
+  // Date range
+  if (filters.dateRange && filters.dateRange !== 'all') {
+    const years = filters.dateRange === 'recent' ? 1 : 5
+    const cutoff = Date.now() - years * 365 * 24 * 60 * 60 * 1000
+    out = out.filter(it => {
+      if (!it.publishedAt) return false
+      const t = Date.parse(it.publishedAt)
+      return !Number.isNaN(t) && t >= cutoff
+    })
+  }
+  // Open access only
+  if (filters.openAccessOnly) {
+    out = out.filter(it => it.openAccess === true)
+  }
+  return out
 }
 
 interface SourceItem {
@@ -36,6 +72,8 @@ interface SourceItem {
   snippet?: string
   authors?: string[]
   publishedAt?: string
+  citations?: number
+  openAccess?: boolean
 }
 
 // Utilities
@@ -516,7 +554,8 @@ function parseArxivAtom(xml: string): SourceItem[] {
       title,
       url,
       authors,
-      publishedAt: toISO(published)
+      publishedAt: toISO(published),
+      openAccess: true
     })
   }
   return items
@@ -585,7 +624,8 @@ async function doajSearch(query: string, maxResults: number): Promise<SourceItem
         url: bibjson.link?.[0]?.url || `https://doaj.org/article/${r.id}`,
         snippet: bibjson.abstract || '',
         authors: bibjson.author?.map((a: any) => a.name).slice(0, 5) || [],
-        publishedAt: toISO(bibjson.year ? `${bibjson.year}-01-01` : undefined)
+        publishedAt: toISO(bibjson.year ? `${bibjson.year}-01-01` : undefined),
+        openAccess: true
       }
     })
   } catch { return [] }
@@ -634,7 +674,8 @@ async function crossrefSearch(query: string, maxResults: number): Promise<Source
       url: item.URL || `https://doi.org/${item.DOI}`,
       snippet: item.abstract || '',
       authors: item.author?.map((a: any) => `${a.given || ''} ${a.family || ''}`.trim()).slice(0, 5) || [],
-      publishedAt: toISO(item.published?.['date-parts']?.[0] ? `${item.published['date-parts'][0].join('-')}` : undefined)
+      publishedAt: toISO(item.published?.['date-parts']?.[0] ? `${item.published['date-parts'][0].join('-')}` : undefined),
+      citations: typeof item['is-referenced-by-count'] === 'number' ? item['is-referenced-by-count'] : undefined
     }))
   } catch { return [] }
 }
@@ -650,7 +691,8 @@ async function hnSearch(query: string, maxResults: number): Promise<SourceItem[]
     provider: "hn" as const,
     title: h.title || h.story_title || h.url || "Hacker News",
     url: h.url || (h.story_url || `https://news.ycombinator.com/item?id=${h.objectID}`),
-    snippet: h.comment_text || h.story_text || h._highlightResult?.title?.value
+    snippet: h.comment_text || h.story_text || h._highlightResult?.title?.value,
+    openAccess: true
   }))
 }
 
@@ -678,7 +720,9 @@ async function openalexSearch(query: string, maxResults: number): Promise<Source
       const authors = Array.isArray(w.authorships) ? w.authorships.map((a: any) => a?.author?.display_name).filter(Boolean) : []
       const url = w.primary_location?.landing_page_url || w.open_access?.oa_url || (w.doi ? `https://doi.org/${w.doi.replace(/^doi:/i,'')}` : (w.id || ''))
       const publishedAt = toISO(w.publication_date || (w.publication_year ? `${w.publication_year}-01-01` : undefined))
-      return { id: String(id), provider: 'openalex' as const, title: title || (url || 'OpenAlex work'), url: url || (w.id || ''), authors, publishedAt }
+      const citations = typeof w.cited_by_count === 'number' ? w.cited_by_count : undefined
+      const openAccess = !!(w.open_access?.is_oa || w.primary_location?.is_oa || w.open_access?.oa_url)
+      return { id: String(id), provider: 'openalex' as const, title: title || (url || 'OpenAlex work'), url: url || (w.id || ''), authors, publishedAt, citations, openAccess }
     })
   } catch { return [] }
 }
@@ -686,7 +730,7 @@ async function openalexSearch(query: string, maxResults: number): Promise<Source
 // --- Semantic Scholar (free tier) ---
 async function semanticScholarSearch(query: string, maxResults: number): Promise<SourceItem[]> {
   try {
-    const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${maxResults}&fields=title,year,authors,url,openAccessPdf`
+    const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${maxResults}&fields=title,year,authors,url,openAccessPdf,citationCount`
     const res = await fetch(url)
     if (!res.ok) return []
     const data: any = await res.json()
@@ -695,7 +739,9 @@ async function semanticScholarSearch(query: string, maxResults: number): Promise
       const url = p.openAccessPdf?.url || p.url || (p.externalIds?.DOI ? `https://doi.org/${p.externalIds.DOI}` : '')
       const authors = Array.isArray(p.authors) ? p.authors.map((a: any) => a.name) : []
       const publishedAt = toISO(p.year ? `${p.year}-01-01` : undefined)
-      return { id: p.paperId || url || p.title, provider: 'semanticscholar' as const, title: p.title || url || 'Semantic Scholar', url: url || '', authors, publishedAt }
+      const citations = typeof p.citationCount === 'number' ? p.citationCount : undefined
+      const openAccess = !!p.openAccessPdf?.url
+      return { id: p.paperId || url || p.title, provider: 'semanticscholar' as const, title: p.title || url || 'Semantic Scholar', url: url || '', authors, publishedAt, citations, openAccess }
     })
   } catch { return [] }
 }
@@ -741,7 +787,7 @@ async function redditSearch(query: string, maxResults: number): Promise<SourceIt
       const d = c.data || {}
       const url = d.url || `https://www.reddit.com${d.permalink || ''}`
       const publishedAt = toISO(d.created_utc ? new Date(d.created_utc * 1000) : undefined)
-      return { id: String(d.id || url), provider: 'reddit' as const, title: d.title || 'Reddit', url, snippet: d.selftext?.slice(0, 300) || '', publishedAt }
+      return { id: String(d.id || url), provider: 'reddit' as const, title: d.title || 'Reddit', url, snippet: d.selftext?.slice(0, 300) || '', publishedAt, openAccess: true }
     })
   } catch { return [] }
 }
@@ -754,7 +800,7 @@ async function githubSearch(query: string, maxResults: number): Promise<SourceIt
     if (!res.ok) return []
     const data: any = await res.json()
     const items: any[] = data?.items || []
-    return items.map((r: any) => ({ id: String(r.id), provider: 'github' as const, title: r.full_name || r.name, url: r.html_url, snippet: r.description || '', publishedAt: toISO(r.updated_at) }))
+    return items.map((r: any) => ({ id: String(r.id), provider: 'github' as const, title: r.full_name || r.name, url: r.html_url, snippet: r.description || '', publishedAt: toISO(r.updated_at), openAccess: true }))
   } catch { return [] }
 }
 
@@ -880,14 +926,20 @@ export async function POST(req: NextRequest) {
         if (needsDomainFilter(query)) {
           items = items.filter(it => textRelevanceScore(it, query) >= 2)
         }
+        // Apply user-provided filters (tier1, citations, date range, open access)
+        items = applySourceFilters(items, body.sourceFilters)
         items = items
           .map(it => ({ it, score: computeScore(it, query) }))
           .sort((a, b) => b.score - a.score)
           .map(x => x.it)
           .slice(0, maxResults)
         sse(controller, { step: "search", status: "done", total: items.length })
-        // Emit intent metrics early
-        sse(controller, { step: "metrics", intent })
+        // Emit initial metrics: intent, provider counts, total
+        const providerCounts = items.reduce((acc: Record<string, number>, it) => {
+          acc[it.provider] = (acc[it.provider] || 0) + 1
+          return acc
+        }, {})
+        sse(controller, { step: "metrics", intent, totalSources: items.length, providerCounts })
 
         // Fetch lightweight content for each (first N to limit latency)
         sse(controller, { step: "fetch", status: "in_progress", progress: { done: 0, total: items.length } })
@@ -961,7 +1013,9 @@ export async function POST(req: NextRequest) {
           const joined = cited.map(c => c.title).join(". ")
           return simpleSentiment(joined)
         })()
-        sse(controller, { step: "metrics", confidence: Number(confidence.toFixed(2)), reliabilityScore: Number(avgReliability.toFixed(2)), biasIndicators, sentiment, intent })
+        const finalProviderCounts = cited.reduce((acc: Record<string, number>, it) => { acc[it.provider] = (acc[it.provider] || 0) + 1; return acc }, {})
+        const domainCoverage = extractTopics(cited)
+        sse(controller, { step: "metrics", confidence: Number(confidence.toFixed(2)), reliabilityScore: Number(avgReliability.toFixed(2)), biasIndicators, sentiment, intent, totalSources: cited.length, providerCounts: finalProviderCounts, domainCoverage })
 
         // Done + citations + related queries (respect requested count)
         const sourcesExport = displaySources.map((c, i) => ({ id: i + 1, title: c.title, url: c.url, provider: c.provider, publishedAt: c.publishedAt, authors: c.authors }))
