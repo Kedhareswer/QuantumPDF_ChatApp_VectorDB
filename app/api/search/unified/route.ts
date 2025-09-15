@@ -3,6 +3,7 @@ import type { MetadataRoute } from "next"
 import { createVectorDatabase } from "@/lib/vector-database"
 import type { VectorDBConfig } from "@/lib/vector-database-types"
 import { AIClient } from "@/lib/ai-client"
+import { EnhancedURLProcessor, processURLContent } from "@/lib/enhanced-url-processor"
 
 // Runtime: Node.js (we use network + modest parsing)
 export const runtime = "nodejs"
@@ -151,28 +152,70 @@ function sanitizeUrl(url: string): string {
   return url.trim()
 }
 
-async function fetchLinkPreview(url: string): Promise<SourceItem | null> {
+async function fetchLinkPreview(url: string, aiConfig?: { provider: string; apiKey: string; model: string; baseUrl?: string }): Promise<SourceItem | null> {
   try {
     const safeUrl = sanitizeUrl(url)
     if (!isValidHttpUrl(safeUrl)) return null
     const host = new URL(safeUrl).hostname
     if (isPrivateHostname(host)) return null
 
+    // Use enhanced URL processor for better content extraction
+    try {
+      const processor = new EnhancedURLProcessor({
+        maxContentLength: 10000, // Limit for search context
+        aiConfig
+      })
+      
+      const processed = await processor.processURL(safeUrl)
+      
+      if (processed.error) {
+        // Fallback to basic preview on error
+        return await fetchBasicLinkPreview(safeUrl)
+      }
+
+      // Extract meaningful snippet from processed content
+      let snippet = processed.content
+      if (snippet.length > 500) {
+        // Try to extract the most relevant part
+        const lines = snippet.split('\n').filter(line => line.trim().length > 20)
+        snippet = lines.slice(0, 3).join(' ').substring(0, 500) + '...'
+      }
+
+      return {
+        id: safeUrl,
+        provider: 'links',
+        title: processed.title,
+        url: safeUrl,
+        snippet,
+        authors: processed.metadata.authors,
+        publishedAt: processed.metadata.publishedAt
+      }
+    } catch {
+      // Fallback to basic preview
+      return await fetchBasicLinkPreview(safeUrl)
+    }
+  } catch {
+    return null
+  }
+}
+
+async function fetchBasicLinkPreview(url: string): Promise<SourceItem | null> {
+  try {
     // Try HEAD first to inspect content type quickly
     let contentType = ''
     try {
-      const head = await fetch(safeUrl, { method: 'HEAD' })
+      const head = await fetch(url, { method: 'HEAD' })
       if (head.ok) {
         contentType = head.headers.get('content-type') || ''
       }
     } catch {}
 
-    // Fallback to GET if HEAD didn’t provide enough info
-    const res = await fetch(safeUrl, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
+    // Fallback to GET if HEAD didn't provide enough info
+    const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
     if (!res.ok) return null
     if (!contentType) contentType = res.headers.get('content-type') || ''
 
-    let title = safeUrl
+    let title = url
     let snippet = ''
     if (contentType.includes('text/html')) {
       const html = await res.text()
@@ -182,26 +225,26 @@ async function fetchLinkPreview(url: string): Promise<SourceItem | null> {
       snippet = (mDesc?.[1] || '').replace(/\s+/g, ' ').trim()
     } else if (contentType.includes('application/pdf')) {
       // Keep lightweight info for PDFs
-      title = decodeURIComponent(safeUrl.split('/').pop() || 'PDF Document')
-      snippet = 'PDF document'
+      title = decodeURIComponent(url.split('/').pop() || 'PDF Document')
+      snippet = 'PDF document - Enhanced processing available'
     } else if (contentType.includes('text/plain')) {
       const txt = await res.text()
       snippet = txt.slice(0, 300).replace(/\s+/g, ' ').trim()
     } else {
       // Unsupported type for preview; still return the link
-      title = decodeURIComponent(safeUrl.split('/').pop() || safeUrl)
+      title = decodeURIComponent(url.split('/').pop() || url)
     }
 
-    return { id: safeUrl, provider: 'links', title, url: safeUrl, snippet }
+    return { id: url, provider: 'links', title, url, snippet }
   } catch {
     return null
   }
 }
 
-async function linksProvider(links: string[], maxResults: number): Promise<SourceItem[]> {
+async function linksProvider(links: string[], maxResults: number, aiConfig?: { provider: string; apiKey: string; model: string; baseUrl?: string }): Promise<SourceItem[]> {
   const normalized = Array.from(new Set(links.map(sanitizeUrl))).filter(isValidHttpUrl)
   const filtered = normalized.filter((u) => !isPrivateHostname(new URL(u).hostname))
-  const previews = await Promise.all(filtered.slice(0, maxResults).map(fetchLinkPreview))
+  const previews = await Promise.all(filtered.slice(0, maxResults).map(url => fetchLinkPreview(url, aiConfig)))
   return previews.filter((p): p is SourceItem => !!p)
 }
 
@@ -965,7 +1008,7 @@ export async function POST(req: NextRequest) {
         if (requestedSources.has("hn") || requestedSources.has("news")) promises.push(hnSearch(query, maxResults))
         if (requestedSources.has("reddit")) promises.push(redditSearch(query, maxResults))
         if (requestedSources.has("github")) promises.push(githubSearch(query, maxResults))
-        if (requestedSources.has("links") && links.length) promises.push(linksProvider(links, maxResults))
+        if (requestedSources.has("links") && links.length) promises.push(linksProvider(links, maxResults, aiConfig))
         if (requestedSources.has("local") && useLocalDocs) promises.push(localSearchProvider(query, maxResults, vectorDBConfig, aiConfig))
 
         const results = (await Promise.allSettled(promises))

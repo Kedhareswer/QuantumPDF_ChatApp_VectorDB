@@ -58,6 +58,7 @@ import { useAppStore } from "@/lib/store"
 import { AIClient } from "@/lib/ai-client"
 import { EnhancedSearchResults } from "./enhanced-search-results"
 import { Stepper } from "./stepper"
+import { URLGuidance, useURLDetection } from "./url-guidance"
 
 interface Message {
   id: string
@@ -388,6 +389,9 @@ export function ChatInterface({
   const [searchSources, setSearchSources] = useState<Array<{ id: number; title: string; url: string; provider: string; publishedAt?: string; authors?: string[]; snippet?: string }>>([])
   // Show/Hide filters panel
   const [showFilters, setShowFilters] = useState(false)
+  // URL processing state
+  const [urlProcessingError, setUrlProcessingError] = useState<string | null>(null)
+  const urlDetection = useURLDetection(input)
   // Predictive caching (counts only) for common refinements
   const predictiveCountsRef = useRef<{ recent?: number; last5?: number; tier1?: number; all?: number }>({})
 
@@ -650,6 +654,7 @@ ${diagnostics.documents.length === 0
     setStreamedAnswer("")
     setMetrics({})
     setTypingPulse(false)
+    setUrlProcessingError(null)
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
       typingTimeoutRef.current = null
@@ -777,6 +782,10 @@ ${diagnostics.documents.length === 0
                   usedClientSynthesis = true
                   const ctx = evt.context
                   const srcs = Array.isArray(ctx.sources) ? ctx.sources : []
+                  // Check for URL processing errors
+                  if (ctx.urlErrors && ctx.urlErrors.length > 0) {
+                    setUrlProcessingError(`Some URLs could not be processed: ${ctx.urlErrors.join(', ')}`)
+                  }
                   // Capture sources for final assistant message
                   sources = srcs.map((s: any) => `${s.title} - ${s.url}`)
                   const requested = ctx.requestedCount || srcs.length
@@ -1660,6 +1669,16 @@ ${diagnostics.documents.length === 0
                   <Settings className="w-4 h-4 mr-2" /> Configure Provider
                 </Button>
               </div>
+            )}
+
+            {/* URL Guidance Component */}
+            {urlDetection.hasUrls && (
+              <URLGuidance 
+                detectedUrls={urlDetection.urls}
+                errorMessage={urlProcessingError || undefined}
+                onRetry={() => setUrlProcessingError(null)}
+                className="mb-4"
+              />
             )}
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
