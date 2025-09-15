@@ -365,6 +365,9 @@ export function ChatInterface({
     showThinking: false,
     complexityLevel: 'auto' as 'auto' | 'simple' | 'normal' | 'complex'
   })
+  // Search mode controls
+  const [searchUseLocalDocs, setSearchUseLocalDocs] = useState(false)
+  const [searchLinksText, setSearchLinksText] = useState("")
   const [useContext, setUseContext] = useState(true)
   const [chatMode, setChatMode] = useState<'docs' | 'search'>('docs')
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -381,7 +384,7 @@ export function ChatInterface({
   const [stepperError, setStepperError] = useState<string | null>(null)
   const { toast } = useToast();
   // LLM configuration (for Search mode gating)
-  const { aiConfig, setActiveTab, modelStatus } = useAppStore()
+  const { aiConfig, vectorDBConfig, setActiveTab, modelStatus } = useAppStore()
   const isLLMConfigured = !!(aiConfig?.provider && aiConfig?.apiKey && aiConfig?.model)
   // Typing pulse and metrics for Search mode
   const [typingPulse, setTypingPulse] = useState(false)
@@ -629,6 +632,14 @@ ${diagnostics.documents.length === 0
           const numberMatch = text.match(/(?:top\s+)?(\d+)(?:\s+(?:latest|recent|top))?/i)
           const requestedCount = numberMatch ? parseInt(numberMatch[1]) : 10
 
+          // Extract URLs from the user's query to use as primary sources (Search Pill behavior)
+          const urlRegex = /\bhttps?:\/\/[^\s]+/gi
+          const extractedLinks = Array.from(new Set((text.match(urlRegex) || []).slice(0, 10)))
+
+          // Merge with manually provided links from the Search controls
+          const manualLinks = Array.from(new Set((searchLinksText.split(/\s+/).filter(Boolean) || []).filter((s) => /^https?:\/\//i.test(s))))
+          const combinedLinks = Array.from(new Set([...(extractedLinks || []), ...manualLinks])).slice(0, 10)
+
           const response = await fetch('/api/search/unified', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -636,7 +647,27 @@ ${diagnostics.documents.length === 0
               query: text,
               maxResults: Math.min(requestedCount, 20), // Cap at 20 for performance
               summaryLevel: 'detailed', // Use detailed for better formatting
-              synthesis: 'client' // Let client perform LLM synthesis
+              synthesis: 'client', // Let client perform LLM synthesis
+              // New fields for Search Pill
+              links: combinedLinks,
+              // keep local docs disabled by default for web research pass; can be toggled via controls in future
+              useLocalDocs: searchUseLocalDocs,
+              // Provide configs so server can perform local vector search and embeddings when enabled
+              aiConfig: aiConfig ? {
+                provider: aiConfig.provider,
+                apiKey: aiConfig.apiKey,
+                model: aiConfig.model,
+                baseUrl: aiConfig.baseUrl
+              } : undefined,
+              vectorDBConfig: vectorDBConfig ? {
+                provider: vectorDBConfig.provider,
+                apiKey: vectorDBConfig.apiKey,
+                environment: vectorDBConfig.environment,
+                indexName: vectorDBConfig.indexName,
+                url: vectorDBConfig.url,
+                collection: vectorDBConfig.collection,
+                dimension: vectorDBConfig.dimension
+              } : undefined
             })
           })
 
@@ -1016,6 +1047,10 @@ ${diagnostics.documents.length === 0
                 </div>
               </div>
             </div>
+
+            
+
+            
           ) : (
             <div className="space-y-8">
               {messages.map((message) => (
@@ -1327,9 +1362,9 @@ ${diagnostics.documents.length === 0
                 </div>
               )}
               <div ref={messagesEndRef} />
-            </div>
-          )}
-        </div>
+      </div>
+      )}
+      </div>
       </ScrollArea>
 
       {/* Input Area */}
@@ -1338,43 +1373,27 @@ ${diagnostics.documents.length === 0
           <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
             {chatMode === 'search' && !isLLMConfigured && (
               <div className="flex items-center justify-between p-3 border-2 border-black bg-yellow-50 rounded">
-                <div className="text-sm text-black">
-                  Search mode requires an AI provider for summarization and analysis.
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-2 border-black"
-                  onClick={() => setActiveTab('settings')}
-                >
+                <div className="text-sm text-black">Search mode requires an AI provider for summarization and analysis.</div>
+                <Button type="button" variant="outline" className="border-2 border-black" onClick={() => setActiveTab('settings')}>
                   <Settings className="w-4 h-4 mr-2" /> Configure Provider
                 </Button>
               </div>
             )}
+
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
-              {/* Mode selector - full width mobile, auto width desktop */}
+              {/* Mode selector */}
               <div className="shrink-0 w-full sm:w-auto">
                 <div className="flex items-center rounded-full border-2 border-black overflow-hidden w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setChatMode('docs')}
-                    className={`px-3 py-2 text-sm ${chatMode === 'docs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
-                    aria-pressed={chatMode === 'docs'}
-                  >
+                  <button type="button" onClick={() => setChatMode('docs')} className={`px-3 py-2 text-sm ${chatMode === 'docs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`} aria-pressed={chatMode === 'docs'}>
                     Docs
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setChatMode('search')}
-                    className={`px-3 py-2 text-sm border-l-2 border-black ${chatMode === 'search' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`}
-                    aria-pressed={chatMode === 'search'}
-                  >
+                  <button type="button" onClick={() => setChatMode('search')} className={`px-3 py-2 text-sm border-l-2 border-black ${chatMode === 'search' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`} aria-pressed={chatMode === 'search'}>
                     Search
                   </button>
                 </div>
               </div>
 
-              {/* Text input - full width always */}
+              {/* Text input */}
               <div className="flex-1 min-w-0 w-full">
                 <Textarea
                   id="chat-input"
@@ -1384,13 +1403,10 @@ ${diagnostics.documents.length === 0
                   onKeyDown={handleKeyDown}
                   placeholder={
                     (chatMode === 'docs' && disabled)
-                      ? "Configure AI provider and upload documents to start chatting..."
+                      ? 'Configure AI provider and upload documents to start chatting...'
                       : chatMode === 'search'
-                        ? (isLLMConfigured
-                            ? "Search the web, arXiv, and news... (Shift+Enter for new line)"
-                            : "Configure AI provider to enable web research summarization..."
-                          )
-                        : "Ask a question about your documents... (Shift+Enter for new line)"
+                        ? (isLLMConfigured ? 'Search the web, arXiv, and news... (Shift+Enter for new line)' : 'Configure AI provider to enable web research summarization...')
+                        : 'Ask a question about your documents... (Shift+Enter for new line)'
                   }
                   disabled={(chatMode === 'docs' ? (disabled || isProcessing) : (isProcessing || !isLLMConfigured))}
                   className="min-h-[3rem] h-[3rem] sm:h-auto max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed w-full"
@@ -1398,7 +1414,7 @@ ${diagnostics.documents.length === 0
                 />
               </div>
 
-              {/* Submit button - full width mobile, auto width desktop */}
+              {/* Submit button */}
               <div className="shrink-0 w-full sm:w-auto">
                 <Button
                   type="submit"
@@ -1418,19 +1434,30 @@ ${diagnostics.documents.length === 0
               </div>
             </div>
 
+            {chatMode === 'search' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex items-start gap-3 p-3 border-2 border-black rounded">
+                  <div className="pt-1">
+                    <Switch id="use-local-docs" checked={searchUseLocalDocs} onCheckedChange={setSearchUseLocalDocs} disabled={isProcessing || !isLLMConfigured} />
+                  </div>
+                  <div>
+                    <Label htmlFor="use-local-docs" className="text-sm font-medium">Use Local Documents</Label>
+                    <p className="text-xs text-gray-600">Blend your uploaded documents into results.</p>
+                  </div>
+                </div>
+                <div className="p-3 border-2 border-black rounded">
+                  <Label htmlFor="search-links" className="text-sm font-medium">Additional Source URLs (one per line)</Label>
+                  <Textarea id="search-links" value={searchLinksText} onChange={(e) => setSearchLinksText(e.target.value)} placeholder={'https://example.com/article\nhttps://arxiv.org/abs/...'} className="mt-2 border-2 border-black" rows={3} disabled={isProcessing} />
+                  <p className="text-xs text-gray-600 mt-1">We’ll treat these as primary sources and validate them safely.</p>
+                </div>
+              </div>
+            )}
+
             {!disabled && (
               <div className="text-center text-sm text-gray-500 space-y-1">
                 <p>
-                  pls star the{" "}
-                  <a 
-                    href="https://github.com/Kedhareswer/QuantumPDF_ChatApp" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:text-blue-700 underline"
-                  >
-                    repo
-                  </a>{" "}
-                  if you liked it
+                  pls star the{' '}
+                  <a href="https://github.com/Kedhareswer/QuantumPDF_ChatApp" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 underline">repo</a>{' '}if you liked it
                 </p>
               </div>
             )}

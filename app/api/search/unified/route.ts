@@ -1,5 +1,8 @@
 import { NextRequest } from "next/server"
 import type { MetadataRoute } from "next"
+import { createVectorDatabase } from "@/lib/vector-database"
+import type { VectorDBConfig } from "@/lib/vector-database-types"
+import { AIClient } from "@/lib/ai-client"
 
 // Runtime: Node.js (we use network + modest parsing)
 export const runtime = "nodejs"
@@ -14,11 +17,20 @@ interface UnifiedRequestBody {
   maxResults?: number
   locale?: string
   model?: string
+  links?: string[]
+  useLocalDocs?: boolean
+  vectorDBConfig?: VectorDBConfig
+  aiConfig?: {
+    provider: string
+    apiKey: string
+    model: string
+    baseUrl?: string
+  }
 }
 
 interface SourceItem {
   id: string
-  provider: "brave" | "arxiv" | "hn" | "unknown"
+  provider: "brave" | "arxiv" | "hn" | "links" | "local" | "unknown"
   title: string
   url: string
   snippet?: string
@@ -73,6 +85,183 @@ function recencyWeight(iso?: string): number {
   const days = Math.max(0, (Date.now() - t) / (1000 * 60 * 60 * 24))
   // 0 days => 1.0; 365 days => ~0.2
   return 1 / (1 + days / 60)
+}
+
+// --- User links support (validation + lightweight metadata fetch) ---
+function isValidHttpUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function isPrivateHostname(host: string): boolean {
+  const h = host.toLowerCase()
+  if (h === 'localhost' || h === '127.0.0.1' || h === '::1') return true
+  // Basic private IP ranges
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(h)) return true
+  // Link-local
+  if (/^169\.254\./.test(h)) return true
+  // Common internal suffixes
+  if (h.endsWith('.local') || h.endsWith('.internal')) return true
+  return false
+}
+
+function sanitizeUrl(url: string): string {
+  return url.trim()
+}
+
+async function fetchLinkPreview(url: string): Promise<SourceItem | null> {
+  try {
+    const safeUrl = sanitizeUrl(url)
+    if (!isValidHttpUrl(safeUrl)) return null
+    const host = new URL(safeUrl).hostname
+    if (isPrivateHostname(host)) return null
+
+    // Try HEAD first to inspect content type quickly
+    let contentType = ''
+    try {
+      const head = await fetch(safeUrl, { method: 'HEAD' })
+      if (head.ok) {
+        contentType = head.headers.get('content-type') || ''
+      }
+    } catch {}
+
+    // Fallback to GET if HEAD didn’t provide enough info
+    const res = await fetch(safeUrl, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
+    if (!res.ok) return null
+    if (!contentType) contentType = res.headers.get('content-type') || ''
+
+    let title = safeUrl
+    let snippet = ''
+    if (contentType.includes('text/html')) {
+      const html = await res.text()
+      const mTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+      const mDesc = html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']+)["'][^>]*>/i)
+      title = (mTitle?.[1] || title).replace(/\s+/g, ' ').trim()
+      snippet = (mDesc?.[1] || '').replace(/\s+/g, ' ').trim()
+    } else if (contentType.includes('application/pdf')) {
+      // Keep lightweight info for PDFs
+      title = decodeURIComponent(safeUrl.split('/').pop() || 'PDF Document')
+      snippet = 'PDF document'
+    } else if (contentType.includes('text/plain')) {
+      const txt = await res.text()
+      snippet = txt.slice(0, 300).replace(/\s+/g, ' ').trim()
+    } else {
+      // Unsupported type for preview; still return the link
+      title = decodeURIComponent(safeUrl.split('/').pop() || safeUrl)
+    }
+
+    return { id: safeUrl, provider: 'links', title, url: safeUrl, snippet }
+  } catch {
+    return null
+  }
+}
+
+async function linksProvider(links: string[], maxResults: number): Promise<SourceItem[]> {
+  const normalized = Array.from(new Set(links.map(sanitizeUrl))).filter(isValidHttpUrl)
+  const filtered = normalized.filter((u) => !isPrivateHostname(new URL(u).hostname))
+  const previews = await Promise.all(filtered.slice(0, maxResults).map(fetchLinkPreview))
+  return previews.filter((p): p is SourceItem => !!p)
+}
+
+// --- Local vector search provider ---
+function getEnvVectorDBConfig(): VectorDBConfig | null {
+  const provider = (process.env.VECTOR_DB_PROVIDER || "").toLowerCase()
+  if (!provider) return null
+  if (provider === "pinecone") {
+    return {
+      provider: "pinecone",
+      apiKey: process.env.PINECONE_API_KEY,
+      indexName: process.env.PINECONE_INDEX || "pdf-documents",
+      dimension: Number(process.env.VECTOR_DIMENSION || 1536),
+    }
+  }
+  if (provider === "weaviate") {
+    return {
+      provider: "weaviate",
+      url: process.env.WEAVIATE_URL || "",
+      apiKey: process.env.WEAVIATE_API_KEY,
+      collection: process.env.WEAVIATE_COLLECTION || "Document",
+      dimension: Number(process.env.VECTOR_DIMENSION || 1536),
+    }
+  }
+  if (provider === "chroma") {
+    return {
+      provider: "chroma",
+      url: process.env.CHROMA_URL || "http://localhost:8000",
+      collection: process.env.CHROMA_COLLECTION || "documents",
+      dimension: Number(process.env.VECTOR_DIMENSION || 1536),
+    }
+  }
+  if (provider === "local") {
+    return { provider: "local", dimension: Number(process.env.VECTOR_DIMENSION || 1536) }
+  }
+  return null
+}
+
+function getEnvAIConfig(): { provider: string; apiKey: string; model: string; baseUrl?: string } | null {
+  const provider = process.env.AI_PROVIDER || process.env.OPENAI_PROVIDER || ""
+  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || ""
+  const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || ""
+  const baseUrl = process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || undefined
+  if (!provider || !apiKey || !model) return null
+  return { provider, apiKey, model, baseUrl }
+}
+
+async function localSearchProvider(query: string, maxResults: number, cfg?: VectorDBConfig, aiCfg?: { provider: string; apiKey: string; model: string; baseUrl?: string }): Promise<SourceItem[]> {
+  try {
+    const vectorCfg = cfg || getEnvVectorDBConfig() || { provider: "local", dimension: 1536 }
+    const aiConf = aiCfg || getEnvAIConfig()
+    if (!aiConf) {
+      // Cannot generate embeddings without AI config
+      return []
+    }
+
+    // Initialize vector DB
+    const vdb = createVectorDatabase(vectorCfg)
+    await vdb.initialize()
+
+    // Create AI client for embeddings
+    const ai = new AIClient({ provider: aiConf.provider as any, apiKey: aiConf.apiKey, model: aiConf.model, baseUrl: aiConf.baseUrl })
+    let embedding: number[] = []
+    try {
+      embedding = await ai.generateEmbedding(query)
+    } catch {
+      // Fallback: zero vector of expected dimension
+      const dim = vectorCfg.dimension || 1536
+      embedding = new Array(dim).fill(0)
+    }
+
+    const results = await vdb.search(query, embedding, { mode: "hybrid", limit: maxResults, threshold: 0.05 })
+    // Map to SourceItem
+    return results.map((r) => {
+      const docId = r?.metadata?.documentId || r.id
+      const chunkIndex = r?.metadata?.chunkIndex ?? 0
+      const sourceName = r?.metadata?.source || "Local Document"
+      const url = `https://local.documents/${encodeURIComponent(String(docId))}?chunk=${encodeURIComponent(String(chunkIndex))}`
+      const snippet = (r.content || "").slice(0, 280).replace(/\s+/g, ' ').trim()
+      // Timestamp
+      let publishedAt: string | undefined
+      const ts = r?.metadata?.timestamp
+      if (ts) {
+        try { publishedAt = typeof ts === 'string' ? new Date(ts).toISOString() : (ts instanceof Date ? ts.toISOString() : undefined) } catch {}
+      }
+      return {
+        id: `${docId}_${chunkIndex}`,
+        provider: "local",
+        title: `${sourceName} (chunk ${Number(chunkIndex) + 1})`,
+        url,
+        snippet,
+        publishedAt,
+      }
+    })
+  } catch (e) {
+    // On any failure, do not block the rest of providers
+    return []
+  }
 }
 
 function detectIntent(query: string): "research" | "news" | "general" {
@@ -426,6 +615,13 @@ export async function POST(req: NextRequest) {
   const intent = detectIntent(query)
   const summaryLevel = body.summaryLevel || 'standard' // quick, standard, detailed
   const synthesisMode: 'server' | 'client' = body.synthesis === 'client' ? 'client' : 'server'
+  const links = Array.isArray(body.links) ? body.links : []
+  const useLocalDocs = !!body.useLocalDocs
+  const vectorDBConfig = body.vectorDBConfig
+  const aiConfig = body.aiConfig
+
+  if (links.length > 0) requestedSources.add('links')
+  if (useLocalDocs) requestedSources.add('local')
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -439,6 +635,8 @@ export async function POST(req: NextRequest) {
         if (requestedSources.has("web")) promises.push(braveSearch(query, maxResults))
         if (requestedSources.has("arxiv")) promises.push(arxivSearch(query, maxResults))
         if (requestedSources.has("news")) promises.push(hnSearch(query, maxResults))
+        if (requestedSources.has("links") && links.length) promises.push(linksProvider(links, maxResults))
+        if (requestedSources.has("local") && useLocalDocs) promises.push(localSearchProvider(query, maxResults, vectorDBConfig, aiConfig))
 
         const results = (await Promise.allSettled(promises))
           .flatMap(r => r.status === "fulfilled" ? r.value : [])

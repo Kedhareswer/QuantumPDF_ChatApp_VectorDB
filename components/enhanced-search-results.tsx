@@ -20,7 +20,8 @@ import {
   Calendar,
   User,
   BookOpen,
-  TrendingUp
+  TrendingUp,
+  FileText
 } from 'lucide-react'
 
 interface SourceItem {
@@ -77,6 +78,8 @@ export function EnhancedSearchResults({
   const getProviderIcon = (provider: string) => {
     switch (provider.toLowerCase()) {
       case 'arxiv': return <BookOpen className="w-4 h-4" />
+      case 'links': return <ExternalLink className="w-4 h-4" />
+      case 'local': return <FileText className="w-4 h-4" />
       case 'brave':
       case 'web': return <Globe className="w-4 h-4" />
       case 'hn':
