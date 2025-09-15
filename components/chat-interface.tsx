@@ -365,9 +365,7 @@ export function ChatInterface({
     showThinking: false,
     complexityLevel: 'auto' as 'auto' | 'simple' | 'normal' | 'complex'
   })
-  // Search mode controls
-  const [searchUseLocalDocs, setSearchUseLocalDocs] = useState(false)
-  const [searchLinksText, setSearchLinksText] = useState("")
+  // Search mode: smart detection (no explicit controls)
   const [useContext, setUseContext] = useState(true)
   const [chatMode, setChatMode] = useState<'docs' | 'search'>('docs')
   const scrollAreaRef = useRef<HTMLDivElement>(null)
@@ -390,6 +388,25 @@ export function ChatInterface({
   const [typingPulse, setTypingPulse] = useState(false)
   const typingTimeoutRef = useRef<any>(null)
   const [metrics, setMetrics] = useState<{ confidence?: number; reliabilityScore?: number; biasIndicators?: any[]; sentiment?: 'pos' | 'neu' | 'neg'; intent?: string; relatedQueries?: string[]; factChecks?: any[]; trendAnalysis?: any; queryEnhancement?: any }>({})
+
+  // Helpers: detect local-docs intent and extract links from text
+  const detectLocalDocsIntent = (q: string): boolean => {
+    const t = (q || "").toLowerCase()
+    const patterns = [
+      /\b(include|use|search|look\s+into|blend|with)\b.*\b(my|uploaded|local|own)\b.*\b(doc|docs|documents|files|knowledge|kb)\b/,
+      /\bfrom\s+my\s+(docs|documents|files)\b/,
+      /\buse\s+(my|local)\s+(docs|documents)\b/,
+      /\bRAG\b/i
+    ]
+    return patterns.some((re) => re.test(t))
+  }
+
+  const extractLinksFromText = (q: string): string[] => {
+    const urlRegex = /\bhttps?:\/\/[^\s]+/gi
+    const matches = (q || "").match(urlRegex) || []
+    const unique = Array.from(new Set(matches))
+    return unique.slice(0, 10)
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -632,13 +649,12 @@ ${diagnostics.documents.length === 0
           const numberMatch = text.match(/(?:top\s+)?(\d+)(?:\s+(?:latest|recent|top))?/i)
           const requestedCount = numberMatch ? parseInt(numberMatch[1]) : 10
 
-          // Extract URLs from the user's query to use as primary sources (Search Pill behavior)
-          const urlRegex = /\bhttps?:\/\/[^\s]+/gi
-          const extractedLinks = Array.from(new Set((text.match(urlRegex) || []).slice(0, 10)))
+          // Extract URLs directly from the query (primary sources)
+          const extractedLinks = extractLinksFromText(text)
+          const combinedLinks = extractedLinks
 
-          // Merge with manually provided links from the Search controls
-          const manualLinks = Array.from(new Set((searchLinksText.split(/\s+/).filter(Boolean) || []).filter((s) => /^https?:\/\//i.test(s))))
-          const combinedLinks = Array.from(new Set([...(extractedLinks || []), ...manualLinks])).slice(0, 10)
+          // Detect if the user asked to blend local uploaded documents
+          const useLocalDocsFlag = detectLocalDocsIntent(text)
 
           const response = await fetch('/api/search/unified', {
             method: 'POST',
@@ -650,8 +666,7 @@ ${diagnostics.documents.length === 0
               synthesis: 'client', // Let client perform LLM synthesis
               // New fields for Search Pill
               links: combinedLinks,
-              // keep local docs disabled by default for web research pass; can be toggled via controls in future
-              useLocalDocs: searchUseLocalDocs,
+              useLocalDocs: useLocalDocsFlag,
               // Provide configs so server can perform local vector search and embeddings when enabled
               aiConfig: aiConfig ? {
                 provider: aiConfig.provider,
@@ -1435,22 +1450,25 @@ ${diagnostics.documents.length === 0
             </div>
 
             {chatMode === 'search' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex items-start gap-3 p-3 border-2 border-black rounded">
-                  <div className="pt-1">
-                    <Switch id="use-local-docs" checked={searchUseLocalDocs} onCheckedChange={setSearchUseLocalDocs} disabled={isProcessing || !isLLMConfigured} />
+              (() => {
+                const links = extractLinksFromText(input)
+                const wantsLocal = detectLocalDocsIntent(input)
+                if (links.length === 0 && !wantsLocal) return null
+                return (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    {links.length > 0 && (
+                      <Badge variant="outline" className="border-2 border-black">
+                        {links.length} link{links.length>1?'s':''} detected
+                      </Badge>
+                    )}
+                    {wantsLocal && (
+                      <Badge variant="outline" className="border-2 border-green-600 text-green-700 bg-green-50">
+                        Local docs: ON
+                      </Badge>
+                    )}
                   </div>
-                  <div>
-                    <Label htmlFor="use-local-docs" className="text-sm font-medium">Use Local Documents</Label>
-                    <p className="text-xs text-gray-600">Blend your uploaded documents into results.</p>
-                  </div>
-                </div>
-                <div className="p-3 border-2 border-black rounded">
-                  <Label htmlFor="search-links" className="text-sm font-medium">Additional Source URLs (one per line)</Label>
-                  <Textarea id="search-links" value={searchLinksText} onChange={(e) => setSearchLinksText(e.target.value)} placeholder={'https://example.com/article\nhttps://arxiv.org/abs/...'} className="mt-2 border-2 border-black" rows={3} disabled={isProcessing} />
-                  <p className="text-xs text-gray-600 mt-1">We’ll treat these as primary sources and validate them safely.</p>
-                </div>
-              </div>
+                )
+              })()
             )}
 
             {!disabled && (

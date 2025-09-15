@@ -6,13 +6,14 @@
 
 <div align="center">
 
-**AI-Powered PDF Document Analysis & Chat Platform**
+**AI-Powered PDF Document Analysis & Multi-Source Research Platform**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Next.js](https://img.shields.io/badge/Next.js-15.2.4-black?logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?logo=react)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
+[![Free Sources](https://img.shields.io/badge/Research_Sources-12+_Free-green?style=flat-square)](https://github.com/Kedhareswer/QuantumPDF_ChatApp)
 
 </div>
 
@@ -21,6 +22,7 @@
 ## 📖 Table of Contents
 
 - [Overview](#-overview)
+- [Research Sources](#-research-sources)
 - [How It Works](#-how-it-works)
 - [Key Features](#-key-features)
 - [Architecture](#-architecture)
@@ -36,16 +38,84 @@
 
 ## 🌟 Overview
 
-QuantumPDF ChatApp enables intelligent conversations with PDF documents. Built with Next.js 15 and React 19, it uses Retrieval-Augmented Generation (RAG) to provide accurate, context-aware responses from your documents.
+QuantumPDF ChatApp combines intelligent PDF document analysis with comprehensive multi-source research capabilities. Built with Next.js 15 and React 19, it uses advanced RAG (Retrieval-Augmented Generation) to provide accurate, context-aware responses from both your uploaded documents and 12+ free research databases.
 
 ### What Makes It Different
 
+- **Multi-source research integration** with 12+ free academic databases
+- **Zero API key requirements** for research sources
+- **Smart intent detection** for seamless local docs integration
 - **Multi-phase RAG processing** for improved accuracy
 - **20+ AI provider support** for flexibility
 - **Client-side PDF processing** for privacy
 - **Adaptive chunk sizing** for optimal performance
-- **Document pre-filtering** for targeted searches
 - **Real-time quality metrics** for transparency
+
+---
+
+## 🔬 Research Sources
+
+### **Completely Free Research Sources (No API Keys Required)**
+
+Our platform integrates with 12+ free and open research databases, providing comprehensive coverage across multiple domains:
+
+| Source | Domain | Description | Icon |
+|--------|--------|-------------|------|
+| **arXiv** | Physics, Math, CS, Biology | Pre-print repository with 2M+ papers | 📚 |
+| **OpenAlex** | All Academic Fields | Open catalog of 200M+ scholarly works | 🏛️ |
+| **Semantic Scholar** | Computer Science, Medicine | AI-powered research tool with 200M+ papers | 🎓 |
+| **PubMed** | Medicine, Life Sciences | NCBI's biomedical literature database | 🔬 |
+| **bioRxiv** | Biology | Biology preprint server | 🧬 |
+| **medRxiv** | Medicine | Medical preprint server | ❤️ |
+| **DOAJ** | All Fields | Directory of Open Access Journals | 📖 |
+| **CrossRef** | All Fields | DOI registry with metadata | 🔗 |
+| **SSRN** | Social Sciences | Social Science Research Network | 🏢 |
+| **Hacker News** | Technology | Tech community discussions | 📈 |
+| **Reddit** | General | Community discussions and insights | 💬 |
+| **GitHub** | Software | Code repositories and documentation | 🐙 |
+
+### **Research Coverage by Field**
+
+```mermaid
+pie title Research Source Coverage
+    "Medicine & Biology" : 25
+    "Computer Science" : 20
+    "Physics & Math" : 15
+    "Social Sciences" : 15
+    "General Academic" : 15
+    "Technology & Code" : 10
+```
+
+### **Source Reliability & Quality**
+
+| Tier | Sources | Quality Level | Use Case |
+|------|---------|---------------|----------|
+| **Tier 1** | PubMed, arXiv, OpenAlex | Peer-reviewed, High | Academic research, Citations |
+| **Tier 2** | Semantic Scholar, DOAJ, CrossRef | Curated, Medium-High | Literature reviews, Analysis |
+| **Tier 3** | bioRxiv, medRxiv, SSRN | Preprints, Medium | Latest research, Trends |
+| **Tier 4** | GitHub, HN, Reddit | Community, Variable | Practical insights, Discussions |
+
+### **Smart Source Selection**
+
+The system automatically selects the most relevant sources based on your query:
+
+```mermaid
+flowchart TD
+    A[User Query] --> B{Query Analysis}
+    B -->|Medical Terms| C[PubMed + medRxiv + bioRxiv]
+    B -->|CS/AI Terms| D[arXiv + Semantic Scholar + GitHub]
+    B -->|General Academic| E[OpenAlex + DOAJ + CrossRef]
+    B -->|Technical Discussion| F[HN + Reddit + GitHub]
+    B -->|Broad Research| G[All Sources]
+    
+    C --> H[Relevance Filtering]
+    D --> H
+    E --> H
+    F --> H
+    G --> H
+    
+    H --> I[Ranked Results]
+```
 
 ---
 

@@ -21,7 +21,15 @@ import {
   User,
   BookOpen,
   TrendingUp,
-  FileText
+  FileText,
+  Github,
+  Microscope,
+  GraduationCap,
+  Dna,
+  Heart,
+  Library,
+  Building2,
+  Link
 } from 'lucide-react'
 
 interface SourceItem {
@@ -78,10 +86,18 @@ export function EnhancedSearchResults({
   const getProviderIcon = (provider: string) => {
     switch (provider.toLowerCase()) {
       case 'arxiv': return <BookOpen className="w-4 h-4" />
+      case 'openalex': return <Library className="w-4 h-4" />
+      case 'semanticscholar': return <GraduationCap className="w-4 h-4" />
+      case 'pubmed': return <Microscope className="w-4 h-4" />
+      case 'biorxiv': return <Dna className="w-4 h-4" />
+      case 'medrxiv': return <Heart className="w-4 h-4" />
+      case 'doaj': return <Library className="w-4 h-4" />
+      case 'crossref': return <Link className="w-4 h-4" />
+      case 'ssrn': return <Building2 className="w-4 h-4" />
       case 'links': return <ExternalLink className="w-4 h-4" />
       case 'local': return <FileText className="w-4 h-4" />
-      case 'brave':
-      case 'web': return <Globe className="w-4 h-4" />
+      case 'github': return <Github className="w-4 h-4" />
+      case 'reddit': return <MessageSquare className="w-4 h-4" />
       case 'hn':
       case 'news': return <TrendingUp className="w-4 h-4" />
       default: return <Globe className="w-4 h-4" />

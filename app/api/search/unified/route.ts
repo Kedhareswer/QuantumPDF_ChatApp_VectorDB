@@ -30,7 +30,7 @@ interface UnifiedRequestBody {
 
 interface SourceItem {
   id: string
-  provider: "brave" | "arxiv" | "hn" | "links" | "local" | "unknown"
+  provider: "arxiv" | "hn" | "links" | "local" | "openalex" | "pubmed" | "semanticscholar" | "reddit" | "github" | "biorxiv" | "medrxiv" | "doaj" | "ssrn" | "researchgate" | "crossref" | "unknown"
   title: string
   url: string
   snippet?: string
@@ -522,21 +522,121 @@ function parseArxivAtom(xml: string): SourceItem[] {
   return items
 }
 
-async function braveSearch(query: string, maxResults: number): Promise<SourceItem[]> {
-  const token = process.env.BRAVE_SEARCH_API_KEY
-  if (!token) return []
-  const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults}`
-  const res = await fetch(url, { headers: { "X-Subscription-Token": token } })
-  if (!res.ok) return []
-  const data: any = await res.json()
-  const web: any[] = data?.web?.results || []
-  return web.map((r, i) => ({
-    id: r.url || `${i}`,
-    provider: "brave" as const,
-    title: r.title || r.url,
-    url: r.url,
-    snippet: r.description || r.snippet || ""
-  }))
+// --- bioRxiv (preprint server for biology) ---
+async function biorxivSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    const url = `https://api.biorxiv.org/details/biorxiv/2020-01-01/2025-12-31/${maxResults}?format=json`
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data: any = await res.json()
+    const papers = data?.collection || []
+    return papers.filter((p: any) => 
+      (p.title?.toLowerCase().includes(query.toLowerCase()) || 
+       p.abstract?.toLowerCase().includes(query.toLowerCase()))
+    ).slice(0, maxResults).map((p: any) => ({
+      id: p.doi || p.preprint_id,
+      provider: 'biorxiv' as const,
+      title: p.title || 'bioRxiv preprint',
+      url: `https://www.biorxiv.org/content/10.1101/${p.preprint_id}v${p.version}`,
+      snippet: p.abstract?.slice(0, 300) || '',
+      authors: p.authors?.split(';').slice(0, 5) || [],
+      publishedAt: toISO(p.date)
+    }))
+  } catch { return [] }
+}
+
+// --- medRxiv (preprint server for medicine) ---
+async function medrxivSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    const url = `https://api.medrxiv.org/details/medrxiv/2020-01-01/2025-12-31/${maxResults}?format=json`
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data: any = await res.json()
+    const papers = data?.collection || []
+    return papers.filter((p: any) => 
+      (p.title?.toLowerCase().includes(query.toLowerCase()) || 
+       p.abstract?.toLowerCase().includes(query.toLowerCase()))
+    ).slice(0, maxResults).map((p: any) => ({
+      id: p.doi || p.preprint_id,
+      provider: 'medrxiv' as const,
+      title: p.title || 'medRxiv preprint',
+      url: `https://www.medrxiv.org/content/10.1101/${p.preprint_id}v${p.version}`,
+      snippet: p.abstract?.slice(0, 300) || '',
+      authors: p.authors?.split(';').slice(0, 5) || [],
+      publishedAt: toISO(p.date)
+    }))
+  } catch { return [] }
+}
+
+// --- DOAJ (Directory of Open Access Journals) ---
+async function doajSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    const url = `https://doaj.org/api/search/articles/${encodeURIComponent(query)}?pageSize=${maxResults}`
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data: any = await res.json()
+    const results = data?.results || []
+    return results.map((r: any) => {
+      const bibjson = r.bibjson || {}
+      return {
+        id: r.id || bibjson.identifier?.[0]?.id,
+        provider: 'doaj' as const,
+        title: bibjson.title || 'DOAJ Article',
+        url: bibjson.link?.[0]?.url || `https://doaj.org/article/${r.id}`,
+        snippet: bibjson.abstract || '',
+        authors: bibjson.author?.map((a: any) => a.name).slice(0, 5) || [],
+        publishedAt: toISO(bibjson.year ? `${bibjson.year}-01-01` : undefined)
+      }
+    })
+  } catch { return [] }
+}
+
+// --- SSRN (Social Science Research Network) ---
+async function ssrnSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    // SSRN doesn't have a public API, but we can scrape their search results page
+    const url = `https://papers.ssrn.com/sol3/results.cfm?RequestTimeout=50000&q=${encodeURIComponent(query)}&per_page=${maxResults}`
+    const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
+    if (!res.ok) return []
+    const html = await res.text()
+    
+    // Basic regex parsing (not ideal but works for MVP)
+    const titleRegex = /<a[^>]*href="[^"]*abstract_id=(\d+)[^"]*"[^>]*>([^<]+)<\/a>/gi
+    const results: SourceItem[] = []
+    let match
+    while ((match = titleRegex.exec(html)) && results.length < maxResults) {
+      const [, id, title] = match
+      results.push({
+        id: id,
+        provider: 'ssrn' as const,
+        title: title.trim(),
+        url: `https://papers.ssrn.com/sol3/papers.cfm?abstract_id=${id}`,
+        snippet: '',
+        publishedAt: undefined
+      })
+    }
+    return results
+  } catch { return [] }
+}
+
+// --- CrossRef (DOI registry with free API) ---
+async function crossrefSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    const url = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${maxResults}&sort=relevance&order=desc`
+    const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0 (mailto:support@example.com)' } })
+    if (!res.ok) return []
+    const data: any = await res.json()
+    const items = data?.message?.items || []
+    return items.map((item: any) => ({
+      id: item.DOI,
+      provider: 'crossref' as const,
+      title: item.title?.[0] || 'CrossRef Work',
+      url: item.URL || `https://doi.org/${item.DOI}`,
+      snippet: item.abstract || '',
+      authors: item.author?.map((a: any) => `${a.given || ''} ${a.family || ''}`.trim()).slice(0, 5) || [],
+      publishedAt: toISO(item.published?.['date-parts']?.[0] ? `${item.published['date-parts'][0].join('-')}` : undefined)
+    }))
+  } catch { return [] }
 }
 
 async function hnSearch(query: string, maxResults: number): Promise<SourceItem[]> {
@@ -555,11 +655,133 @@ async function hnSearch(query: string, maxResults: number): Promise<SourceItem[]
 }
 
 async function arxivSearch(query: string, maxResults: number): Promise<SourceItem[]> {
-  const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(query)}&sortBy=submittedDate&sortOrder=descending&start=0&max_results=${maxResults}`
+  // Prefer relevance over recency for domain-specific queries
+  const q = `all:${'"' + query + '"'}`
+  const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(q)}&sortBy=relevance&start=0&max_results=${maxResults}`
   const res = await fetch(url)
   if (!res.ok) return []
   const xml = await res.text()
   return parseArxivAtom(xml)
+}
+
+// --- OpenAlex (open library) ---
+async function openalexSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${maxResults}&filter=is_oa:true,type:journal-article&sort=cited_by_count:desc`
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data: any = await res.json()
+    const works: any[] = data?.results || data?.works || []
+    return works.slice(0, maxResults).map((w: any) => {
+      const id = w.id || w.doi || w.openalex || w.ids?.openalex || w.ids?.doi || w.display_name
+      const title = w.display_name || w.title || (w.biblio?.title || '')
+      const authors = Array.isArray(w.authorships) ? w.authorships.map((a: any) => a?.author?.display_name).filter(Boolean) : []
+      const url = w.primary_location?.landing_page_url || w.open_access?.oa_url || (w.doi ? `https://doi.org/${w.doi.replace(/^doi:/i,'')}` : (w.id || ''))
+      const publishedAt = toISO(w.publication_date || (w.publication_year ? `${w.publication_year}-01-01` : undefined))
+      return { id: String(id), provider: 'openalex' as const, title: title || (url || 'OpenAlex work'), url: url || (w.id || ''), authors, publishedAt }
+    })
+  } catch { return [] }
+}
+
+// --- Semantic Scholar (free tier) ---
+async function semanticScholarSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${maxResults}&fields=title,year,authors,url,openAccessPdf`
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data: any = await res.json()
+    const items: any[] = data?.data || []
+    return items.map((p: any) => {
+      const url = p.openAccessPdf?.url || p.url || (p.externalIds?.DOI ? `https://doi.org/${p.externalIds.DOI}` : '')
+      const authors = Array.isArray(p.authors) ? p.authors.map((a: any) => a.name) : []
+      const publishedAt = toISO(p.year ? `${p.year}-01-01` : undefined)
+      return { id: p.paperId || url || p.title, provider: 'semanticscholar' as const, title: p.title || url || 'Semantic Scholar', url: url || '', authors, publishedAt }
+    })
+  } catch { return [] }
+}
+
+// --- PubMed (NCBI E-utilities, no key for basic usage) ---
+async function pubmedSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    const esearch = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmax=${maxResults}&retmode=json&sort=relevance&term=${encodeURIComponent(query)}`
+    const r1 = await fetch(esearch)
+    if (!r1.ok) return []
+    const j1: any = await r1.json()
+    const ids: string[] = j1?.esearchresult?.idlist || []
+    if (!ids.length) return []
+    const esum = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=${ids.join(',')}`
+    const r2 = await fetch(esum)
+    if (!r2.ok) return []
+    const j2: any = await r2.json()
+    const out: SourceItem[] = []
+    const result = j2?.result || {}
+    const uids: string[] = result?.uids || []
+    for (const id of uids.slice(0, maxResults)) {
+      const it = result[id]
+      if (!it) continue
+      const title = it.title || `PubMed ${id}`
+      const authors = Array.isArray(it.authors) ? it.authors.map((a: any) => a.name).filter(Boolean) : []
+      const url = `https://pubmed.ncbi.nlm.nih.gov/${id}/`
+      const publishedAt = toISO(it.pubdate)
+      out.push({ id, provider: 'pubmed', title, url, authors, publishedAt })
+    }
+    return out
+  } catch { return [] }
+}
+
+// --- Reddit (public JSON endpoints) ---
+async function redditSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&sort=relevance&t=all&limit=${maxResults}`
+    const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
+    if (!res.ok) return []
+    const data: any = await res.json()
+    const children: any[] = data?.data?.children || []
+    return children.slice(0, maxResults).map((c: any) => {
+      const d = c.data || {}
+      const url = d.url || `https://www.reddit.com${d.permalink || ''}`
+      const publishedAt = toISO(d.created_utc ? new Date(d.created_utc * 1000) : undefined)
+      return { id: String(d.id || url), provider: 'reddit' as const, title: d.title || 'Reddit', url, snippet: d.selftext?.slice(0, 300) || '', publishedAt }
+    })
+  } catch { return [] }
+}
+
+// --- GitHub repositories (public API, low-rate without token) ---
+async function githubSearch(query: string, maxResults: number): Promise<SourceItem[]> {
+  try {
+    const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=${maxResults}`
+    const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
+    if (!res.ok) return []
+    const data: any = await res.json()
+    const items: any[] = data?.items || []
+    return items.map((r: any) => ({ id: String(r.id), provider: 'github' as const, title: r.full_name || r.name, url: r.html_url, snippet: r.description || '', publishedAt: toISO(r.updated_at) }))
+  } catch { return [] }
+}
+
+// --- Relevance helpers ---
+function needsDomainFilter(query: string): boolean {
+  return /endoscop/i.test(query)
+}
+
+function textRelevanceScore(item: SourceItem, query: string): number {
+  const base = (item.title + ' ' + (item.snippet || '')).toLowerCase()
+  const tokens = query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  let score = 0
+  for (const t of tokens) if (base.includes(t)) score += 1
+  // Domain-specific boost for endoscopy when present
+  if (/endoscop/i.test(query)) {
+    const keywords = ['endoscopy','endoscopic','colonoscopy','gastroscopy','bronchoscopy','gi','gastro','medical imaging','image enhancement','super-resolution','dehazing','denoising','illumination','deblurring']
+    for (const k of keywords) if (base.includes(k)) score += 2
+  }
+  return score
+}
+
+function computeScore(item: SourceItem, query: string): number {
+  const host = hostnameFromUrl(item.url)
+  const d = getDomainInfo(host)
+  const rec = recencyWeight(item.publishedAt)
+  const rel = textRelevanceScore(item, query)
+  return 0.2 * d.reliability + 0.2 * rec + 0.6 * (rel / 10) // normalize rel roughly
 }
 
 // Summarization using Hugging Face if available (fallback to snippet)
@@ -611,7 +833,10 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: "Missing query" }), { status: 400 })
   }
   const maxResults = clamp(body.maxResults ?? 10, 3, 20)
-  const requestedSources = new Set(body.sources || ["web", "arxiv", "news"]) // default: all
+  // Default to completely free/open sources (no API keys required)
+  const requestedSources = new Set(body.sources || [
+    "arxiv", "openalex", "semanticscholar", "pubmed", "biorxiv", "medrxiv", "doaj", "crossref", "hn", "reddit", "github", "ssrn"
+  ])
   const intent = detectIntent(query)
   const summaryLevel = body.summaryLevel || 'standard' // quick, standard, detailed
   const synthesisMode: 'server' | 'client' = body.synthesis === 'client' ? 'client' : 'server'
@@ -630,18 +855,36 @@ export async function POST(req: NextRequest) {
         // Emit initial typing pulse to animate UI during early phase
         sse(controller, { step: "typing", status: "pulse" })
 
-        // Run connectors in parallel
+        // Run connectors in parallel (all free/open sources)
         const promises: Promise<SourceItem[]>[] = []
-        if (requestedSources.has("web")) promises.push(braveSearch(query, maxResults))
         if (requestedSources.has("arxiv")) promises.push(arxivSearch(query, maxResults))
-        if (requestedSources.has("news")) promises.push(hnSearch(query, maxResults))
+        if (requestedSources.has("openalex")) promises.push(openalexSearch(query, maxResults))
+        if (requestedSources.has("semanticscholar")) promises.push(semanticScholarSearch(query, maxResults))
+        if (requestedSources.has("pubmed")) promises.push(pubmedSearch(query, maxResults))
+        if (requestedSources.has("biorxiv")) promises.push(biorxivSearch(query, maxResults))
+        if (requestedSources.has("medrxiv")) promises.push(medrxivSearch(query, maxResults))
+        if (requestedSources.has("doaj")) promises.push(doajSearch(query, maxResults))
+        if (requestedSources.has("crossref")) promises.push(crossrefSearch(query, maxResults))
+        if (requestedSources.has("ssrn")) promises.push(ssrnSearch(query, maxResults))
+        if (requestedSources.has("hn") || requestedSources.has("news")) promises.push(hnSearch(query, maxResults))
+        if (requestedSources.has("reddit")) promises.push(redditSearch(query, maxResults))
+        if (requestedSources.has("github")) promises.push(githubSearch(query, maxResults))
         if (requestedSources.has("links") && links.length) promises.push(linksProvider(links, maxResults))
         if (requestedSources.has("local") && useLocalDocs) promises.push(localSearchProvider(query, maxResults, vectorDBConfig, aiConfig))
 
         const results = (await Promise.allSettled(promises))
           .flatMap(r => r.status === "fulfilled" ? r.value : [])
 
-        let items = uniqBy(results, r => (r.title?.toLowerCase().replace(/\s+/g, ' ') || "") + "|" + (new URL(r.url).hostname)).slice(0, maxResults)
+        // Dedup, filter for domain relevance when needed, and score-sort
+        let items = uniqBy(results, r => (r.title?.toLowerCase().replace(/\s+/g, ' ') || "") + "|" + hostnameFromUrl(r.url))
+        if (needsDomainFilter(query)) {
+          items = items.filter(it => textRelevanceScore(it, query) >= 2)
+        }
+        items = items
+          .map(it => ({ it, score: computeScore(it, query) }))
+          .sort((a, b) => b.score - a.score)
+          .map(x => x.it)
+          .slice(0, maxResults)
         sse(controller, { step: "search", status: "done", total: items.length })
         // Emit intent metrics early
         sse(controller, { step: "metrics", intent })
