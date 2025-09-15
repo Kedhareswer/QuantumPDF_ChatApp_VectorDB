@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,7 +29,11 @@ import {
   Heart,
   Library,
   Building2,
-  Link
+  Link,
+  Bookmark,
+  BookmarkCheck,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react'
 
 interface SourceItem {
@@ -60,6 +64,10 @@ interface EnhancedSearchResultsProps {
   onDeepDive?: (sourceId: number) => void
   onCrossReference?: (sourceId: number) => void
   onExportCitation?: (sourceId: number, format: 'bibtex' | 'apa' | 'mla') => void
+  onBookmarkToggle?: (sourceId: number, bookmarked: boolean) => void
+  onCredibilityVote?: (sourceId: number, vote: 'up' | 'down', newScore: number) => void
+  initialBookmarks?: number[]
+  initialVotes?: Record<number, number>
 }
 
 export function EnhancedSearchResults({
@@ -68,10 +76,47 @@ export function EnhancedSearchResults({
   onFollowUp,
   onDeepDive,
   onCrossReference,
-  onExportCitation
+  onExportCitation,
+  onBookmarkToggle,
+  onCredibilityVote,
+  initialBookmarks = [],
+  initialVotes = {}
 }: EnhancedSearchResultsProps) {
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set())
   const [expandedClaims, setExpandedClaims] = useState(false)
+  const [bookmarked, setBookmarked] = useState<Set<number>>(new Set(initialBookmarks))
+  const [votes, setVotes] = useState<Record<number, number>>({ ...initialVotes })
+  const [bookmarksOnly, setBookmarksOnly] = useState(false)
+  const [sortBy, setSortBy] = useState<'default'|'date_desc'|'reliability_desc'|'votes_desc'>('default')
+
+  // Persist to localStorage
+  useEffect(() => {
+    try {
+      const savedB = localStorage.getItem('qpdf_bookmarks')
+      const savedV = localStorage.getItem('qpdf_votes')
+      if (savedB) {
+        const arr: number[] = JSON.parse(savedB)
+        if (Array.isArray(arr)) setBookmarked(new Set(arr))
+      }
+      if (savedV) {
+        const obj = JSON.parse(savedV)
+        if (obj && typeof obj === 'object') setVotes(obj)
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('qpdf_bookmarks', JSON.stringify(Array.from(bookmarked)))
+    } catch {}
+  }, [bookmarked])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('qpdf_votes', JSON.stringify(votes))
+    } catch {}
+  }, [votes])
 
   const toggleSource = (id: number) => {
     const newExpanded = new Set(expandedSources)
@@ -81,6 +126,53 @@ export function EnhancedSearchResults({
       newExpanded.add(id)
     }
     setExpandedSources(newExpanded)
+  }
+
+  const formatYear = (dateStr?: string) => {
+    if (!dateStr) return ''
+    try { return new Date(dateStr).getFullYear().toString() } catch { return '' }
+  }
+
+  const formatAuthors = (authors?: string[]) => {
+    if (!authors || authors.length === 0) return ''
+    const first = authors[0]
+    const etal = authors.length > 1 ? ' et al.' : ''
+    return `${first}${etal}`
+  }
+
+  const makeCitation = (s: SourceItem, style: 'apa' | 'mla' | 'bibtex') => {
+    const year = formatYear(s.publishedAt)
+    const authors = formatAuthors(s.authors)
+    if (style === 'bibtex') {
+      const key = `${(s.authors?.[0] || 'unknown').split(' ')[0] || 'ref'}${year || 'noyear'}`.replace(/[^a-zA-Z0-9]/g, '')
+      return `@article{${key},\n  title={${s.title}},\n  author={${(s.authors || []).join(' and ')}},\n  year={${year || 'n.d.'}},\n  url={${s.url}}\n}`
+    }
+    if (style === 'mla') {
+      return `${authors ? authors + '. ' : ''}"${s.title}." ${s.provider}, ${year || 'n.d.'}. ${s.url}`
+    }
+    // apa
+    return `${authors ? authors + ' ' : ''}(${year || 'n.d.'}). ${s.title}. ${s.provider}. ${s.url}`
+  }
+
+  const copyCitation = async (s: SourceItem, style: 'apa' | 'mla' | 'bibtex') => {
+    try {
+      await navigator.clipboard.writeText(makeCitation(s, style))
+    } catch {}
+  }
+
+  const toggleBookmark = (id: number) => {
+    const next = new Set(bookmarked)
+    let now = false
+    if (next.has(id)) { next.delete(id); now = false } else { next.add(id); now = true }
+    setBookmarked(next)
+    onBookmarkToggle?.(id, now)
+  }
+
+  const castVote = (id: number, delta: 1 | -1) => {
+    const current = votes[id] || 0
+    const nextScore = current + delta
+    setVotes(prev => ({ ...prev, [id]: nextScore }))
+    onCredibilityVote?.(id, delta === 1 ? 'up' : 'down', nextScore)
   }
 
   const getProviderIcon = (provider: string) => {
@@ -142,6 +234,49 @@ export function EnhancedSearchResults({
     }
   }
 
+  // Derived list: filter by bookmarks and sort
+  const filtered = sources.filter(s => (bookmarksOnly ? bookmarked.has(s.id) : true))
+  const view = [...filtered].sort((a, b) => {
+    if (sortBy === 'date_desc') {
+      const ta = a.publishedAt ? new Date(a.publishedAt).getTime() : 0
+      const tb = b.publishedAt ? new Date(b.publishedAt).getTime() : 0
+      return tb - ta
+    }
+    if (sortBy === 'reliability_desc') {
+      const ra = typeof a.reliability === 'number' ? a.reliability : 0
+      const rb = typeof b.reliability === 'number' ? b.reliability : 0
+      return rb - ra
+    }
+    if (sortBy === 'votes_desc') {
+      const va = votes[a.id] || 0
+      const vb = votes[b.id] || 0
+      return vb - va
+    }
+    return 0
+  })
+
+  const exportBookmarkedBibtex = async () => {
+    try {
+      const list = sources.filter(s => bookmarked.has(s.id))
+      const bib = list.map(s => makeCitation(s, 'bibtex')).join('\n\n')
+      if (bib) await navigator.clipboard.writeText(bib)
+    } catch {}
+  }
+
+  const copyViewUrls = async () => {
+    try {
+      const txt = view.map(s => s.url).join('\n')
+      if (txt) await navigator.clipboard.writeText(txt)
+    } catch {}
+  }
+
+  const copyViewMarkdown = async () => {
+    try {
+      const md = view.map(s => `[#${s.id}] ${s.title} - ${s.url}`).join('\n')
+      if (md) await navigator.clipboard.writeText(md)
+    } catch {}
+  }
+
   return (
     <div className="space-y-6">
       {/* Fact-checking Claims Section */}
@@ -195,8 +330,39 @@ export function EnhancedSearchResults({
       )}
 
       {/* Sources Grid */}
-      <div className="grid gap-4">
-        {sources.map((source) => {
+      <div>
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Button variant={bookmarksOnly ? 'default' : 'outline'} className="h-8 text-xs" onClick={() => setBookmarksOnly(v => !v)}>
+              {bookmarksOnly ? 'Bookmarked Only' : 'All Sources'}
+            </Button>
+            <Button variant="outline" className="h-8 text-xs" onClick={exportBookmarkedBibtex} disabled={bookmarked.size === 0}>
+              Export Bookmarked (BibTeX)
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-600">Sort:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="border rounded px-2 py-1 text-xs"
+            >
+              <option value="default">Default</option>
+              <option value="date_desc">Date (newest)</option>
+              <option value="reliability_desc">Reliability (high→low)</option>
+              <option value="votes_desc">Credibility (high→low)</option>
+            </select>
+            <Button variant="outline" className="h-8 text-xs" onClick={copyViewUrls}>
+              Copy URLs
+            </Button>
+            <Button variant="outline" className="h-8 text-xs" onClick={copyViewMarkdown}>
+              Copy Markdown refs
+            </Button>
+          </div>
+        </div>
+        <div className="grid gap-4">
+        {view.map((source) => {
           const isExpanded = expandedSources.has(source.id)
           
           return (
@@ -289,6 +455,17 @@ export function EnhancedSearchResults({
                     >
                       <ExternalLink className="w-4 h-4" />
                     </Button>
+                    
+                    {/* Bookmark / Pin */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toggleBookmark(source.id)}
+                      className="h-8 w-8 p-0"
+                      aria-label={bookmarked.has(source.id) ? 'Unbookmark' : 'Bookmark'}
+                    >
+                      {bookmarked.has(source.id) ? <BookmarkCheck className="w-4 h-4 text-green-600" /> : <Bookmark className="w-4 h-4" />}
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
@@ -343,27 +520,47 @@ export function EnhancedSearchResults({
                         </Button>
                       )}
                       
-                      {onExportCitation && (
-                        <div className="flex gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onExportCitation(source.id, 'apa')}
-                            className="h-8 text-xs"
-                          >
-                            <Download className="w-3 h-3 mr-1" />
-                            APA
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onExportCitation(source.id, 'bibtex')}
-                            className="h-8 text-xs"
-                          >
-                            BibTeX
-                          </Button>
-                        </div>
-                      )}
+                      {/* Credibility voting */}
+                      <div className="flex items-center gap-1">
+                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => castVote(source.id, 1)} aria-label="Upvote credibility">
+                          <ThumbsUp className="w-3 h-3" />
+                        </Button>
+                        <span className="text-xs min-w-[1.5rem] text-center">{votes[source.id] || 0}</span>
+                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => castVote(source.id, -1)} aria-label="Downvote credibility">
+                          <ThumbsDown className="w-3 h-3" />
+                        </Button>
+                      </div>
+
+                      {/* Citations export (fallback to copy if no handler) */}
+                      <div className="flex gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onExportCitation ? onExportCitation(source.id, 'apa') : copyCitation(source, 'apa')}
+                          className="h-8 text-xs"
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          APA
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onExportCitation ? onExportCitation(source.id, 'bibtex') : copyCitation(source, 'bibtex')}
+                          className="h-8 text-xs"
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          BibTeX
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onExportCitation ? onExportCitation(source.id, 'mla') : copyCitation(source, 'mla')}
+                          className="h-8 text-xs"
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          MLA
+                        </Button>
+                      </div>
                     </div>
                     
                     {/* Full URL */}
@@ -378,6 +575,7 @@ export function EnhancedSearchResults({
             </Card>
           )
         })}
+        </div>
       </div>
     </div>
   )

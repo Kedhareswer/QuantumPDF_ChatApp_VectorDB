@@ -412,12 +412,13 @@ function detectTrends(sources: SourceItem[]): { trend: string; momentum: number;
 }
 
 // Smart query enhancement
-function enhanceQuery(query: string): { enhanced: string; suggestions: string[]; corrections: string[] } {
+function enhanceQuery(query: string): { enhanced: string; suggestions: string[]; corrections: string[]; synonyms: string[] } {
   const enhanced = expandAcronyms(query)
   const suggestions = generateQuerySuggestions(query)
   const corrections = spellCheck(query)
+  const synonyms = generateSynonyms(query)
   
-  return { enhanced, suggestions, corrections }
+  return { enhanced, suggestions, corrections, synonyms }
 }
 
 function expandAcronyms(query: string): string {
@@ -455,6 +456,25 @@ function generateQuerySuggestions(query: string): string[] {
     `${query} systematic review`
   ]
   return suggestions.slice(0, 3)
+}
+
+function generateSynonyms(query: string): string[] {
+  // Heuristic synonym expansion for common research terms
+  const base = query.toLowerCase()
+  const pairs: Array<[RegExp, string[]]> = [
+    [/ai|artificial intelligence/g, ["artificial intelligence", "intelligent systems"]],
+    [/ml|machine learning/g, ["machine learning", "statistical learning", "predictive modeling"]],
+    [/nlp|natural language processing/g, ["natural language processing", "computational linguistics"]],
+    [/cv|computer vision/g, ["computer vision", "image analysis", "visual recognition"]],
+    [/deep learning|dl/g, ["deep learning", "neural networks"]],
+    [/randomized|rct/g, ["randomized controlled trial", "RCT"]],
+    [/systematic review|meta-analysis/g, ["systematic review", "meta analysis"]],
+  ]
+  const out = new Set<string>()
+  pairs.forEach(([re, syns]) => {
+    if (re.test(base)) syns.forEach(s => out.add(s))
+  })
+  return Array.from(out).slice(0, 6)
 }
 
 function spellCheck(query: string): string[] {
@@ -532,6 +552,36 @@ function analyzeTrends(sources: SourceItem[]): Array<{category: string; insight:
   }
   
   return trends
+}
+
+// Summarize methodologies present across sources (heuristic)
+function summarizeMethodologies(sources: SourceItem[]): { breakdown: Record<string, number>; top: string[] } {
+  const vocab: Record<string, string[]> = {
+    'Randomized Controlled Trial': ['randomized controlled', ' rct '],
+    'Systematic Review': ['systematic review'],
+    'Meta-analysis': ['meta-analysis', 'meta analysis'],
+    'Prospective Study': ['prospective'],
+    'Retrospective Study': ['retrospective'],
+    'Cross-sectional Study': ['cross-sectional', 'cross sectional'],
+    'Case Study/Series': ['case study', 'case series'],
+    'Benchmark/Dataset': ['benchmark', 'dataset', 'corpus'],
+    'Simulation/Modeling': ['simulation', 'simulated', 'modeling', 'modelling'],
+    'Survey': ['survey', 'questionnaire'],
+    'Qualitative Study': ['qualitative'],
+    'Quantitative Study': ['quantitative'],
+  }
+  const breakdown: Record<string, number> = {}
+  const lc = (s: string) => ` ${s.toLowerCase()} `
+  for (const s of sources) {
+    const text = lc(s.title + ' ' + (s.snippet || ''))
+    for (const [label, terms] of Object.entries(vocab)) {
+      if (terms.some(t => text.includes(t))) {
+        breakdown[label] = (breakdown[label] || 0) + 1
+      }
+    }
+  }
+  const top = Object.entries(breakdown).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k)
+  return { breakdown, top }
 }
 
 // Minimal ATOM parser for arXiv (regex-based to avoid extra deps for MVP)
@@ -1038,6 +1088,8 @@ export async function POST(req: NextRequest) {
         
         // Query enhancement suggestions
         const queryEnhancement = enhanceQuery(query)
+        // Methodology summary (basic heuristic)
+        const methodologySummary = summarizeMethodologies(cited)
         
         sse(controller, { 
           step: "done", 
@@ -1046,7 +1098,8 @@ export async function POST(req: NextRequest) {
           relatedQueries: [...relatedQueries, ...researchGaps, ...queryEnhancement.suggestions].slice(0, 6),
           factChecks,
           trendAnalysis,
-          queryEnhancement: queryEnhancement.corrections.length > 0 ? queryEnhancement : undefined
+          queryEnhancement,
+          methodologySummary
         })
         controller.close()
       } catch (error) {

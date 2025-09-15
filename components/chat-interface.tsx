@@ -48,6 +48,8 @@ import { Separator } from "@/components/ui/separator"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { QuickActions } from "@/components/quick-actions"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
+import { SearchAnalytics } from "@/components/search-analytics"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { EnhancedChatProcessingSkeleton, ChatTypingIndicator } from "@/components/skeleton-loaders"
 import { ThinkingBubble } from "@/components/thinking-bubble"
@@ -376,8 +378,18 @@ export function ChatInterface({
   // Typing pulse and metrics for Search mode
   const [typingPulse, setTypingPulse] = useState(false)
   const typingTimeoutRef = useRef<any>(null)
-  const [metrics, setMetrics] = useState<{ confidence?: number; reliabilityScore?: number; biasIndicators?: any[]; sentiment?: 'pos' | 'neu' | 'neg'; intent?: string; relatedQueries?: string[]; factChecks?: any[]; trendAnalysis?: any; queryEnhancement?: any }>({})
+  const [metrics, setMetrics] = useState<{ confidence?: number; reliabilityScore?: number; biasIndicators?: any[]; sentiment?: 'pos' | 'neu' | 'neg'; intent?: string; relatedQueries?: string[]; factChecks?: any[]; trendAnalysis?: any; queryEnhancement?: any; methodologySummary?: { breakdown: Record<string, number>; top: string[] } }>({})
   const [searchMetrics, setSearchMetrics] = useState<{ totalSources?: number; providerCounts?: Record<string, number>; domainCoverage?: string[] }>({})
+  // Output formatting mode (Phase 3B)
+  const [outputMode, setOutputMode] = useState<'summary' | 'analysis' | 'comparison'>('summary')
+  // Progressive refinement history (Phase 2B)
+  const [refineHistory, setRefineHistory] = useState<string[]>([])
+  // Search result sources for interactive management (Phase 2C)
+  const [searchSources, setSearchSources] = useState<Array<{ id: number; title: string; url: string; provider: string; publishedAt?: string; authors?: string[]; snippet?: string }>>([])
+  // Show/Hide filters panel
+  const [showFilters, setShowFilters] = useState(false)
+  // Predictive caching (counts only) for common refinements
+  const predictiveCountsRef = useRef<{ recent?: number; last5?: number; tier1?: number; all?: number }>({})
 
   // Source filters for Search mode
   const [sourceFilters, setSourceFilters] = useState({
@@ -416,6 +428,46 @@ export function ChatInterface({
       inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`
     }
   }, [input])
+
+  // Persist refine history (Phase 2B)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('qpdf_refine_history')
+      if (saved) {
+        const arr = JSON.parse(saved)
+        if (Array.isArray(arr)) setRefineHistory(arr.slice(0, 5))
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('qpdf_refine_history', JSON.stringify(refineHistory.slice(0, 5)))
+    } catch {}
+  }, [refineHistory])
+
+  // Compute predictive counts when sources change
+  useEffect(() => {
+    if (!Array.isArray(searchSources) || searchSources.length === 0) {
+      predictiveCountsRef.current = {}
+      return
+    }
+    const now = Date.now()
+    const withinYears = (iso: string | undefined, y: number) => {
+      if (!iso) return false
+      const t = Date.parse(iso)
+      if (Number.isNaN(t)) return false
+      const cutoff = now - y * 365 * 24 * 60 * 60 * 1000
+      return t >= cutoff
+    }
+    const tier1 = new Set(['pubmed','arxiv','openalex'])
+    const all = searchSources.length
+    const recent = searchSources.filter(s => withinYears(s.publishedAt, 1)).length
+    const last5 = searchSources.filter(s => withinYears(s.publishedAt, 5)).length
+    const t1 = searchSources.filter(s => tier1.has(String(s.provider).toLowerCase())).length
+    predictiveCountsRef.current = { recent, last5, tier1: t1, all }
+  }, [searchSources])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -735,7 +787,32 @@ ${diagnostics.documents.length === 0
                     return `[#${s.id}] ${s.title}\n${authors}${authors && year ? ' | ' : ''}${year}\nURL: ${s.url}\nSnippet: ${(sn?.snippet || '').trim()}`
                   }).join("\n\n")
 
-                  const systemPrompt = `You are an AI research assistant. Produce a professional, markdown-only report with the following sections:\n\n1) Executive Summary (2-4 sentences)\n2) Research Papers Overview (a single table with EXACTLY ${requested} rows and columns: # | Title | Authors | Year | Focus Area | URL)\n3) Detailed Analysis (one short paragraph per paper)\n4) Key Research Trends (bulleted)\n5) Clinical/Practical Implications (bulleted)\n\nRules:\n- Use ONLY the provided sources and snippets.\n- Cite papers consistently by their table number [#].\n- Return EXACTLY ${requested} papers in the table.\n- No HTML. Markdown only.`
+                  // Populate interactive sources grid early
+                  try {
+                    const snips = Array.isArray((ctx as any).snippets) ? (ctx as any).snippets : []
+                    const snipMap = new Map<number, string>(snips.map((x: any) => [x.id, x.snippet]))
+                    const items = srcs.map((s: any) => ({
+                      id: s.id,
+                      title: s.title,
+                      url: s.url,
+                      provider: s.provider,
+                      publishedAt: s.publishedAt,
+                      authors: s.authors,
+                      snippet: snipMap.get(s.id) || ''
+                    }))
+                    setSearchSources(items)
+                  } catch {}
+
+                  const baseRules = `Rules:\n- Use ONLY the provided sources and snippets.\n- Cite papers consistently by their table number [#].\n- Return EXACTLY ${requested} papers in the table when a table is requested.\n- No HTML. Markdown only.`
+                  const systemPrompt = (() => {
+                    if (outputMode === 'comparison') {
+                      return `You are an AI research assistant. Produce a professional, markdown-only comparison brief with these sections:\n\n1) Executive Summary (2-4 sentences)\n2) Comparison Table (EXACTLY ${requested} rows, columns: # | Title | Year | Methodology | Dataset | Metrics | URL)\n3) Comparative Analysis (strengths/weaknesses across methods)\n4) Recommendations (bulleted)\n\n${baseRules}`
+                    } else if (outputMode === 'analysis') {
+                      return `You are an AI research assistant. Produce a professional, markdown-only analytical report:\n\n1) Executive Summary (2-4 sentences)\n2) Research Papers Overview (single table with EXACTLY ${requested} rows and columns: # | Title | Authors | Year | Focus Area | URL)\n3) Methodology Landscape (summarize methods across papers)\n4) Detailed Analysis (one short paragraph per paper)\n5) Limitations and Open Questions (bulleted)\n\n${baseRules}`
+                    }
+                    // summary
+                    return `You are an AI research assistant. Produce a professional, markdown-only report with the following sections:\n\n1) Executive Summary (2-4 sentences)\n2) Research Papers Overview (a single table with EXACTLY ${requested} rows and columns: # | Title | Authors | Year | Focus Area | URL)\n3) Detailed Analysis (one short paragraph per paper)\n4) Key Research Trends (bulleted)\n5) Clinical/Practical Implications (bulleted)\n\n${baseRules}`
+                  })()
 
                   const userPrompt = `Query: ${ctx.query}\n\nSources:\n\n${contextBlocks}`
 
@@ -795,6 +872,19 @@ ${diagnostics.documents.length === 0
                 // Extract sources if provided
                 if (evt.sources && Array.isArray(evt.sources)) {
                   sources = evt.sources.map((s: any) => `${s.title} - ${s.url}`)
+                  // Update interactive sources list, preserving snippets if we have them
+                  setSearchSources(prev => {
+                    const snipMap = new Map<number, string>(prev.map(p => [p.id, p.snippet || '']))
+                    return (evt.sources as any[]).map((s: any) => ({
+                      id: s.id,
+                      title: s.title,
+                      url: s.url,
+                      provider: s.provider,
+                      publishedAt: s.publishedAt,
+                      authors: s.authors,
+                      snippet: snipMap.get(s.id) || ''
+                    }))
+                  })
                 }
                 // Capture related queries, fact checks, trends, and query enhancements if present
                 if (evt.relatedQueries && Array.isArray(evt.relatedQueries)) {
@@ -809,6 +899,11 @@ ${diagnostics.documents.length === 0
                 if (evt.queryEnhancement) {
                   setMetrics((prev) => ({ ...prev, queryEnhancement: evt.queryEnhancement }))
                 }
+                if (typeof (evt as any)?.methodologySummary !== 'undefined') {
+                  setMetrics((prev) => ({ ...prev, methodologySummary: (evt as any).methodologySummary }))
+                }
+                // Maintain refine history
+                setRefineHistory((prev) => [userMessage.content, ...prev].slice(0, 5))
                 
                 // If server handled synthesis, finalize here; otherwise client onComplete handles it
                 if (!usedClientSynthesis) {
@@ -1308,6 +1403,35 @@ ${diagnostics.documents.length === 0
                           )}
                         </div>
                       )}
+
+                      {/* Methodology Summary (Phase 3C) */}
+                      {metrics.methodologySummary && (
+                        <div className="mt-3 p-3 border border-blue-200 rounded bg-blue-50/30">
+                          <div className="text-sm font-semibold mb-2 text-blue-800">Methodology Summary</div>
+                          {Array.isArray(metrics.methodologySummary.top) && metrics.methodologySummary.top.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              {metrics.methodologySummary.top.map((m: string, idx: number) => (
+                                <Badge key={`meth-${idx}`} variant="outline" className="text-xs border-2 border-blue-300 text-blue-800">
+                                  {m}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          {metrics.methodologySummary.breakdown && (
+                            <div className="space-y-1">
+                              {Object.entries(metrics.methodologySummary.breakdown).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).slice(0, 6).map(([k, v]: any, idx: number) => (
+                                <div key={`mb-${idx}`} className="flex items-center gap-2 text-xs text-gray-700">
+                                  <span className="w-48 truncate">{k}</span>
+                                  <div className="flex-1 h-2 bg-gray-100 rounded">
+                                    <div className="h-2 bg-blue-400 rounded" style={{ width: `${Math.min(100, Number(v) * 10)}%` }} />
+                                  </div>
+                                  <span className="w-6 text-right">{v as number}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkMath]}
                         rehypePlugins={[rehypeKatex as any]}
@@ -1378,15 +1502,141 @@ ${diagnostics.documents.length === 0
                         </div>
                       )}
                       
-                      {/* Query Enhancement Suggestions */}
-                      {metrics.queryEnhancement && metrics.queryEnhancement.corrections.length > 0 && (
+                      {/* Query Enhancement & Synonyms (Phase 2A) */}
+                      {metrics.queryEnhancement && (
                         <div className="mt-3 p-3 border border-yellow-200 rounded bg-yellow-50/30">
                           <div className="text-sm font-semibold mb-2 text-yellow-800">Query Suggestions:</div>
-                          <div className="space-y-1">
-                            {metrics.queryEnhancement.corrections.map((correction: string, idx: number) => (
-                              <p key={idx} className="text-xs text-yellow-700">{correction}</p>
+                          {Array.isArray(metrics.queryEnhancement.corrections) && metrics.queryEnhancement.corrections.length > 0 && (
+                            <div className="space-y-1 mb-2">
+                              {metrics.queryEnhancement.corrections.map((correction: string, idx: number) => (
+                                <p key={idx} className="text-xs text-yellow-700">{correction}</p>
+                              ))}
+                            </div>
+                          )}
+                          {Array.isArray(metrics.queryEnhancement.suggestions) && metrics.queryEnhancement.suggestions.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              {metrics.queryEnhancement.suggestions.map((s: string, idx: number) => (
+                                <Badge key={`sug-${idx}`} variant="outline" className="text-xs cursor-pointer border-2 border-yellow-400" onClick={() => setInput(s)}>
+                                  {s}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                          {Array.isArray(metrics.queryEnhancement.synonyms) && metrics.queryEnhancement.synonyms.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {metrics.queryEnhancement.synonyms.map((s: string, idx: number) => (
+                                <Badge key={`syn-${idx}`} variant="outline" className="text-xs cursor-pointer border-2 border-purple-300 text-purple-800" onClick={() => setInput(prev => (prev ? `${prev} ${s}` : s))}>
+                                  {s}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Visual Search Analytics (Phase 3A) */}
+                      {(searchMetrics.providerCounts || searchMetrics.domainCoverage) && (
+                        <SearchAnalytics 
+                          providerCounts={searchMetrics.providerCounts} 
+                          domainCoverage={searchMetrics.domainCoverage} 
+                          sources={searchSources as any}
+                        />
+                      )}
+
+                      {/* Refinement history (Phase 2B) */}
+                      {refineHistory.length > 0 && (
+                        <div className="mt-3 p-3 border border-gray-200 rounded bg-gray-50/50">
+                          <div className="text-sm font-semibold mb-2 text-gray-800">Recent refinements</div>
+                          <div className="flex flex-wrap gap-2">
+                            {refineHistory.map((q, idx) => (
+                              <Badge key={`hist-${idx}`} variant="outline" className="text-xs cursor-pointer border-2 border-gray-300" onClick={() => setInput(q)}>
+                                {q}
+                              </Badge>
                             ))}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Refine bar (Phase 2B) */}
+                      <div className="mt-3 p-3 border-2 border-black rounded bg-white">
+                        <div className="text-sm font-semibold mb-2">Refine</div>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 text-xs border-2 border-black"
+                            onClick={() => setSourceFilters(prev => ({ ...prev, dateRange: 'all', minCitationCount: 0, tier1Only: false, openAccessOnly: false }))}
+                          >
+                            Broaden{predictiveCountsRef.current.all ? ` (${predictiveCountsRef.current.all})` : ''}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 text-xs border-2 border-black"
+                            onClick={() => setSourceFilters(prev => ({ ...prev, dateRange: 'recent' }))}
+                          >
+                            Narrow (1y){predictiveCountsRef.current.recent ? ` (${predictiveCountsRef.current.recent})` : ''}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 text-xs border-2 border-black"
+                            onClick={() => setSourceFilters(prev => ({ ...prev, minCitationCount: Math.max(100, prev.minCitationCount || 0) }))}
+                          >
+                            Top-cited only
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={sourceFilters.tier1Only ? 'default' : 'outline'}
+                            className="h-8 text-xs border-2 border-black"
+                            onClick={() => setSourceFilters(prev => ({ ...prev, tier1Only: !prev.tier1Only }))}
+                          >
+                            Tier1 only{predictiveCountsRef.current.tier1 ? ` (${predictiveCountsRef.current.tier1})` : ''}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 text-xs border-2 border-black"
+                            onClick={() => setSourceFilters({ tier1Only: false, minCitationCount: 0, dateRange: 'all', openAccessOnly: true })}
+                          >
+                            Reset
+                          </Button>
+                          <div className="grow" />
+                          <Button
+                            type="button"
+                            className="h-8 text-xs border-2 border-black bg-black text-white hover:bg-white hover:text-black"
+                            disabled={isProcessing || !isLLMConfigured || !input.trim()}
+                            onClick={() => handleSubmitStreaming({ preventDefault: () => {} } as any)}
+                          >
+                            Apply & Search
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 text-xs border-2 border-black"
+                            disabled={isProcessing || !isLLMConfigured || !input.trim()}
+                            onClick={() => handleSubmitStreaming({ preventDefault: () => {} } as any)}
+                          >
+                            Background refresh
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Interactive Sources (Phase 2C) */}
+                      {Array.isArray(searchSources) && searchSources.length > 0 && (
+                        <div className="mt-4">
+                          <EnhancedSearchResults
+                            sources={searchSources as any}
+                            onFollowUp={(sourceId, question) => setInput(question)}
+                            onDeepDive={(sourceId) => {
+                              const src = (searchSources as any[]).find(s => s.id === sourceId)
+                              if (src?.url) window.open(src.url, '_blank')
+                            }}
+                            onCrossReference={(sourceId) => setInput(prev => (prev ? `${prev}\nCross-reference #${sourceId}` : `Cross-reference #${sourceId}`))}
+                            onExportCitation={(sourceId, format) => {
+                              // No-op: component will fallback to copy
+                            }}
+                          />
                         </div>
                       )}
                     </CardContent>
@@ -1424,6 +1674,22 @@ ${diagnostics.documents.length === 0
                   </button>
                 </div>
               </div>
+
+              {/* Output mode selector (Phase 3B) */}
+              {chatMode === 'search' && (
+                <div className="shrink-0 w-full sm:w-auto">
+                  <Select value={outputMode} onValueChange={(v: any) => setOutputMode(v)}>
+                    <SelectTrigger className="w-full sm:w-[180px] border-2 border-black">
+                      <SelectValue placeholder="Output" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="summary">Summary</SelectItem>
+                      <SelectItem value="analysis">Analysis</SelectItem>
+                      <SelectItem value="comparison">Comparison</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Text input */}
               <div className="flex-1 min-w-0 w-full">
@@ -1485,6 +1751,29 @@ ${diagnostics.documents.length === 0
                     </Badge>
                   )
                 }
+                // Add filter summary chips
+                if (sourceFilters?.tier1Only) {
+                  badges.push(
+                    <Badge key="f-tier1" variant="outline" className="border-2 border-indigo-600 text-indigo-700 bg-indigo-50">
+                      Tier1 only
+                    </Badge>
+                  )
+                }
+                if ((sourceFilters?.minCitationCount || 0) > 0) {
+                  badges.push(
+                    <Badge key="f-cites" variant="outline" className="border-2 border-indigo-600 text-indigo-700 bg-indigo-50">
+                      ≥ {sourceFilters.minCitationCount} cites
+                    </Badge>
+                  )
+                }
+                if (sourceFilters?.dateRange && sourceFilters.dateRange !== 'all') {
+                  badges.push(
+                    <Badge key="f-date" variant="outline" className="border-2 border-indigo-600 text-indigo-700 bg-indigo-50">
+                      {sourceFilters.dateRange === 'recent' ? 'Recent (1y)' : 'Last 5y'}
+                    </Badge>
+                  )
+                }
+
                 // Add metrics chips if available
                 if (searchMetrics?.totalSources) {
                   badges.push(
