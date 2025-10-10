@@ -60,12 +60,13 @@ interface QualityGate {
 
 import { AIClient } from "./ai-client"
 import { PDFParser } from "./pdf-parser"
+import type { TextChunk } from "./advanced-chunking"
 
 interface Document {
   id: string
   name: string
   content: string
-  chunks: string[]
+  chunks: string[] | TextChunk[] // Support both simple strings and rich TextChunk objects
   embeddings: number[][]
   uploadedAt: Date
   metadata?: any
@@ -480,11 +481,23 @@ export class RAGEngine {
   }
 
   private findRelevantChunks(questionEmbedding: number[], topK: number, filters?: RAGFilterOptions) {
-    const allChunks: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number }> = [];
+    const allChunks: Array<{
+      content: string;
+      source: string;
+      similarity: number;
+      documentId: string;
+      documentName: string;
+      semanticImportance: number;
+      // Docling metadata (optional)
+      page?: number;
+      bbox?: any;
+      level?: number;
+      chunkType?: string;
+    }> = [];
 
     try {
       console.log("Enhanced findRelevantChunks: Starting multi-document search")
-      
+
       // Validate inputs
       if (!Array.isArray(questionEmbedding) || questionEmbedding.length === 0) {
         console.error("Invalid question embedding:", questionEmbedding);
@@ -505,11 +518,11 @@ export class RAGEngine {
 
       // Enhanced multi-document processing with better fairness
       const documentMetrics = new Map<string, { avgSimilarity: number; chunkCount: number; bestSimilarity: number }>()
-      
+
       this.documents.forEach((doc, docIndex) => {
         try {
           console.log(`Processing document ${docIndex}: ${doc.name}`)
-          
+
           // Apply document-level filters first
           if (filters) {
             if (filters.documentIds && filters.documentIds.length > 0 && !filters.documentIds.includes(doc.id)) {
@@ -542,11 +555,11 @@ export class RAGEngine {
               }
             }
           }
-          
+
           let docSimilaritySum = 0
           let validChunks = 0
           let docBestSimilarity = 0
-          
+
           // Validate document structure
           if (!doc || !doc.chunks || !doc.embeddings) {
             console.warn(`Document ${docIndex} has invalid structure:`, {
@@ -598,31 +611,51 @@ export class RAGEngine {
 
               // Calculate cosine similarity
               const similarity = this.aiClient!.cosineSimilarity(questionEmbedding, chunkEmbedding);
-              
+
               if (typeof similarity === "number" && !isNaN(similarity)) {
                 docSimilaritySum += similarity
                 validChunks++
                 docBestSimilarity = Math.max(docBestSimilarity, similarity)
-                
+
                 // Apply adaptive similarity threshold based on document performance
                 const adaptiveMinSim = this.calculateAdaptiveThreshold(similarity, filters?.minSimilarity ?? 0.03)
-                
+
                 if (similarity >= adaptiveMinSim) {
-                  // Get semantic importance from chunk metadata if available
-                  const semanticImportance = this.extractSemanticImportance(chunk, doc.metadata) 
-                  
+                  // Extract chunk content and metadata
+                  // Support both string chunks and TextChunk objects
+                  const chunkContent = typeof chunk === 'string' ? chunk : chunk.content
+                  const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
+
+                  // Get semantic importance (enhanced for Docling metadata)
+                  const semanticImportance = this.extractSemanticImportance(chunk, doc.metadata)
+
+                  // Build enhanced source string with Docling metadata
+                  let sourceString = `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`
+                  if (chunkMetadata) {
+                    if (chunkMetadata.page !== undefined) {
+                      sourceString = `${doc.name} · p.${chunkMetadata.page}` + (chunkMetadata.level ? ` · ${this.formatChunkType(chunkMetadata.type, chunkMetadata.level)}` : '')
+                    } else if (chunkMetadata.type) {
+                      sourceString += ` · ${this.formatChunkType(chunkMetadata.type)}`
+                    }
+                  }
+
                   allChunks.push({
-                    content: chunk || "",
-                    source: `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`,
+                    content: chunkContent || "",
+                    source: sourceString,
                     similarity,
                     documentId: doc.id,
                     documentName: doc.name,
-                    semanticImportance
+                    semanticImportance,
+                    // Include Docling metadata if available
+                    ...(chunkMetadata?.page !== undefined && { page: chunkMetadata.page }),
+                    ...(chunkMetadata?.bbox && { bbox: chunkMetadata.bbox }),
+                    ...(chunkMetadata?.level !== undefined && { level: chunkMetadata.level }),
+                    ...(chunkMetadata?.type && { chunkType: chunkMetadata.type }),
                   });
-                  
+
                   // Log high-similarity chunks
                   if (similarity > 0.2) {
-                    console.log(`Strong similarity chunk found: ${similarity.toFixed(3)} from ${doc.name} (importance: ${semanticImportance.toFixed(2)})`)
+                    console.log(`Strong similarity chunk found: ${similarity.toFixed(3)} from ${sourceString} (importance: ${semanticImportance.toFixed(2)})`)
                   }
                 } else if (similarity > 0.01) {
                   // Even low-similarity chunks are tracked for diversity purposes
@@ -635,7 +668,7 @@ export class RAGEngine {
               console.error(`Error processing chunk ${chunkIndex} in document ${docIndex}:`, chunkError);
             }
           });
-          
+
           // Store document metrics for enhanced diversity algorithm
           if (validChunks > 0) {
             documentMetrics.set(doc.id, {
@@ -651,7 +684,7 @@ export class RAGEngine {
       });
 
       console.log(`Total chunks processed: ${allChunks.length} from ${documentMetrics.size} documents`)
-      
+
       if (allChunks.length === 0) {
         console.warn("No chunks were successfully processed")
         return [];
@@ -663,6 +696,21 @@ export class RAGEngine {
       console.error("Error finding relevant chunks:", error);
       return [];
     }
+  }
+
+  // Helper to format chunk type for display
+  private formatChunkType(type: string, level?: number): string {
+    if (type === 'heading' && level) {
+      return `H${level}`
+    }
+    const typeMap: Record<string, string> = {
+      'heading': 'Heading',
+      'table': 'Table',
+      'list': 'List',
+      'paragraph': 'Para',
+      'other': 'Content'
+    }
+    return typeMap[type] || type
   }
 
   async query(question: string, options?: { 
@@ -1449,25 +1497,66 @@ Provide ONLY the final response - no explanations about changes made.`
     return Math.max(baseThreshold, baseThreshold * 0.5)
   }
 
-  private extractSemanticImportance(chunk: string, docMetadata?: any): number {
+  private extractSemanticImportance(chunk: string | any, docMetadata?: any): number {
     let importance = 1.0
-    
-    // Boost for headings and titles
-    if (/^#{1,6}\s|^[A-Z][^.]*:?$/m.test(chunk)) {
-      importance += 0.3
+
+    // Enhanced: Check if chunk is a TextChunk object with Docling metadata
+    const chunkMetadata = typeof chunk === 'object' && chunk.metadata ? chunk.metadata : null
+    const chunkContent = typeof chunk === 'string' ? chunk : (chunk.content || '')
+
+    // DOCLING-SPECIFIC BOOSTS (higher priority)
+    if (chunkMetadata) {
+      // Boost for Docling block type
+      if (chunkMetadata.type === 'heading') {
+        importance += 0.4
+        // Additional boost based on heading level (if available)
+        if (chunkMetadata.level) {
+          importance += Math.max(0.3 - (chunkMetadata.level * 0.05), 0.1) // h1=0.3, h2=0.25, h3=0.2, etc.
+        }
+      } else if (chunkMetadata.type === 'table') {
+        importance += 0.35 // Tables often contain critical structured data
+      } else if (chunkMetadata.type === 'list') {
+        importance += 0.15
+      }
+
+      // Boost for high confidence (Docling OCR confidence)
+      if (chunkMetadata.confidence && chunkMetadata.confidence > 90) {
+        importance += 0.15
+      }
+
+      // Boost for pre-calculated semantic importance (from Docling adapter)
+      if (chunkMetadata.semanticImportance && chunkMetadata.semanticImportance > 60) {
+        importance += 0.2
+      }
+
+      // Boost for page metadata presence (indicates structured Docling import)
+      if (chunkMetadata.page !== undefined) {
+        importance += 0.1 // Slight boost for having page attribution
+      }
     }
-    
+
+    // FALLBACK: Text-based heuristics (lower priority, for non-Docling content)
+    // Boost for headings and titles
+    if (/^#{1,6}\s|^[A-Z][^.]*:?$/m.test(chunkContent)) {
+      importance += 0.25
+    }
+
     // Boost for content with key indicators
-    if (/\b(summary|conclusion|important|key|main|primary|objective)\b/i.test(chunk)) {
+    if (/\b(summary|conclusion|important|key|main|primary|objective|abstract|introduction)\b/i.test(chunkContent)) {
       importance += 0.2
     }
-    
+
     // Boost for structured content
-    if (/\d+\.|•|-|\*/.test(chunk)) {
+    if (/\d+\.|•|-|\*/.test(chunkContent)) {
       importance += 0.1
     }
-    
-    return Math.min(2.0, importance)
+
+    // Boost for content with data/numbers
+    if (/\d{4}|\d+%|\$\d+|table|figure|chart/i.test(chunkContent)) {
+      importance += 0.15
+    }
+
+    return Math.min(2.5, importance)
   }
 
   private applyEnhancedDiversityAlgorithm(

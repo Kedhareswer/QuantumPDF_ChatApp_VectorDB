@@ -10,9 +10,9 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import Mermaid from '@/components/mermaid'
 import type { Components } from 'react-markdown'
+
 import {
   Send,
-  Search,
   Loader2,
   FileText,
   Brain,
@@ -23,19 +23,15 @@ import {
   Copy,
   ThumbsUp,
   ThumbsDown,
-  Trash2,
-  RotateCcw,
-  Download,
-  Share,
-  ChevronDown,
-  ChevronRight,
-  Eye,
   Zap,
   Settings,
   HelpCircle,
   CheckCircle,
   XCircle,
   Circle,
+  ChevronDown,
+  ChevronRight,
+  Eye,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -44,21 +40,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { QuickActions } from "@/components/quick-actions"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Slider } from "@/components/ui/slider"
-import { SearchAnalytics } from "@/components/search-analytics"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { EnhancedChatProcessingSkeleton, ChatTypingIndicator } from "@/components/skeleton-loaders"
+import { EnhancedChatProcessingSkeleton } from "@/components/skeleton-loaders"
 import { ThinkingBubble } from "@/components/thinking-bubble"
 import { useToast } from "@/hooks/use-toast"
 import { useAppStore } from "@/lib/store"
-import { AIClient } from "@/lib/ai-client"
-import { EnhancedSearchResults } from "./enhanced-search-results"
-import { Stepper } from "./stepper"
-import { URLGuidance, useURLDetection } from "./url-guidance"
+import { QuickActions } from "@/components/quick-actions"
 
 interface Message {
   id: string
@@ -358,31 +348,18 @@ export function ChatInterface({
   })
   // Search mode: smart detection (no explicit controls)
   const [useContext, setUseContext] = useState(true)
-  const [chatMode, setChatMode] = useState<'docs' | 'search'>('docs')
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [stepperSteps, setStepperSteps] = useState<Array<{ key: string; label: string; status: "pending" | "in_progress" | "done" | "error" }>>([
-    { key: "search", label: "Searching document database", status: "pending" },
-    { key: "ranking", label: "Ranking by relevance", status: "pending" },
-    { key: "context", label: "Preparing context", status: "pending" },
-    { key: "answer", label: "Generating answer", status: "pending" }
-  ])
-  const [showStepper, setShowStepper] = useState(false)
   const [streamedAnswer, setStreamedAnswer] = useState<string | null>(null)
-  const [stepperError, setStepperError] = useState<string | null>(null)
   const { toast } = useToast();
   // LLM configuration (for Search mode gating)
 
   const { aiConfig, vectorDBConfig, setActiveTab, modelStatus } = useAppStore()
   const isLLMConfigured = !!(aiConfig?.provider && aiConfig?.apiKey && aiConfig?.model)
-  // Typing pulse and metrics for Search mode
-  const [typingPulse, setTypingPulse] = useState(false)
-  const typingTimeoutRef = useRef<any>(null)
+  // Metrics for Search mode
   const [metrics, setMetrics] = useState<{ confidence?: number; reliabilityScore?: number; biasIndicators?: any[]; sentiment?: 'pos' | 'neu' | 'neg'; intent?: string; relatedQueries?: string[]; factChecks?: any[]; trendAnalysis?: any; queryEnhancement?: any; methodologySummary?: { breakdown: Record<string, number>; top: string[] } }>({})
   const [searchMetrics, setSearchMetrics] = useState<{ totalSources?: number; providerCounts?: Record<string, number>; domainCoverage?: string[] }>({})
-  // Output formatting mode (Phase 3B)
-  const [outputMode, setOutputMode] = useState<'summary' | 'analysis' | 'comparison'>('summary')
   // Progressive refinement history (Phase 2B)
   const [refineHistory, setRefineHistory] = useState<string[]>([])
   // Search result sources for interactive management (Phase 2C)
@@ -391,7 +368,6 @@ export function ChatInterface({
   const [showFilters, setShowFilters] = useState(false)
   // URL processing state
   const [urlProcessingError, setUrlProcessingError] = useState<string | null>(null)
-  const urlDetection = useURLDetection(input)
   // Predictive caching (counts only) for common refinements
   const predictiveCountsRef = useRef<{ recent?: number; last5?: number; tier1?: number; all?: number }>({})
 
@@ -632,336 +608,18 @@ ${diagnostics.documents.length === 0
     }
   }
 
-  // Enhanced streaming chat submit handler with AI client integration
+  // Enhanced streaming chat submit handler (Docs-only)
   const handleSubmitStreaming = async (e: React.FormEvent) => {
     e.preventDefault()
     const text = (input || "").trim()
     if (!text) return
-    
-    // Add user message immediately
-    const userMessage = {
-      id: Date.now().toString(),
-      role: "user" as const,
-      content: text,
-      timestamp: new Date()
-    }
-    
-    // Clear input and reset states
+    // Docs-only: delegate to parent and reset input
     setInput("")
-    // Only show stepper in Search mode
-    setShowStepper(chatMode === 'search')
-    setStepperError(null)
-    setStreamedAnswer("")
-    setMetrics({})
-    setTypingPulse(false)
-    setUrlProcessingError(null)
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current)
-      typingTimeoutRef.current = null
-    }
-    setStepperSteps([
-      { key: "search", label: chatMode === 'search' ? "Searching sources" : "Searching document database", status: "in_progress" },
-      { key: "ranking", label: chatMode === 'search' ? "Fetching content" : "Ranking by relevance", status: "pending" },
-      { key: "context", label: chatMode === 'search' ? "Summarizing" : "Preparing context", status: "pending" },
-      { key: "answer", label: chatMode === 'search' ? "Synthesizing answer" : "Generating answer", status: "pending" }
-    ])
-
-    // For docs mode, use the parent's message handling
-    if (chatMode === 'docs') {
-      onSendMessage(text, { useContext, showThinking: enhancedOptions.showThinking, complexityLevel: enhancedOptions.complexityLevel === 'auto' ? undefined : enhancedOptions.complexityLevel as any })
-      return
-    }
-    
-    // For search mode, add user message immediately and handle response locally
-    if (onAddMessage) {
-      onAddMessage(userMessage)
-    }
-
-    try {
-      // Step 1: Search document database
-      setStepperSteps(prev => prev.map(s => 
-        s.key === "search" ? { ...s, status: "done" } : 
-        s.key === "ranking" ? { ...s, status: "in_progress" } : s
-      ))
-
-      // Step 2: Ranking by relevance
-      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate processing
-      setStepperSteps(prev => prev.map(s => 
-        s.key === "ranking" ? { ...s, status: "done" } : 
-        s.key === "context" ? { ...s, status: "in_progress" } : s
-      ))
-
-      // Step 3: Preparing context / pre-summarization
-      await new Promise(resolve => setTimeout(resolve, 300))
-      setStepperSteps(prev => prev.map(s => 
-        s.key === "context" ? { ...s, status: "done" } : 
-        s.key === "answer" ? { ...s, status: "in_progress" } : s
-      ))
-
-      // Step 4: Depending on mode, either Web Research (SSE) or AI client
-      if (chatMode === 'search') {
-        try {
-          // Extract number from query if user specified a count
-          const numberMatch = text.match(/(?:top\s+)?(\d+)(?:\s+(?:latest|recent|top))?/i)
-          const requestedCount = numberMatch ? parseInt(numberMatch[1]) : 10
-
-          // Extract URLs directly from the query (primary sources)
-          const extractedLinks = extractLinksFromText(text)
-          const combinedLinks = extractedLinks
-
-          // Detect if the user asked to blend local uploaded documents
-          const useLocalDocsFlag = detectLocalDocsIntent(text)
-
-          const response = await fetch('/api/search/unified', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              query: text,
-              maxResults: Math.min(requestedCount, 20), // Cap at 20 for performance
-              summaryLevel: 'detailed', // Use detailed for better formatting
-              synthesis: 'client', // Let client perform LLM synthesis
-              // New fields for Search Pill
-              links: combinedLinks,
-              useLocalDocs: useLocalDocsFlag,
-              sourceFilters,
-              // Provide configs so server can perform local vector search and embeddings when enabled
-              aiConfig: aiConfig ? {
-                provider: aiConfig.provider,
-                apiKey: aiConfig.apiKey,
-                model: aiConfig.model,
-                baseUrl: aiConfig.baseUrl
-              } : undefined,
-              vectorDBConfig: vectorDBConfig ? {
-                provider: vectorDBConfig.provider,
-                apiKey: vectorDBConfig.apiKey,
-                environment: vectorDBConfig.environment,
-                indexName: vectorDBConfig.indexName,
-                url: vectorDBConfig.url,
-                collection: vectorDBConfig.collection,
-                dimension: vectorDBConfig.dimension
-              } : undefined
-            })
-          })
-
-          if (!response.ok || !response.body) throw new Error(`Search API error: ${response.status} ${response.statusText}`)
-          
-          const reader = response.body.getReader()
-          const decoder = new TextDecoder()
-          let buffer = ""
-          let accumulatedAnswer = ""
-          let sources: string[] = []
-          let usedClientSynthesis = false
-
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ""
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue
-              const data = line.slice(6)
-              if (!data) continue
-              let evt: any
-              try { evt = JSON.parse(data) } catch { continue }
-              const step = evt.step
-              const status = evt.status
-
-              if (step === 'search') {
-                setStepperSteps(prev => prev.map(s => s.key === 'search' ? { ...s, status: status === 'done' ? 'done' : 'in_progress' } : s))
-                if (status === 'done') setStepperSteps(prev => prev.map(s => s.key === 'ranking' ? { ...s, status: 'in_progress' } : s))
-              } else if (step === 'fetch') {
-                setStepperSteps(prev => prev.map(s => s.key === 'ranking' ? { ...s, status: status === 'done' ? 'done' : 'in_progress' } : s))
-                if (status === 'done') setStepperSteps(prev => prev.map(s => s.key === 'context' ? { ...s, status: 'in_progress' } : s))
-              } else if (step === 'summarize') {
-                setStepperSteps(prev => prev.map(s => s.key === 'context' ? { ...s, status: status === 'done' ? 'done' : 'in_progress' } : s))
-                if (status === 'done') setStepperSteps(prev => prev.map(s => s.key === 'answer' ? { ...s, status: 'in_progress' } : s))
-              } else if (step === 'context' && evt.context) {
-                // Client-side RAG synthesis
-                try {
-                  usedClientSynthesis = true
-                  const ctx = evt.context
-                  const srcs = Array.isArray(ctx.sources) ? ctx.sources : []
-                  // Check for URL processing errors
-                  if (ctx.urlErrors && ctx.urlErrors.length > 0) {
-                    setUrlProcessingError(`Some URLs could not be processed: ${ctx.urlErrors.join(', ')}`)
-                  }
-                  // Capture sources for final assistant message
-                  sources = srcs.map((s: any) => `${s.title} - ${s.url}`)
-                  const requested = ctx.requestedCount || srcs.length
-                  const contextBlocks = srcs.map((s: any) => {
-                    const sn = (ctx.snippets || []).find((x: any) => x.id === s.id)
-                    const authors = Array.isArray(s.authors) && s.authors.length > 0 ? `Authors: ${s.authors.slice(0,3).join(', ')}${s.authors.length>3 ? ' et al.' : ''}` : ''
-                    const year = s.publishedAt ? `Year: ${new Date(s.publishedAt).getFullYear()}` : ''
-                    return `[#${s.id}] ${s.title}\n${authors}${authors && year ? ' | ' : ''}${year}\nURL: ${s.url}\nSnippet: ${(sn?.snippet || '').trim()}`
-                  }).join("\n\n")
-
-                  // Populate interactive sources grid early
-                  try {
-                    const snips = Array.isArray((ctx as any).snippets) ? (ctx as any).snippets : []
-                    const snipMap = new Map<number, string>(snips.map((x: any) => [x.id, x.snippet]))
-                    const items = srcs.map((s: any) => ({
-                      id: s.id,
-                      title: s.title,
-                      url: s.url,
-                      provider: s.provider,
-                      publishedAt: s.publishedAt,
-                      authors: s.authors,
-                      snippet: snipMap.get(s.id) || ''
-                    }))
-                    setSearchSources(items)
-                  } catch {}
-
-                  const baseRules = `Rules:\n- Use ONLY the provided sources and snippets.\n- Cite papers consistently by their table number [#].\n- Return EXACTLY ${requested} papers in the table when a table is requested.\n- No HTML. Markdown only.`
-                  const systemPrompt = (() => {
-                    if (outputMode === 'comparison') {
-                      return `You are an AI research assistant. Produce a professional, markdown-only comparison brief with these sections:\n\n1) Executive Summary (2-4 sentences)\n2) Comparison Table (EXACTLY ${requested} rows, columns: # | Title | Year | Methodology | Dataset | Metrics | URL)\n3) Comparative Analysis (strengths/weaknesses across methods)\n4) Recommendations (bulleted)\n\n${baseRules}`
-                    } else if (outputMode === 'analysis') {
-                      return `You are an AI research assistant. Produce a professional, markdown-only analytical report:\n\n1) Executive Summary (2-4 sentences)\n2) Research Papers Overview (single table with EXACTLY ${requested} rows and columns: # | Title | Authors | Year | Focus Area | URL)\n3) Methodology Landscape (summarize methods across papers)\n4) Detailed Analysis (one short paragraph per paper)\n5) Limitations and Open Questions (bulleted)\n\n${baseRules}`
-                    }
-                    // summary
-                    return `You are an AI research assistant. Produce a professional, markdown-only report with the following sections:\n\n1) Executive Summary (2-4 sentences)\n2) Research Papers Overview (a single table with EXACTLY ${requested} rows and columns: # | Title | Authors | Year | Focus Area | URL)\n3) Detailed Analysis (one short paragraph per paper)\n4) Key Research Trends (bulleted)\n5) Clinical/Practical Implications (bulleted)\n\n${baseRules}`
-                  })()
-
-                  const userPrompt = `Query: ${ctx.query}\n\nSources:\n\n${contextBlocks}`
-
-                  const client = new AIClient(aiConfig)
-                  // Reset streamed answer
-                  accumulatedAnswer = ""
-                  setStreamedAnswer("")
-
-                  await client.generateTextStream([
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: userPrompt }
-                  ], (token: string) => {
-                    accumulatedAnswer += token
-                    setStreamedAnswer(prev => (prev || "") + token)
-                  }, () => {
-                    // onComplete: finalize assistant message here
-                    const assistantMessage = {
-                      id: (Date.now() + 1).toString(),
-                      role: "assistant" as const,
-                      content: accumulatedAnswer,
-                      timestamp: new Date(),
-                      sources: sources.length > 0 ? sources : undefined,
-                      metadata: {
-                        responseTime: Date.now() - parseInt(userMessage.id),
-                        relevanceScore: 0.95,
-                        retrievedChunks: srcs.length
-                      }
-                    }
-                    onAddMessage?.(assistantMessage)
-                  }, (err: Error) => {
-                    console.error('Client synthesis failed:', err)
-                  })
-                } catch (e) {
-                  console.error('Error starting client synthesis:', e)
-                }
-              } else if (step === 'answer' && evt.text) {
-                // Server-side streaming fallback (when synthesisMode === 'server')
-                accumulatedAnswer += evt.text
-                setStreamedAnswer(accumulatedAnswer)
-              } else if (step === 'typing') {
-                // Show brief typing pulse
-                setTypingPulse(true)
-                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
-                typingTimeoutRef.current = setTimeout(() => setTypingPulse(false), 900)
-              } else if (step === 'metrics') {
-                // Merge incoming metrics
-                setMetrics((prev) => ({ ...prev, ...evt }))
-                setSearchMetrics((prev) => ({
-                  ...prev,
-                  totalSources: evt.totalSources ?? prev.totalSources,
-                  providerCounts: evt.providerCounts ?? prev.providerCounts,
-                  domainCoverage: evt.domainCoverage ?? prev.domainCoverage,
-                }))
-              } else if (step === 'done') {
-                setStepperSteps(prev => prev.map(s => s.key === 'answer' ? { ...s, status: 'done' } : s))
-                
-                // Extract sources if provided
-                if (evt.sources && Array.isArray(evt.sources)) {
-                  sources = evt.sources.map((s: any) => `${s.title} - ${s.url}`)
-                  // Update interactive sources list, preserving snippets if we have them
-                  setSearchSources(prev => {
-                    const snipMap = new Map<number, string>(prev.map(p => [p.id, p.snippet || '']))
-                    return (evt.sources as any[]).map((s: any) => ({
-                      id: s.id,
-                      title: s.title,
-                      url: s.url,
-                      provider: s.provider,
-                      publishedAt: s.publishedAt,
-                      authors: s.authors,
-                      snippet: snipMap.get(s.id) || ''
-                    }))
-                  })
-                }
-                // Capture related queries, fact checks, trends, and query enhancements if present
-                if (evt.relatedQueries && Array.isArray(evt.relatedQueries)) {
-                  setMetrics((prev) => ({ ...prev, relatedQueries: evt.relatedQueries }))
-                }
-                if (evt.factChecks && Array.isArray(evt.factChecks)) {
-                  setMetrics((prev) => ({ ...prev, factChecks: evt.factChecks }))
-                }
-                if (evt.trendAnalysis) {
-                  setMetrics((prev) => ({ ...prev, trendAnalysis: evt.trendAnalysis }))
-                }
-                if (evt.queryEnhancement) {
-                  setMetrics((prev) => ({ ...prev, queryEnhancement: evt.queryEnhancement }))
-                }
-                if (typeof (evt as any)?.methodologySummary !== 'undefined') {
-                  setMetrics((prev) => ({ ...prev, methodologySummary: (evt as any).methodologySummary }))
-                }
-                // Maintain refine history
-                setRefineHistory((prev) => [userMessage.content, ...prev].slice(0, 5))
-                
-                // If server handled synthesis, finalize here; otherwise client onComplete handles it
-                if (!usedClientSynthesis) {
-                  const assistantMessage = {
-                    id: (Date.now() + 1).toString(),
-                    role: "assistant" as const,
-                    content: accumulatedAnswer,
-                    timestamp: new Date(),
-                    sources: sources.length > 0 ? sources : undefined,
-                    metadata: {
-                      responseTime: Date.now() - parseInt(userMessage.id),
-                      relevanceScore: 0.95,
-                      retrievedChunks: evt.sources?.length || 0
-                    }
-                  }
-                  onAddMessage?.(assistantMessage)
-                }
-              }
-            }
-          }
-          setTimeout(() => {
-            if (chatMode === 'search') {
-              setShowStepper(false)
-            }
-            setStreamedAnswer("")
-          }, 1000)
-          return
-        } catch (err) {
-          console.error('Unified search error:', err)
-          setStepperError(err instanceof Error ? err.message : 'Unified search failed')
-          setStepperSteps(prev => prev.map(s => s.status === 'in_progress' ? { ...s, status: 'error' } : s))
-          return
-        }
-      }
-
-      // This section should not be reached for search mode
-      console.error('Unexpected code path: docs mode should be handled by parent component')
-      setStepperError('Configuration error: docs mode should be handled by parent component')
-      setStepperSteps(prev => prev.map(s => 
-        s.status === 'in_progress' ? { ...s, status: 'error' } : s
-      ))
-
-    } catch (err: any) {
-      console.error("Chat submission error:", err)
-      setStepperError(err.message || "Unknown error occurred")
-      setStepperSteps(prev => prev.map(s => 
-        s.status === "in_progress" ? { ...s, status: "error" } : s
-      ))
-    }
+    onSendMessage(text, {
+      useContext,
+      showThinking: enhancedOptions.showThinking,
+      complexityLevel: enhancedOptions.complexityLevel === 'auto' ? undefined : (enhancedOptions.complexityLevel as any)
+    })
   }
 
   return (
@@ -1067,10 +725,9 @@ ${diagnostics.documents.length === 0
                     id="context-toggle"
                     checked={useContext}
                     onCheckedChange={(checked) => setUseContext(checked)}
-                    disabled={chatMode === 'search'}
                   />
                   <Label htmlFor="context-toggle" className="text-sm">
-                    Use Document Context {chatMode === 'search' && <span className="text-xs text-gray-500">(disabled in Search mode)</span>}
+                    Use Document Context
                   </Label>
                 </div>
               </div>
@@ -1365,34 +1022,6 @@ ${diagnostics.documents.length === 0
 
               {isProcessing && <EnhancedChatProcessingSkeleton phase="retrieving" />}
 
-              {/* Stepper UI */}
-              {showStepper && (
-                <Card className="mb-4">
-                  <CardContent>
-                    <Stepper steps={stepperSteps} />
-                    {typingPulse && (
-                      <div className="mt-2"><ChatTypingIndicator /></div>
-                    )}
-                    {stepperError && <div className="text-red-600 mt-2">{stepperError}</div>}
-                    {(metrics.confidence !== undefined || metrics.reliabilityScore !== undefined || metrics.sentiment || metrics.intent) && (
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {metrics.intent && (
-                          <Badge variant="outline" className="text-xs">Intent: {String(metrics.intent).toUpperCase()}</Badge>
-                        )}
-                        {typeof metrics.confidence === 'number' && (
-                          <Badge variant="outline" className={`text-xs ${metrics.confidence >= 0.75 ? 'border-green-500 text-green-700' : metrics.confidence >= 0.5 ? 'border-yellow-500 text-yellow-700' : 'border-red-500 text-red-700'}`}>Confidence: {Math.round(metrics.confidence * 100)}%</Badge>
-                        )}
-                        {typeof metrics.reliabilityScore === 'number' && (
-                          <Badge variant="outline" className="text-xs">Reliability: {Math.round((metrics.reliabilityScore || 0) * 100)}%</Badge>
-                        )}
-                        {metrics.sentiment && (
-                          <Badge variant="outline" className="text-xs">Sentiment: {metrics.sentiment.toUpperCase()}</Badge>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
               {/* If streamedAnswer, show it as the latest assistant message */}
               {streamedAnswer && (
                 <div className="mb-4">
@@ -1543,111 +1172,13 @@ ${diagnostics.documents.length === 0
                         </div>
                       )}
 
-                      {/* Visual Search Analytics (Phase 3A) */}
-                      {(searchMetrics.providerCounts || searchMetrics.domainCoverage) && (
-                        <SearchAnalytics 
-                          providerCounts={searchMetrics.providerCounts} 
-                          domainCoverage={searchMetrics.domainCoverage} 
-                          sources={searchSources as any}
-                        />
-                      )}
+                      {/* Search Analytics removed */}
 
-                      {/* Refinement history (Phase 2B) */}
-                      {refineHistory.length > 0 && (
-                        <div className="mt-3 p-3 border border-gray-200 rounded bg-gray-50/50">
-                          <div className="text-sm font-semibold mb-2 text-gray-800">Recent refinements</div>
-                          <div className="flex flex-wrap gap-2">
-                            {refineHistory.map((q, idx) => (
-                              <Badge key={`hist-${idx}`} variant="outline" className="text-xs cursor-pointer border-2 border-gray-300" onClick={() => setInput(q)}>
-                                {q}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      {/* Refinement history removed */}
 
-                      {/* Refine bar (Phase 2B) */}
-                      <div className="mt-3 p-3 border-2 border-black rounded bg-white">
-                        <div className="text-sm font-semibold mb-2">Refine</div>
-                        <div className="flex flex-wrap gap-2 items-center">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 text-xs border-2 border-black"
-                            onClick={() => setSourceFilters(prev => ({ ...prev, dateRange: 'all', minCitationCount: 0, tier1Only: false, openAccessOnly: false }))}
-                          >
-                            Broaden{predictiveCountsRef.current.all ? ` (${predictiveCountsRef.current.all})` : ''}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 text-xs border-2 border-black"
-                            onClick={() => setSourceFilters(prev => ({ ...prev, dateRange: 'recent' }))}
-                          >
-                            Narrow (1y){predictiveCountsRef.current.recent ? ` (${predictiveCountsRef.current.recent})` : ''}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 text-xs border-2 border-black"
-                            onClick={() => setSourceFilters(prev => ({ ...prev, minCitationCount: Math.max(100, prev.minCitationCount || 0) }))}
-                          >
-                            Top-cited only
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={sourceFilters.tier1Only ? 'default' : 'outline'}
-                            className="h-8 text-xs border-2 border-black"
-                            onClick={() => setSourceFilters(prev => ({ ...prev, tier1Only: !prev.tier1Only }))}
-                          >
-                            Tier1 only{predictiveCountsRef.current.tier1 ? ` (${predictiveCountsRef.current.tier1})` : ''}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 text-xs border-2 border-black"
-                            onClick={() => setSourceFilters({ tier1Only: false, minCitationCount: 0, dateRange: 'all', openAccessOnly: true })}
-                          >
-                            Reset
-                          </Button>
-                          <div className="grow" />
-                          <Button
-                            type="button"
-                            className="h-8 text-xs border-2 border-black bg-black text-white hover:bg-white hover:text-black"
-                            disabled={isProcessing || !isLLMConfigured || !input.trim()}
-                            onClick={() => handleSubmitStreaming({ preventDefault: () => {} } as any)}
-                          >
-                            Apply & Search
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 text-xs border-2 border-black"
-                            disabled={isProcessing || !isLLMConfigured || !input.trim()}
-                            onClick={() => handleSubmitStreaming({ preventDefault: () => {} } as any)}
-                          >
-                            Background refresh
-                          </Button>
-                        </div>
-                      </div>
+                      {/* Refine bar removed */}
 
-                      {/* Interactive Sources (Phase 2C) */}
-                      {Array.isArray(searchSources) && searchSources.length > 0 && (
-                        <div className="mt-4">
-                          <EnhancedSearchResults
-                            sources={searchSources as any}
-                            onFollowUp={(sourceId, question) => setInput(question)}
-                            onDeepDive={(sourceId) => {
-                              const src = (searchSources as any[]).find(s => s.id === sourceId)
-                              if (src?.url) window.open(src.url, '_blank')
-                            }}
-                            onCrossReference={(sourceId) => setInput(prev => (prev ? `${prev}\nCross-reference #${sourceId}` : `Cross-reference #${sourceId}`))}
-                            onExportCitation={(sourceId, format) => {
-                              // No-op: component will fallback to copy
-                            }}
-                          />
-                        </div>
-                      )}
+                      {/* Interactive sources removed */}
                     </CardContent>
                   </Card>
                 </div>
@@ -1662,53 +1193,14 @@ ${diagnostics.documents.length === 0
       <div className="border-t-2 border-black bg-white sticky bottom-0 z-10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
-            {chatMode === 'search' && !isLLMConfigured && (
-              <div className="flex items-center justify-between p-3 border-2 border-black bg-yellow-50 rounded">
-                <div className="text-sm text-black">Search mode requires an AI provider for summarization and analysis.</div>
-                <Button type="button" variant="outline" className="border-2 border-black" onClick={() => setActiveTab('settings')}>
-                  <Settings className="w-4 h-4 mr-2" /> Configure Provider
-                </Button>
-              </div>
-            )}
+            {/* Search mode removed */}
 
-            {/* URL Guidance Component */}
-            {urlDetection.hasUrls && (
-              <URLGuidance 
-                detectedUrls={urlDetection.urls}
-                errorMessage={urlProcessingError || undefined}
-                onRetry={() => setUrlProcessingError(null)}
-                className="mb-4"
-              />
-            )}
+            {/* Search URL guidance removed */}
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
-              {/* Mode selector */}
-              <div className="shrink-0 w-full sm:w-auto">
-                <div className="flex items-center rounded-full border-2 border-black overflow-hidden w-full sm:w-auto">
-                  <button type="button" onClick={() => setChatMode('docs')} className={`px-3 py-2 text-sm flex-1 sm:flex-none text-center ${chatMode === 'docs' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`} aria-pressed={chatMode === 'docs'}>
-                    Docs
-                  </button>
-                  <button type="button" onClick={() => setChatMode('search')} className={`px-3 py-2 text-sm border-l-2 border-black flex-1 sm:flex-none text-center ${chatMode === 'search' ? 'bg-black text-white' : 'bg-white text-black hover:bg-gray-100'}`} aria-pressed={chatMode === 'search'}>
-                    Search
-                  </button>
-                </div>
-              </div>
+              {/* Mode selector removed (Docs-only) */}
 
-              {/* Output mode selector (Phase 3B) */}
-              {chatMode === 'search' && (
-                <div className="shrink-0 w-full sm:w-auto">
-                  <Select value={outputMode} onValueChange={(v: any) => setOutputMode(v)}>
-                    <SelectTrigger className="w-full sm:w-[180px] border-2 border-black">
-                      <SelectValue placeholder="Output" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="summary">Summary</SelectItem>
-                      <SelectItem value="analysis">Analysis</SelectItem>
-                      <SelectItem value="comparison">Comparison</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              {/* Output mode selector removed */}
 
               {/* Text input */}
               <div className="flex-1 min-w-0 w-full">
@@ -1718,14 +1210,8 @@ ${diagnostics.documents.length === 0
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={
-                    (chatMode === 'docs' && disabled)
-                      ? 'Configure AI provider and upload documents to start chatting...'
-                      : chatMode === 'search'
-                        ? (isLLMConfigured ? 'Search the web, arXiv, and news... (Shift+Enter for new line)' : 'Configure AI provider to enable web research summarization...')
-                        : 'Ask a question about your documents... (Shift+Enter for new line)'
-                  }
-                  disabled={(chatMode === 'docs' ? (disabled || isProcessing) : (isProcessing || !isLLMConfigured))}
+                  placeholder={disabled ? 'Configure AI provider and upload documents to start chatting...' : 'Ask a question about your documents... (Shift+Enter for new line)'}
+                  disabled={disabled || isProcessing}
                   className="min-h-[3rem] h-[3rem] sm:h-auto max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed w-full"
                   rows={1}
                 />
@@ -1735,87 +1221,23 @@ ${diagnostics.documents.length === 0
               <div className="shrink-0 w-full sm:w-auto">
                 <Button
                   type="submit"
-                  disabled={(chatMode === 'docs' ? (disabled || isProcessing) : (isProcessing || !isLLMConfigured)) || !input.trim()}
+                  disabled={(disabled || isProcessing) || !input.trim()}
                   className="w-full sm:w-auto border-2 border-black bg-black text-white hover:bg-white hover:text-black px-6 h-12 btn-enhanced"
-                  aria-label={chatMode === 'search' ? 'Search' : 'Send message'}
+                  aria-label={'Send message'}
                 >
                   {isProcessing ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <div className="flex items-center gap-2">
-                      {chatMode === 'search' ? <Search className="w-5 h-5" /> : <Send className="w-5 h-5" />}
-                      <span className="hidden sm:inline">{chatMode === 'search' ? 'Search' : 'Send'}</span>
+                      <Send className="w-5 h-5" />
+                      <span className="hidden sm:inline">Send</span>
                     </div>
                   )}
                 </Button>
               </div>
             </div>
 
-            {chatMode === 'search' && (
-              (() => {
-                const links = extractLinksFromText(input)
-                const wantsLocal = detectLocalDocsIntent(input)
-                const badges: React.ReactNode[] = []
-                if (links.length > 0) {
-                  badges.push(
-                    <Badge key="links" variant="outline" className="border-2 border-black">
-                      {links.length} link{links.length>1?'s':''} detected
-                    </Badge>
-                  )
-                }
-                if (wantsLocal) {
-                  badges.push(
-                    <Badge key="local" variant="outline" className="border-2 border-green-600 text-green-700 bg-green-50">
-                      Local docs: ON
-                    </Badge>
-                  )
-                }
-                // Add filter summary chips
-                if (sourceFilters?.tier1Only) {
-                  badges.push(
-                    <Badge key="f-tier1" variant="outline" className="border-2 border-indigo-600 text-indigo-700 bg-indigo-50">
-                      Tier1 only
-                    </Badge>
-                  )
-                }
-                if ((sourceFilters?.minCitationCount || 0) > 0) {
-                  badges.push(
-                    <Badge key="f-cites" variant="outline" className="border-2 border-indigo-600 text-indigo-700 bg-indigo-50">
-                      ≥ {sourceFilters.minCitationCount} cites
-                    </Badge>
-                  )
-                }
-                if (sourceFilters?.dateRange && sourceFilters.dateRange !== 'all') {
-                  badges.push(
-                    <Badge key="f-date" variant="outline" className="border-2 border-indigo-600 text-indigo-700 bg-indigo-50">
-                      {sourceFilters.dateRange === 'recent' ? 'Recent (1y)' : 'Last 5y'}
-                    </Badge>
-                  )
-                }
-
-                // Add metrics chips if available
-                if (searchMetrics?.totalSources) {
-                  badges.push(
-                    <Badge key="total" variant="outline" className="border-2 border-blue-600 text-blue-700 bg-blue-50">
-                      {searchMetrics.totalSources} sources
-                    </Badge>
-                  )
-                }
-                if (searchMetrics?.providerCounts) {
-                  const entries = Object.entries(searchMetrics.providerCounts)
-                  if (entries.length) {
-                    const [topProvider, count] = entries.sort((a,b)=>b[1]-a[1])[0]
-                    badges.push(
-                      <Badge key="topprov" variant="outline" className="border-2 border-purple-600 text-purple-700 bg-purple-50">
-                        Top: {topProvider} ({count})
-                      </Badge>
-                    )
-                  }
-                }
-                if (badges.length === 0) return null
-                return <div className="flex flex-wrap items-center gap-2 text-xs">{badges}</div>
-              })()
-            )}
+            {/* Search badges removed */}
 
             {!disabled && (
               <div className="text-center text-sm text-gray-500 space-y-1">
