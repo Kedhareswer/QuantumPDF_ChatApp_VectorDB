@@ -42,6 +42,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TabContentLoadingSkeleton, ChatInterfaceSkeleton } from "@/components/skeleton-loaders"
 import { AIClient } from "@/lib/ai-client"
+import { TutorialModal } from "@/components/tutorial-modal"
 
 export default function QuantumPDFChatbot() {
   const {
@@ -82,8 +83,20 @@ export default function QuantumPDFChatbot() {
   const [isSearching, setIsSearching] = useState(false)
   const [isTabLoading, setIsTabLoading] = useState(false)
 
+  // Tutorial modal state
+  const [showTutorial, setShowTutorial] = useState(false)
+
   // Check if chat is ready
   const isChatReady = modelStatus === "ready" && documents.length > 0
+
+  // Check for first-time user on mount
+  useEffect(() => {
+    const hasSeenTutorial = localStorage.getItem("quantum-pdf-tutorial-completed")
+    if (!hasSeenTutorial) {
+      // Show tutorial after a short delay for better UX
+      setTimeout(() => setShowTutorial(true), 500)
+    }
+  }, [])
 
   // Initialize RAG engine with store config
   useEffect(() => {
@@ -625,6 +638,9 @@ export default function QuantumPDFChatbot() {
   return (
     <ErrorBoundary>
       <div className="h-screen overflow-hidden bg-gray-50 flex">
+        {/* Tutorial Modal */}
+        <TutorialModal isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
+
         {/* Error Handler */}
         <ErrorHandler errors={errors} onDismiss={removeError} />
 
@@ -852,36 +868,6 @@ export default function QuantumPDFChatbot() {
 
         {/* Main Content */}
         <main className="flex-1 flex flex-col min-w-0 min-h-0">
-          <header className="bg-white border-b-2 border-black p-4 lg:p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4 ml-12 lg:ml-0">
-                <div className="w-8 h-8 border-2 border-black bg-black flex items-center justify-center">
-                  <Brain className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <div className="text-xs font-semibold tracking-wide text-gray-600 uppercase">QUANTUM PDF</div>
-                  <h1 className="font-bold text-xl">AI Document Chat</h1>
-                  <p className="text-sm text-gray-600">
-                    {isChatReady
-                      ? `Ready • ${documents.length} document${documents.length !== 1 ? "s" : ""} loaded`
-                      : documents.length > 0
-                        ? "Configure AI provider to start chatting"
-                        : "Upload documents to start chatting"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Badge variant={isChatReady ? "default" : "secondary"} className="hidden sm:inline-flex">
-                  {isChatReady ? "READY" : "SETUP REQUIRED"}
-                </Badge>
-                <Badge variant="outline" className="hidden sm:inline-flex text-xs">
-                  {vectorDBConfig.provider.toUpperCase()}
-                </Badge>
-              </div>
-            </div>
-          </header>
-
           <div className="flex-1 min-h-0 bg-white">
             <ChatInterface
               messages={messages}

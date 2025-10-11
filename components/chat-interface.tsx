@@ -788,7 +788,7 @@ ${diagnostics.documents.length === 0
                   <h1 className="text-hierarchy-1">QUANTUM PDF READY</h1>
                   <p className="text-lg text-gray-600 leading-relaxed">
                     {disabled
-                      ? "Upload PDF documents and configure your AI provider to start chatting"
+                      ? "Configure AI Providers and Upload PDFs to start chatting"
                       : "Ask questions about your uploaded documents"}
                   </p>
                 </div>
