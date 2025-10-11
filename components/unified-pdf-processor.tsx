@@ -390,10 +390,10 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         {/* Client-only PDF wrapper to initialize PDF.js */}
         <PDFClientWrapper onProcessorReady={handleProcessorReady} />
         
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Document Processor
+        <CardHeader className="p-3 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
+            <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span className="text-sm sm:text-base md:text-lg">Document Processor</span>
           </CardTitle>
           <div className="grid grid-cols-2 gap-2 mt-3">
             <Button
@@ -404,9 +404,9 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                 handleRemoveFile()
               }}
               disabled={isProcessing}
-              className={`${inputMode === 'pdf' ? 'bg-black text-white' : ''} w-full text-xs sm:text-sm`}
+              className={`${inputMode === 'pdf' ? 'bg-black text-white' : ''} w-full text-[10px] sm:text-xs md:text-sm h-8 sm:h-9 px-2 sm:px-3`}
             >
-              <FileText className="w-4 h-4 mr-1 flex-shrink-0" />
+              <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
               <span className="truncate">Upload PDF</span>
             </Button>
             <Button
@@ -417,20 +417,20 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                 handleRemoveFile()
               }}
               disabled={isProcessing}
-              className={`${inputMode === 'docling' ? 'bg-black text-white' : ''} w-full text-xs sm:text-sm`}
+              className={`${inputMode === 'docling' ? 'bg-black text-white' : ''} w-full text-[10px] sm:text-xs md:text-sm h-8 sm:h-9 px-2 sm:px-3`}
             >
-              <FileJson className="w-4 h-4 mr-1 flex-shrink-0" />
+              <FileJson className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
               <span className="truncate">Import Docling</span>
             </Button>
           </div>
         </CardHeader>
 
-      <CardContent className="p-4">
+      <CardContent className="p-2 sm:p-3 md:p-4">
         {/* File Upload Area */}
         <div
           className={`border-2 ${
             error ? "border-red-500" : file ? "border-green-500" : "border-gray-300"
-          } border-dashed rounded-md p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors ${
+          } border-dashed rounded-md p-3 sm:p-4 md:p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors ${
             isProcessing ? "pointer-events-none opacity-50" : ""
           }`}
           onDrop={handleDrop}
@@ -455,11 +455,11 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
           />
 
             {file ? (
-              <div className="flex flex-col items-center space-y-3">
-                <FileText className="w-8 h-8 text-green-600" />
+              <div className="flex flex-col items-center space-y-2 sm:space-y-3">
+                <FileText className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-green-600" />
                 <div className="text-center">
-                  <p className="text-sm font-medium">{file.name}</p>
-                  <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  <p className="text-xs sm:text-sm font-medium break-words max-w-full px-2">{file.name}</p>
+                  <p className="text-[10px] sm:text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                 </div>
                 {!isProcessing && (
                   <Button
@@ -469,25 +469,25 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                       e.stopPropagation()
                       handleRemoveFile()
                     }}
-                    className="border-red-500 text-red-500 hover:bg-red-500 hover:text-white"
+                    className="border-red-500 text-red-500 hover:bg-red-500 hover:text-white text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
                   >
-                    <X className="w-4 h-4 mr-1" /> Remove
+                    <X className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> Remove
                   </Button>
                 )}
               </div>
             ) : (
-              <div className="flex flex-col items-center space-y-3">
-                <Upload className="w-8 h-8 text-gray-400" />
-                <div className="text-center">
+              <div className="flex flex-col items-center space-y-2 sm:space-y-3">
+                <Upload className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-gray-400" />
+                <div className="text-center px-2">
                   {inputMode === 'pdf' ? (
                     <>
-                      <p className="text-sm font-medium">Click or drag & drop to upload PDF</p>
-                      <p className="text-xs text-gray-500 mt-1">PDF files up to 100MB • Enhanced processing</p>
+                      <p className="text-xs sm:text-sm font-medium">Click or drag & drop to upload PDF</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 mt-1">PDF files up to 100MB • Enhanced processing</p>
                     </>
                   ) : (
                     <>
-                      <p className="text-sm font-medium">Click or drag & drop to import Docling output</p>
-                      <p className="text-xs text-gray-500 mt-1">JSON or Markdown files up to 50MB</p>
+                      <p className="text-xs sm:text-sm font-medium">Click or drag & drop to import Docling output</p>
+                      <p className="text-[10px] sm:text-xs text-gray-500 mt-1">JSON or Markdown files up to 50MB</p>
                     </>
                   )}
                 </div>
@@ -624,72 +624,72 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
           )}
         </CardContent>
 
-        <CardFooter className="border-t border-gray-200 p-4">
+        <CardFooter className="border-t border-gray-200 p-2 sm:p-3 md:p-4">
           <Button
             onClick={handleProcessFile}
             disabled={!file || isProcessing}
-            className="w-full bg-black hover:bg-gray-800 text-white disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="w-full bg-black hover:bg-gray-800 text-white disabled:bg-gray-300 disabled:cursor-not-allowed text-xs sm:text-sm h-9 sm:h-10"
           >
             {isProcessing ? (
               <div className="flex items-center space-x-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>{inputMode === 'pdf' ? 'Processing PDF...' : 'Importing Docling...'}</span>
+                <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
+                <span className="text-[10px] sm:text-xs md:text-sm">{inputMode === 'pdf' ? 'Processing PDF...' : 'Importing Docling...'}</span>
               </div>
             ) : (
-              inputMode === 'pdf' ? 'Process PDF with Enhanced Engine' : 'Import Docling Output'
+              <span className="text-[10px] sm:text-xs md:text-sm">{inputMode === 'pdf' ? 'Process PDF with Enhanced Engine' : 'Import Docling Output'}</span>
             )}
           </Button>
         </CardFooter>
       </Card>
 
       {/* Enhanced Processing Tips */}
-      <div className="text-xs text-gray-500 space-y-2 bg-gray-50 p-4 rounded-md">
+      <div className="text-[10px] sm:text-xs text-gray-500 space-y-1 sm:space-y-2 bg-gray-50 p-2 sm:p-3 md:p-4 rounded-md mt-3">
         {inputMode === 'pdf' ? (
           <>
-            <h4 className="font-medium text-gray-700 mb-2">Enhanced PDF Processing Features:</h4>
+            <h4 className="font-medium text-gray-700 mb-1 sm:mb-2 text-xs sm:text-sm">Enhanced PDF Processing Features:</h4>
             <p className="flex items-center">
-              <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
-              Advanced text extraction with structure preservation
+              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+              <span>Advanced text extraction with structure preservation</span>
             </p>
             <p className="flex items-center">
-              <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
-              Intelligent chunking with semantic splitting
+              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+              <span>Intelligent chunking with semantic splitting</span>
             </p>
             <p className="flex items-center">
-              <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
-              Quality assessment and confidence scoring
+              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+              <span>Quality assessment and confidence scoring</span>
             </p>
             <p className="flex items-center">
-              <Info className="w-3 h-3 mr-1 text-blue-500" />
-              Real-time progress tracking with detailed feedback
+              <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />
+              <span>Real-time progress tracking with detailed feedback</span>
             </p>
             <p className="flex items-center">
-              <AlertTriangle className="w-3 h-3 mr-1 text-yellow-500" />
-              Comprehensive error handling and recovery
+              <AlertTriangle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-yellow-500 flex-shrink-0" />
+              <span>Comprehensive error handling and recovery</span>
             </p>
           </>
         ) : (
           <>
-            <h4 className="font-medium text-gray-700 mb-2">Docling Import Features:</h4>
+            <h4 className="font-medium text-gray-700 mb-1 sm:mb-2 text-xs sm:text-sm">Docling Import Features:</h4>
             <p className="flex items-center">
-              <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
-              Structure-aware ingestion (headings, tables, lists)
+              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+              <span>Structure-aware ingestion (headings, tables, lists)</span>
             </p>
             <p className="flex items-center">
-              <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
-              Page numbers and bounding boxes preserved
+              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+              <span>Page numbers and bounding boxes preserved</span>
             </p>
             <p className="flex items-center">
-              <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
-              High-fidelity text with OCR/VLM support
+              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+              <span>High-fidelity text with OCR/VLM support</span>
             </p>
             <p className="flex items-center">
-              <Info className="w-3 h-3 mr-1 text-blue-500" />
-              Accepts both JSON and Markdown exports
+              <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />
+              <span>Accepts both JSON and Markdown exports</span>
             </p>
             <p className="flex items-center">
-              <Info className="w-3 h-3 mr-1 text-blue-500" />
-              Pre-process with Docling CLI for best results
+              <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />
+              <span>Pre-process with Docling CLI for best results</span>
             </p>
           </>
         )}

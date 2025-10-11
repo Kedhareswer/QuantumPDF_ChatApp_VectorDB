@@ -236,18 +236,18 @@ function MessageContent({ content }: { content: string }) {
                 rehypePlugins={[rehypeKatex as any]}
                 components={{
                   // Custom styling for markdown elements
-                  h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-lg font-bold mb-2 mt-4 first:mt-0">{children}</h3>,
-                  h4: ({ children }) => <h4 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h4>,
-                  h5: ({ children }) => <h5 className="text-sm font-bold mb-2 mt-3 first:mt-0">{children}</h5>,
-                  h6: ({ children }) => <h6 className="text-sm font-bold mb-2 mt-3 first:mt-0">{children}</h6>,
-                  p: ({ children }) => <p className="mb-4 last:mb-0 leading-relaxed">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc list-inside mb-4 space-y-1">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal list-inside mb-4 space-y-1">{children}</ol>,
-                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                  h1: ({ children }) => <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 mt-4 sm:mt-6 first:mt-0 break-words">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-base sm:text-lg md:text-xl font-bold mb-2 sm:mb-3 mt-3 sm:mt-5 first:mt-0 break-words">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm sm:text-base md:text-lg font-bold mb-2 mt-3 sm:mt-4 first:mt-0 break-words">{children}</h3>,
+                  h4: ({ children }) => <h4 className="text-xs sm:text-sm md:text-base font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h4>,
+                  h5: ({ children }) => <h5 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h5>,
+                  h6: ({ children }) => <h6 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h6>,
+                  p: ({ children }) => <p className="mb-3 sm:mb-4 last:mb-0 leading-relaxed text-xs sm:text-sm md:text-base break-words">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc list-inside mb-3 sm:mb-4 space-y-1 text-xs sm:text-sm">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal list-inside mb-3 sm:mb-4 space-y-1 text-xs sm:text-sm">{children}</ol>,
+                  li: ({ children }) => <li className="leading-relaxed break-words">{children}</li>,
                   blockquote: ({ children }) => (
-                    <blockquote className="border-l-4 border-gray-300 pl-4 my-4 italic text-gray-700 bg-gray-50 py-2">
+                    <blockquote className="border-l-4 border-gray-300 pl-3 sm:pl-4 my-3 sm:my-4 italic text-gray-700 bg-gray-50 py-2 text-xs sm:text-sm">
                       {children}
                     </blockquote>
                   ),
@@ -263,23 +263,23 @@ function MessageContent({ content }: { content: string }) {
                     }
 
                     return inline ? (
-                      <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800" {...rest}>
+                      <code className="bg-gray-100 px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono text-gray-800 break-words" {...rest}>
                         {children}
                       </code>
                     ) : (
-                      <code className="block bg-gray-100 p-3 rounded text-sm font-mono overflow-x-auto" {...rest}>
+                      <code className="block bg-gray-100 p-2 sm:p-3 rounded text-[10px] sm:text-xs font-mono overflow-x-auto" {...rest}>
                         {children}
                       </code>
                     );
                   },
                   pre: ({ children }) => (
-                    <pre className="bg-gray-100 p-3 rounded text-sm font-mono overflow-x-auto mb-4">
+                    <pre className="bg-gray-100 p-2 sm:p-3 rounded text-[10px] sm:text-xs font-mono overflow-x-auto mb-3 sm:mb-4">
                       {children}
                     </pre>
                   ),
                   table: ({ children }) => (
-                    <div className="overflow-x-auto mb-4">
-                      <table className="min-w-full border-collapse border border-gray-300 bg-white">
+                    <div className="overflow-x-auto mb-3 sm:mb-4">
+                      <table className="min-w-full border-collapse border border-gray-300 bg-white text-xs sm:text-sm">
                         {children}
                       </table>
                     </div>
@@ -292,28 +292,28 @@ function MessageContent({ content }: { content: string }) {
                   tbody: ({ children }) => <tbody>{children}</tbody>,
                   tr: ({ children }) => <tr className="border-b border-gray-200">{children}</tr>,
                   th: ({ children }) => (
-                    <th className="border border-gray-300 px-4 py-2 text-left font-semibold text-gray-900 bg-gray-50">
+                    <th className="border border-gray-300 px-2 sm:px-3 md:px-4 py-1 sm:py-2 text-left font-semibold text-gray-900 bg-gray-50 text-[10px] sm:text-xs">
                       {children}
                     </th>
                   ),
                   td: ({ children }) => (
-                    <td className="border border-gray-300 px-4 py-2 text-gray-700">
+                    <td className="border border-gray-300 px-2 sm:px-3 md:px-4 py-1 sm:py-2 text-gray-700 text-[10px] sm:text-xs break-words">
                       {children}
                     </td>
                   ),
                   strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
                   em: ({ children }) => <em className="italic">{children}</em>,
                   a: ({ href, children }) => (
-                    <a 
-                      href={href} 
-                      className="text-blue-600 hover:text-blue-800 underline"
+                    <a
+                      href={href}
+                      className="text-blue-600 hover:text-blue-800 underline text-xs sm:text-sm break-words"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
                       {children}
                     </a>
                   ),
-                  hr: () => <hr className="my-6 border-t-2 border-gray-200" />,
+                  hr: () => <hr className="my-4 sm:my-6 border-t-2 border-gray-200" />,
                 } as Components}
             >
               {part.content}
@@ -625,10 +625,10 @@ ${diagnostics.documents.length === 0
   return (
     <div className="flex flex-col h-full min-h-0 bg-white">
       {/* Chat Header with Controls */}
-      <div className="border-b border-gray-200 p-4">
+      <div className="border-b border-gray-200 p-2 sm:p-3 md:p-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Chat</h2>
-          <div className="flex items-center space-x-2">
+          <h2 className="text-sm sm:text-base md:text-lg font-semibold">Chat</h2>
+          <div className="flex items-center space-x-1 sm:space-x-2">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -636,13 +636,13 @@ ${diagnostics.documents.length === 0
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowAdvancedControls(!showAdvancedControls)}
-                    className={showAdvancedControls ? "bg-purple-50 text-purple-700" : ""}
+                    className={`${showAdvancedControls ? "bg-purple-50 text-purple-700" : ""} h-7 sm:h-8 w-7 sm:w-8 p-0`}
                   >
-                    <Settings className="w-4 h-4" />
+                    <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Enhanced AI Controls</p>
+                  <p className="text-xs">Enhanced AI Controls</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

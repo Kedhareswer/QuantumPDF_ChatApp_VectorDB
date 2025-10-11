@@ -246,6 +246,45 @@
     margin-left: 0;
     margin-right: 0;
   }
+
+  /* Mobile typography adjustments */
+  .text-hierarchy-1 {
+    @apply text-lg font-bold;
+    line-height: 1.3;
+  }
+
+  .text-hierarchy-2 {
+    @apply text-base font-bold;
+    line-height: 1.4;
+  }
+
+  .text-hierarchy-3 {
+    @apply text-sm font-semibold;
+    line-height: 1.4;
+  }
+
+  .text-hierarchy-4 {
+    @apply text-xs font-medium;
+    line-height: 1.5;
+  }
+
+  /* Ensure text wraps properly on mobile */
+  body {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+
+  /* Message bubble improvements for mobile */
+  .message-bubble {
+    @apply p-3 sm:p-4;
+    word-break: break-word;
+  }
+
+  /* Reduce padding on cards for mobile */
+  .card-enhanced {
+    @apply p-2 sm:p-4;
+  }
 }
 
 /* High contrast mode support */
