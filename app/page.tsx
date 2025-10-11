@@ -658,11 +658,11 @@ export default function QuantumPDFChatbot() {
         {/* Sidebar */}
         <div
           className={`
-          fixed lg:relative inset-y-0 left-0 z-40 
-          ${sidebarCollapsed ? "lg:w-16 w-72" : "w-80"} 
+          fixed lg:relative inset-y-0 left-0 z-40
+          ${sidebarCollapsed ? "lg:w-16 w-72" : "w-80"}
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
           transition-all duration-300 ease-in-out
-          bg-white border-r-2 border-black flex flex-col h-full
+          bg-white border-r-2 border-black flex flex-col h-screen
         `}
         >
           {/* Sidebar Header */}

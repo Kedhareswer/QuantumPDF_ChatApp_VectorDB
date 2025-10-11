@@ -1197,13 +1197,13 @@ ${diagnostics.documents.length === 0
 
             {/* Search URL guidance removed */}
 
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
+            <div className="flex items-start gap-2 w-full">
               {/* Mode selector removed (Docs-only) */}
 
               {/* Output mode selector removed */}
 
               {/* Text input */}
-              <div className="flex-1 min-w-0 w-full">
+              <div className="flex-1 min-w-0">
                 <Textarea
                   id="chat-input"
                   ref={inputRef}
@@ -1212,26 +1212,23 @@ ${diagnostics.documents.length === 0
                   onKeyDown={handleKeyDown}
                   placeholder={disabled ? 'Configure AI provider and upload documents to start chatting...' : 'Ask a question about your documents... (Shift+Enter for new line)'}
                   disabled={disabled || isProcessing}
-                  className="min-h-[3rem] h-[3rem] sm:h-auto max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-base leading-relaxed w-full"
+                  className="min-h-[3rem] h-[3rem] sm:h-auto max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-sm sm:text-base leading-relaxed w-full"
                   rows={1}
                 />
               </div>
 
               {/* Submit button */}
-              <div className="shrink-0 w-full sm:w-auto">
+              <div className="shrink-0">
                 <Button
                   type="submit"
                   disabled={(disabled || isProcessing) || !input.trim()}
-                  className="w-full sm:w-auto border-2 border-black bg-black text-white hover:bg-white hover:text-black px-6 h-12 btn-enhanced"
+                  className="border-2 border-black bg-black text-white hover:bg-white hover:text-black px-3 sm:px-6 h-12 btn-enhanced"
                   aria-label={'Send message'}
                 >
                   {isProcessing ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <Send className="w-5 h-5" />
-                      <span className="hidden sm:inline">Send</span>
-                    </div>
+                    <Send className="w-5 h-5" />
                   )}
                 </Button>
               </div>
