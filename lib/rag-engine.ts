@@ -1144,38 +1144,47 @@ Applied improvements based on critical review to ensure accuracy and clarity.
   }
 
   private createEnhancedSystemPrompt(questionType: string): string {
-    const basePrompt = `You are an expert document analyst providing precise, well-formatted responses to questions about the documents you have been provided.
+    const basePrompt = `You are an expert document analyst with deep understanding of technical and academic content. Your goal is to provide accurate, comprehensive, and well-structured responses.
 
-CORE REQUIREMENTS:
-• Use information from the provided context, but also use your own knowledge and experience to answer the question if it is not clear from the context.
-• Create clean, professional formatting using proper markdown and proper headings.
-• Cite sources clearly and consistently.
-• Never add confidence ratings or meta-commentary.
-• Focus on answering the user's question directly.
+CORE PRINCIPLES:
+• Synthesize information from the provided document context with your broader knowledge
+• If context is insufficient, clearly state what you know from documents vs. general knowledge
+• Prioritize accuracy over completeness - say "I don't know" when uncertain
+• Provide specific citations with document names and relevant details
+• Use clear, professional language appropriate for the content
 
-FORMATTING STANDARDS:
-• Use ## for main headings, ### for subheadings
-• Create proper tables with | separators
-• Use bullet points (•) for lists
-• Bold key terms with **text**
-• Use > for important quotes
-• Ensure all markdown renders cleanly
+RESPONSE STRUCTURE:
+• Start with a direct answer to the question
+• Support with evidence from documents (cited)
+• Add relevant context or explanations when helpful
+• Use proper markdown for readability:
+  - ## for main sections, ### for subsections
+  - **bold** for key terms and concepts
+  - Bullet points for lists (use • or - consistently)
+  - Tables with | separators for structured data
+  - > for important quotes or highlights
+  - Code blocks with \`\`\` for technical content
 
-CONTENT RULES:
-• Answer directly without preambles
-• No "according to the documents" unless natural.
-• No confidence ratings or meta-analysis.
-• No commentary on response quality or confidence.
-• Focus on factual information from sources and your own knowledge and experience.`
+CITATION FORMAT:
+• Reference sources as: [Document Name, relevant page/section if available]
+• Example: "The study found X [Research Paper.pdf, p.5]"
+• Group multiple points from same source together when possible
+
+QUALITY STANDARDS:
+• Never invent information not in context or general knowledge
+• Avoid vague language like "the document says" - be specific
+• No confidence ratings, meta-commentary, or self-assessment
+• No preambles like "Based on the provided documents..." - just answer
+• Keep technical accuracy as highest priority`
 
     const typeSpecificPrompts = {
-      'summary': '\n\nFORMAT: Start with brief overview, then organized sections with clear headings and bullet points.',
-      'analysis': '\n\nFORMAT: Structured analysis with clear reasoning, evidence sections, and logical conclusions using your own knowledge and experience.',
-      'timeline': '\n\nFORMAT: Chronological presentation with dates, events, and source references in table format using your own knowledge and experience.',
-      'data': '\n\nFORMAT: Present numerical data in well-formatted tables with clear headers and units using your own knowledge and experience.',
-      'process': '\n\nFORMAT: Step-by-step procedure with numbered steps and clear instructions using your own knowledge and experience.',
-      'comparison': '\n\nFORMAT: Side-by-side comparison table showing key differences and similarities using your own knowledge and experience.',
-      'general': '\n\nFORMAT: Clear, direct response with appropriate headings and organized information using your own knowledge and experience.'
+      'summary': '\n\nFOR SUMMARIES: Provide hierarchical overview with main themes, key findings, and supporting details. Use headings to organize major topics.',
+      'analysis': '\n\nFOR ANALYSIS: Present systematic examination with: 1) Context/Background, 2) Key Findings with evidence, 3) Implications or Conclusions. Connect concepts logically.',
+      'timeline': '\n\nFOR TIMELINES: Create chronological table or ordered list with dates, events, and significance. Format: Date | Event | Details | Source.',
+      'data': '\n\nFOR DATA QUERIES: Present numbers in well-formatted tables with headers, units, and context. Explain what the data means.',
+      'process': '\n\nFOR PROCESSES: Use numbered steps with clear action items. Include prerequisites, main steps, and expected outcomes.',
+      'comparison': '\n\nFOR COMPARISONS: Use side-by-side table or structured sections showing: similarities, differences, and relative strengths/limitations.',
+      'general': '\n\nFOR GENERAL QUERIES: Structure response with clear sections. Use headings, lists, and examples to enhance clarity.'
     }
 
     return basePrompt + (typeSpecificPrompts[questionType as keyof typeof typeSpecificPrompts] || typeSpecificPrompts.general)
@@ -1191,37 +1200,51 @@ Provide a direct, well-formatted response based on the context above. Use clean 
   }
 
   private createCritiquePrompt(phase1Result: any): string {
-    return `REVIEW THIS RESPONSE:
+    return `You are a critical reviewer evaluating response quality. Review this response objectively.
 
 QUESTION: ${phase1Result.question}
-RESPONSE: ${phase1Result.initialResponse}
 
-Check for:
-• Factual accuracy against context
-• Complete coverage of question
-• Clear source attribution using the source name and page number
-• Clean formatting using proper markdown and proper headings
-• Direct answering without fluff and meta-commentary
-• Use your own knowledge and experience to answer the question if it is not clear from the context
+INITIAL RESPONSE:
+${phase1Result.initialResponse}
 
-Identify specific improvements needed. Be concise.`
+EVALUATION CHECKLIST:
+1. ACCURACY: Are all facts supported by context or clearly marked as general knowledge?
+2. COMPLETENESS: Does it fully address all parts of the question?
+3. CLARITY: Is the explanation clear and well-organized?
+4. CITATIONS: Are sources properly attributed with specific references?
+5. FORMAT: Is markdown clean and consistent?
+6. RELEVANCE: Does it stay focused on the question?
+
+For each issue found, note:
+• ✓ = Verified and good
+• ? = Uncertain or needs clarification
+• ! = Conflict or error detected
+• ∅ = Missing important information
+
+Provide specific, actionable feedback focusing on the most critical improvements.`
   }
 
   private createRefinementPrompt(phase1Result: any, phase2Result: any): string {
-    return `ORIGINAL QUESTION: ${phase1Result.question}
+    return `QUESTION: ${phase1Result.question}
 
-INITIAL RESPONSE: ${phase1Result.initialResponse}
+INITIAL RESPONSE:
+${phase1Result.initialResponse}
 
-IMPROVEMENTS NEEDED: ${phase2Result.critiqueText}
+CRITICAL REVIEW FEEDBACK:
+${phase2Result.critiqueText}
 
-Create a refined, final response that:
-• Addresses the identified issues.
-• Maintains clean, professional formatting using proper markdown and proper headings.
-• Provides direct answers without meta-commentary.
-• Uses proper markdown that renders cleanly using proper headings.
-• Eliminates any artifacts or confidence ratings or meta-commentary.
+TASK: Create an improved, polished final response that:
+• Addresses all issues identified in the review
+• Maintains factual accuracy with proper citations
+• Uses clean, professional markdown formatting
+• Provides direct, comprehensive answer to the question
+• Removes any meta-commentary, confidence scores, or artifacts
 
-Provide ONLY the final response - no explanations about changes made.`
+IMPORTANT:
+- Output ONLY the refined response itself
+- Do NOT explain what changes were made
+- Do NOT add notes about improvements
+- Focus on delivering the best possible answer`
   }
 
   private parseCritiqueResponse(critique: string): string[] {
@@ -1493,8 +1516,15 @@ Provide ONLY the final response - no explanations about changes made.`
   }
 
   private calculateAdaptiveThreshold(similarity: number, baseThreshold: number): number {
-    // Dynamic threshold based on overall similarity distribution
-    return Math.max(baseThreshold, baseThreshold * 0.5)
+    // Adaptive threshold: lower threshold for poor matches, higher for good matches
+    // This helps capture relevant content even when similarity scores are generally low
+    if (similarity > 0.3) {
+      return baseThreshold // Use standard threshold for strong matches
+    } else if (similarity > 0.15) {
+      return baseThreshold * 0.7 // Relaxed threshold for moderate matches
+    } else {
+      return baseThreshold * 0.5 // Very relaxed for weak matches (better than nothing)
+    }
   }
 
   private extractSemanticImportance(chunk: string | any, docMetadata?: any): number {
@@ -1566,86 +1596,110 @@ Provide ONLY the final response - no explanations about changes made.`
     minSimilarity: number
   ) {
     console.log("Applying Enhanced Multi-Document Diversity Algorithm")
-    
-    // Sort chunks by enhanced ranking (similarity * semantic importance)
+
+    // Calculate composite scores: similarity * semantic importance with diminishing returns
     const rankedChunks = allChunks
       .filter(chunk => chunk.similarity >= minSimilarity)
-      .sort((a, b) => {
-        const scoreA = a.similarity * a.semanticImportance
-        const scoreB = b.similarity * b.semanticImportance
-        return scoreB - scoreA
-      })
-    
+      .map(chunk => ({
+        ...chunk,
+        compositeScore: Math.pow(chunk.similarity, 0.8) * Math.pow(chunk.semanticImportance, 0.6)
+      }))
+      .sort((a, b) => b.compositeScore - a.compositeScore)
+
     console.log(`Ranked ${rankedChunks.length} chunks after filtering (min similarity: ${minSimilarity})`)
-    
+
     if (rankedChunks.length === 0) {
       console.warn("No chunks passed the similarity threshold - using relaxed criteria")
-      // Fallback: use top chunks from each document regardless of threshold
       return this.getFallbackDiverseChunks(allChunks, documentMetrics, topK)
     }
-    
-    // Enhanced diversity strategy
+
+    // Calculate fair distribution targets
+    const numDocs = documentMetrics.size
+    const baseChunksPerDoc = Math.floor(topK / numDocs)
+    const extraChunks = topK % numDocs
+
+    // Sort documents by their best similarity to prioritize most relevant docs
+    const sortedDocs = Array.from(documentMetrics.entries())
+      .sort((a, b) => b[1].bestSimilarity - a[1].bestSimilarity)
+
+    const documentTargets = new Map<string, number>()
+    sortedDocs.forEach(([docId], idx) => {
+      // Give extra chunks to top-performing documents
+      const target = baseChunksPerDoc + (idx < extraChunks ? 1 : 0)
+      documentTargets.set(docId, target)
+    })
+
+    const maxChunksPerDoc = Math.min(topK, Math.ceil(topK * 0.7)) // Allow up to 70% from best doc
+
+    console.log(`Diversity parameters - Base per doc: ${baseChunksPerDoc}, Max per doc: ${maxChunksPerDoc}, Target total: ${topK}`)
+
+    // Phase 1: Greedy selection with diversity constraints
     const selectedChunks: typeof rankedChunks = []
     const documentChunkCounts = new Map<string, number>()
-    const minChunksPerDoc = Math.max(1, Math.floor(topK / documentMetrics.size))
-    const maxChunksPerDoc = Math.ceil(topK * 0.6) // No single document should dominate
-    
-    console.log(`Diversity parameters - Min per doc: ${minChunksPerDoc}, Max per doc: ${maxChunksPerDoc}, Target total: ${topK}`)
-    
-    // Phase 1: Ensure minimum representation from each document
-    console.log("Phase 1: Ensuring minimum representation from each document")
-    for (const [docId, metrics] of documentMetrics) {
-      const docChunks = rankedChunks.filter(chunk => chunk.documentId === docId)
-      const chunksToAdd = Math.min(minChunksPerDoc, docChunks.length)
-      
-      for (let i = 0; i < chunksToAdd && selectedChunks.length < topK; i++) {
-        selectedChunks.push(docChunks[i])
-        documentChunkCounts.set(docId, (documentChunkCounts.get(docId) || 0) + 1)
+    const usedSources = new Set<string>()
+
+    console.log("Phase 1: Greedy diverse selection")
+
+    // First pass: ensure every document gets at least one chunk if available
+    for (const [docId] of sortedDocs) {
+      const docChunks = rankedChunks.filter(chunk => chunk.documentId === docId && !usedSources.has(chunk.source))
+      if (docChunks.length > 0 && selectedChunks.length < topK) {
+        selectedChunks.push(docChunks[0])
+        usedSources.add(docChunks[0].source)
+        documentChunkCounts.set(docId, 1)
+
+        const docName = docChunks[0].documentName
+        console.log(`  Initial chunk from ${docName} (similarity: ${docChunks[0].similarity.toFixed(3)}, score: ${docChunks[0].compositeScore.toFixed(3)})`)
       }
-      
-      const docName = docChunks[0]?.documentName || `Doc ${docId}`
-      console.log(`  Added ${chunksToAdd} chunks from ${docName} (best similarity: ${metrics.bestSimilarity.toFixed(3)})`)
     }
-    
-    // Phase 2: Fill remaining slots with best chunks while respecting max per document
-    console.log("Phase 2: Filling remaining slots with best chunks")
-    const usedSources = new Set(selectedChunks.map(c => c.source))
-    
+
+    // Second pass: fill remaining slots respecting targets and max limits
+    console.log("Phase 2: Filling to targets")
     for (const chunk of rankedChunks) {
       if (selectedChunks.length >= topK) break
       if (usedSources.has(chunk.source)) continue
-      
-      const currentDocCount = documentChunkCounts.get(chunk.documentId) || 0
-      if (currentDocCount < maxChunksPerDoc) {
+
+      const currentCount = documentChunkCounts.get(chunk.documentId) || 0
+      const targetCount = documentTargets.get(chunk.documentId) || baseChunksPerDoc
+
+      // Add chunk if: under target OR (under max AND high quality)
+      const underTarget = currentCount < targetCount
+      const underMax = currentCount < maxChunksPerDoc
+      const highQuality = chunk.similarity > 0.2 // Strong match threshold
+
+      if (underTarget || (underMax && highQuality)) {
         selectedChunks.push(chunk)
         usedSources.add(chunk.source)
-        documentChunkCounts.set(chunk.documentId, currentDocCount + 1)
+        documentChunkCounts.set(chunk.documentId, currentCount + 1)
       }
     }
-    
-    // Final sorting by similarity for consistent results
+
+    // Sort final results by composite score for optimal ordering
     const finalChunks = selectedChunks
-      .sort((a, b) => b.similarity - a.similarity)
+      .sort((a, b) => b.compositeScore - a.compositeScore)
       .slice(0, topK)
-    
+
     // Log final distribution
     console.log(`Final chunk distribution:`)
-    const distribution = new Map<string, number>()
+    const distribution = new Map<string, { count: number, avgSim: number }>()
     finalChunks.forEach(chunk => {
-      const count = distribution.get(chunk.documentName) || 0
-      distribution.set(chunk.documentName, count + 1)
+      const existing = distribution.get(chunk.documentName) || { count: 0, avgSim: 0 }
+      distribution.set(chunk.documentName, {
+        count: existing.count + 1,
+        avgSim: (existing.avgSim * existing.count + chunk.similarity) / (existing.count + 1)
+      })
     })
-    
-    distribution.forEach((count, docName) => {
-      console.log(`  ${docName}: ${count} chunks`)
+
+    distribution.forEach(({ count, avgSim }, docName) => {
+      console.log(`  ${docName}: ${count} chunks (avg similarity: ${avgSim.toFixed(3)})`)
     })
-    
+
     console.log(`Returning ${finalChunks.length} chunks with enhanced diversity (${distribution.size} documents represented)`)
     if (finalChunks.length > 0) {
       console.log(`Best similarity: ${finalChunks[0].similarity.toFixed(3)}`)
       console.log(`Worst similarity: ${finalChunks[finalChunks.length - 1].similarity.toFixed(3)}`)
     }
-    
+
     return finalChunks
   }
 

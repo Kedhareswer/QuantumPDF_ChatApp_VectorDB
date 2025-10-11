@@ -30,3 +30,4 @@ next-env.d.ts
 .next
 .vscode
 .kiro
+__tests__/

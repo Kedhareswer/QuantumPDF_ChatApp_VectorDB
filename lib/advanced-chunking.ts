@@ -156,25 +156,40 @@ export class AdvancedChunker {
   private semanticChunking(text: string, documentId?: string, documentName?: string): TextChunk[] {
     const chunks: TextChunk[] = []
     const sections = this.identifySemanticSections(text)
-    
+
     let chunkIndex = 0
     for (const section of sections) {
-      if (section.content.trim().length < this.options.minChunkSize) continue
-      
-      if (section.content.length <= this.options.maxChunkSize) {
+      const trimmedContent = section.content.trim()
+
+      // Skip very small sections
+      if (trimmedContent.length < this.options.minChunkSize) {
+        // Try to merge with previous chunk if exists
+        if (chunks.length > 0 && chunks[chunks.length - 1].content.length + trimmedContent.length < this.options.maxChunkSize) {
+          chunks[chunks.length - 1].content += '\n\n' + trimmedContent
+          chunks[chunks.length - 1].metadata.endChar = section.startChar + trimmedContent.length
+          chunks[chunks.length - 1].metadata.wordCount = chunks[chunks.length - 1].content.split(/\s+/).length
+          continue
+        } else {
+          continue // Skip if can't merge
+        }
+      }
+
+      if (trimmedContent.length <= this.options.maxChunkSize) {
         // Section fits in one chunk
-        chunks.push(this.createChunk(section.content, chunkIndex, section.startChar, documentId, documentName))
+        chunks.push(this.createChunk(trimmedContent, chunkIndex, section.startChar, documentId, documentName))
         chunkIndex++
       } else {
         // Split large section into smaller chunks with semantic boundaries
         const subChunks = this.splitLargeSection(section)
         subChunks.forEach(subChunk => {
-          chunks.push(this.createChunk(subChunk.content, chunkIndex, subChunk.startChar, documentId, documentName))
-          chunkIndex++
+          if (subChunk.content.trim().length >= this.options.minChunkSize) {
+            chunks.push(this.createChunk(subChunk.content, chunkIndex, subChunk.startChar, documentId, documentName))
+            chunkIndex++
+          }
         })
       }
     }
-    
+
     return chunks
   }
 
@@ -213,21 +228,34 @@ export class AdvancedChunker {
   }
 
   private isSemanticBoundary(currentLine: string, prevLine?: string, nextLine?: string): boolean {
-    // Heading patterns
-    if (/^#{1,6}\s/.test(currentLine) || /^[A-Z][^.]*:?$/.test(currentLine.trim())) {
+    const trimmedCurrent = currentLine.trim()
+    const trimmedPrev = prevLine?.trim()
+
+    // Strong heading patterns (Markdown or plain text)
+    if (/^#{1,6}\s/.test(trimmedCurrent)) return true // Markdown headings
+    if (/^[A-Z][^.!?]{0,50}:?\s*$/.test(trimmedCurrent) && trimmedCurrent.length < 60) return true // Short capitalized lines
+
+    // Numbered section headers (1. Introduction, 2.1 Methods, etc.)
+    if (/^\d+(\.\d+)*\.?\s+[A-Z]/.test(trimmedCurrent)) return true
+
+    // Bulleted or numbered list starts (after paragraph)
+    if (trimmedPrev && !/^[•\-\*\d]/.test(trimmedPrev) && /^[•\-\*]\s|^\d+\.\s/.test(trimmedCurrent)) {
       return true
     }
-    
-    // Empty line transitions
-    if (!prevLine && currentLine.trim()) {
-      return true
-    }
-    
-    // Major topic shifts (detected by capitalization patterns)
-    if (prevLine && /^[A-Z]/.test(currentLine) && !/^[A-Z]/.test(prevLine)) {
-      return true
-    }
-    
+
+    // Paragraph transitions: empty line followed by new paragraph
+    if (!trimmedPrev && trimmedCurrent && nextLine?.trim()) return true
+
+    // Major topic shifts indicated by all-caps lines or underlines
+    if (/^[A-Z\s]{4,}$/.test(trimmedCurrent) && trimmedCurrent.length < 100) return true
+    if (/^[=\-_]{3,}$/.test(trimmedCurrent)) return true // Underlines
+
+    // Quote or blockquote starts
+    if (/^>/.test(trimmedCurrent)) return true
+
+    // Code block boundaries
+    if (/^```/.test(trimmedCurrent)) return true
+
     return false
   }
 
@@ -290,22 +318,58 @@ export class AdvancedChunker {
   }
 
   private calculateSemanticImportance(content: string): number {
-    let importance = 50
-    
-    // Boost importance for headings and titles
-    if (/^#{1,6}\s/.test(content) || /^[A-Z][^.]*:?$/.test(content.trim())) {
-      importance += 30
+    let importance = 50 // Base importance
+
+    const trimmedContent = content.trim()
+
+    // Strong indicators of important content
+    // Headings and titles (very high importance)
+    if (/^#{1,3}\s/.test(trimmedContent)) importance += 35 // High-level markdown headings
+    else if (/^#{4,6}\s/.test(trimmedContent)) importance += 25 // Lower-level headings
+    else if (/^[A-Z][^.!?]{0,50}:?\s*$/.test(trimmedContent) && trimmedContent.length < 60) {
+      importance += 30 // Short capitalized title lines
     }
-    
-    // Boost for content with numbers, dates, specific terms
-    if (/\d{4}|\d+%|\$\d+/.test(content)) importance += 10
-    if (/\b(important|key|critical|significant|main|primary)\b/i.test(content)) importance += 15
-    
-    // Boost for content with proper nouns
-    const properNouns = (content.match(/\b[A-Z][a-z]+\b/g) || []).length
-    importance += Math.min(properNouns * 2, 20)
-    
-    return Math.min(100, importance)
+
+    // Numbered sections (structural importance)
+    if (/^\d+(\.\d+)*\.?\s+[A-Z]/.test(trimmedContent)) importance += 20
+
+    // Key content indicators
+    const keyTerms = /\b(abstract|summary|introduction|conclusion|objective|purpose|method|result|finding|key|important|critical|significant|main|primary|essential|fundamental)\b/i
+    if (keyTerms.test(trimmedContent)) importance += 15
+
+    // Numerical data and statistics (often important)
+    if (/\d{4}/.test(trimmedContent)) importance += 5 // Years/dates
+    if (/\d+%|\$\d+|€\d+|£\d+/.test(trimmedContent)) importance += 8 // Percentages, currency
+    if (/\b(table|figure|chart|graph|diagram)\b/i.test(trimmedContent)) importance += 12
+
+    // Structured content (lists, tables)
+    if (/^[•\-\*]\s|^\d+\.\s/m.test(trimmedContent)) importance += 8
+    if (/\|.*\|/m.test(trimmedContent)) importance += 10 // Tables
+
+    // Proper nouns and named entities (context-rich)
+    const properNounMatches = trimmedContent.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) || []
+    const uniqueProperNouns = new Set(properNounMatches).size
+    importance += Math.min(uniqueProperNouns * 1.5, 15)
+
+    // Citations and references (academic/technical importance)
+    if (/\[\d+\]|\([A-Z][a-z]+,?\s+\d{4}\)/.test(trimmedContent)) importance += 8
+
+    // Quotations (potentially important attributed content)
+    if (/"[^"]{20,}"/.test(trimmedContent)) importance += 5
+
+    // Length factor: very short or very long chunks may be less semantically complete
+    const wordCount = trimmedContent.split(/\s+/).length
+    if (wordCount < 20) importance -= 10 // Too short, likely fragment
+    else if (wordCount > 200) importance -= 5 // Very long, may be less focused
+
+    // Density bonus: well-structured content with good sentence complexity
+    const sentences = trimmedContent.split(/[.!?]+/).filter(s => s.trim().length > 10)
+    if (sentences.length >= 3) {
+      const avgSentenceLength = wordCount / sentences.length
+      if (avgSentenceLength > 10 && avgSentenceLength < 30) importance += 5 // Good structure
+    }
+
+    return Math.max(10, Math.min(100, importance))
   }
 
   private calculateKeywordDensity(content: string): number {

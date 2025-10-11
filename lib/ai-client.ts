@@ -34,9 +34,6 @@ interface ChatMessage {
 
 export class AIClient {
   private config: AIConfig
-  private text: string = ''
-  private prompt: string = ''
-  private context: string = ''
 
   constructor(config: AIConfig) {
     this.config = config
@@ -66,7 +63,12 @@ export class AIClient {
           return this.generateFallbackEmbedding(text)
       }
     } catch (error) {
-      console.error("Error generating embedding:", error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      console.error(`Error generating embedding for provider ${this.config.provider}:`, {
+        error: errorMessage,
+        textLength: text?.length || 0,
+        textPreview: text?.substring(0, 50) || ''
+      })
       return this.generateFallbackEmbedding(text)
     }
   }
@@ -824,54 +826,79 @@ export class AIClient {
   }
 
   private generateFallbackEmbedding(text: string): number[] {
-    console.warn("Using fallback embedding generation")
+    console.warn("Using optimized fallback embedding generation")
     try {
       if (!text || typeof text !== 'string' || text.trim().length === 0) {
         console.warn("Invalid input text for fallback embedding, using default")
         text = "default text"
       }
-      
+
       // Use consistent dimension for fallback embeddings
-      const dimension = 1024; // Common embedding dimension
-      const embedding = new Array<number>(dimension).fill(0);
-      
-      // Improved hash-based embedding for fallback
+      const dimension = 1024
+      const embedding = new Float32Array(dimension) // Use typed array for performance
+
+      // Improved hash-based embedding with single pass
       const cleanText = text.toLowerCase().trim()
       for (let i = 0; i < cleanText.length; i++) {
-        const charCode = cleanText.charCodeAt(i);
-        const index = charCode % dimension;
-        // Use multiple hash functions for better distribution
-        embedding[index] += (charCode * 0.1);
-        embedding[(charCode * 3) % dimension] += (charCode * 0.05);
-        embedding[(charCode * 7) % dimension] += (charCode * 0.02);
+        const charCode = cleanText.charCodeAt(i)
+        // Use multiple hash functions in single pass for better distribution
+        const idx1 = charCode % dimension
+        const idx2 = (charCode * 3) % dimension
+        const idx3 = (charCode * 7) % dimension
+
+        embedding[idx1] += charCode * 0.1
+        embedding[idx2] += charCode * 0.05
+        embedding[idx3] += charCode * 0.02
       }
-      
-      // Add some randomness based on text content
-      for (let i = 0; i < dimension; i += 10) {
-        const seed = this.simpleHash(text + i.toString());
-        embedding[i] += (seed % 100) * 0.001;
+
+      // Add content-based randomness (reduced complexity)
+      const seed = this.simpleHash(text)
+      for (let i = 0; i < dimension; i += 100) {
+        embedding[i] += ((seed + i) % 100) * 0.001
       }
-      
+
       // Normalize the vector to unit length
-      const magnitude = Math.sqrt(embedding.reduce((sum: number, val: number) => sum + val * val, 0));
+      let magnitudeSquared = 0
+      for (let i = 0; i < dimension; i++) {
+        magnitudeSquared += embedding[i] * embedding[i]
+      }
+
+      const magnitude = Math.sqrt(magnitudeSquared)
+
       if (magnitude > 0) {
-        const normalized = embedding.map((val: number) => val / magnitude);
-        console.log(`Generated fallback embedding with dimension: ${normalized.length}`);
-        return normalized;
+        const normalized = new Array(dimension)
+        for (let i = 0; i < dimension; i++) {
+          normalized[i] = embedding[i] / magnitude
+        }
+        console.log(`Generated optimized fallback embedding with dimension: ${normalized.length}`)
+        return normalized
       } else {
         // If magnitude is 0, create a small random vector
-        console.warn("Zero magnitude in fallback embedding, generating random vector");
-        const random = new Array(dimension).fill(0).map(() => (Math.random() - 0.5) * 0.1);
-        const randomMagnitude = Math.sqrt(random.reduce((sum: number, val: number) => sum + val * val, 0));
-        return random.map((val: number) => val / randomMagnitude);
+        console.warn("Zero magnitude in fallback embedding, generating random vector")
+        const random = new Float32Array(dimension)
+        for (let i = 0; i < dimension; i++) {
+          random[i] = (Math.random() - 0.5) * 0.1
+        }
+
+        let randomMagnitudeSquared = 0
+        for (let i = 0; i < dimension; i++) {
+          randomMagnitudeSquared += random[i] * random[i]
+        }
+
+        const randomMagnitude = Math.sqrt(randomMagnitudeSquared)
+        const normalized = new Array(dimension)
+        for (let i = 0; i < dimension; i++) {
+          normalized[i] = random[i] / randomMagnitude
+        }
+        return normalized
       }
     } catch (error) {
-      console.error("Error in fallback embedding generation:", error);
+      console.error("Error in fallback embedding generation:", error)
       // Return a minimal valid embedding vector
-      const dimension = 1024;
-      const minimal = new Array(dimension).fill(0);
-      minimal[0] = 1.0; // Set first element to 1 for a valid unit vector
-      return minimal;
+      const dimension = 1024
+      const minimal = new Array(dimension).fill(0)
+      minimal[0] = 1.0 // Set first element to 1 for a valid unit vector
+      return minimal
     }
   }
 

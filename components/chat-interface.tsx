@@ -26,9 +26,6 @@ import {
   Zap,
   Settings,
   HelpCircle,
-  CheckCircle,
-  XCircle,
-  Circle,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -351,52 +348,9 @@ export function ChatInterface({
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [streamedAnswer, setStreamedAnswer] = useState<string | null>(null)
-  const { toast } = useToast();
-  // LLM configuration (for Search mode gating)
+  const { toast } = useToast()
 
   const { aiConfig, vectorDBConfig, setActiveTab, modelStatus } = useAppStore()
-  const isLLMConfigured = !!(aiConfig?.provider && aiConfig?.apiKey && aiConfig?.model)
-  // Metrics for Search mode
-  const [metrics, setMetrics] = useState<{ confidence?: number; reliabilityScore?: number; biasIndicators?: any[]; sentiment?: 'pos' | 'neu' | 'neg'; intent?: string; relatedQueries?: string[]; factChecks?: any[]; trendAnalysis?: any; queryEnhancement?: any; methodologySummary?: { breakdown: Record<string, number>; top: string[] } }>({})
-  const [searchMetrics, setSearchMetrics] = useState<{ totalSources?: number; providerCounts?: Record<string, number>; domainCoverage?: string[] }>({})
-  // Progressive refinement history (Phase 2B)
-  const [refineHistory, setRefineHistory] = useState<string[]>([])
-  // Search result sources for interactive management (Phase 2C)
-  const [searchSources, setSearchSources] = useState<Array<{ id: number; title: string; url: string; provider: string; publishedAt?: string; authors?: string[]; snippet?: string }>>([])
-  // Show/Hide filters panel
-  const [showFilters, setShowFilters] = useState(false)
-  // URL processing state
-  const [urlProcessingError, setUrlProcessingError] = useState<string | null>(null)
-  // Predictive caching (counts only) for common refinements
-  const predictiveCountsRef = useRef<{ recent?: number; last5?: number; tier1?: number; all?: number }>({})
-
-  // Source filters for Search mode
-  const [sourceFilters, setSourceFilters] = useState({
-    tier1Only: false,
-    minCitationCount: 0,
-    dateRange: 'all' as 'recent' | 'last5years' | 'all',
-    openAccessOnly: true,
-  })
-
-  // Helpers: detect local-docs intent and extract links from text
-  const detectLocalDocsIntent = (q: string): boolean => {
-    const t = (q || "").toLowerCase()
-    const patterns = [
-      /\b(include|use|search|look\s+into|blend|with)\b.*\b(my|uploaded|local|own)\b.*\b(doc|docs|documents|files|knowledge|kb)\b/,
-      /\bfrom\s+my\s+(docs|documents|files)\b/,
-      /\buse\s+(my|local)\s+(docs|documents)\b/,
-      /\bRAG\b/i
-    ]
-    return patterns.some((re) => re.test(t))
-  }
-
-  const extractLinksFromText = (q: string): string[] => {
-    const urlRegex = /\bhttps?:\/\/[^\s]+/gi
-    const matches = (q || "").match(urlRegex) || []
-    const unique = Array.from(new Set(matches))
-    return unique.slice(0, 10)
-  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -409,68 +363,9 @@ export function ChatInterface({
     }
   }, [input])
 
-  // Persist refine history (Phase 2B)
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('qpdf_refine_history')
-      if (saved) {
-        const arr = JSON.parse(saved)
-        if (Array.isArray(arr)) setRefineHistory(arr.slice(0, 5))
-      }
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('qpdf_refine_history', JSON.stringify(refineHistory.slice(0, 5)))
-    } catch {}
-  }, [refineHistory])
-
-  // Compute predictive counts when sources change
-  useEffect(() => {
-    if (!Array.isArray(searchSources) || searchSources.length === 0) {
-      predictiveCountsRef.current = {}
-      return
-    }
-    const now = Date.now()
-    const withinYears = (iso: string | undefined, y: number) => {
-      if (!iso) return false
-      const t = Date.parse(iso)
-      if (Number.isNaN(t)) return false
-      const cutoff = now - y * 365 * 24 * 60 * 60 * 1000
-      return t >= cutoff
-    }
-    const tier1 = new Set(['pubmed','arxiv','openalex'])
-    const all = searchSources.length
-    const recent = searchSources.filter(s => withinYears(s.publishedAt, 1)).length
-    const last5 = searchSources.filter(s => withinYears(s.publishedAt, 5)).length
-    const t1 = searchSources.filter(s => tier1.has(String(s.provider).toLowerCase())).length
-    predictiveCountsRef.current = { recent, last5, tier1: t1, all }
-  }, [searchSources])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (input.trim() && !isProcessing && !disabled) {
-      const options = enhancedOptions.complexityLevel === 'auto' 
-        ? { showThinking: enhancedOptions.showThinking, useContext }
-        : { 
-            showThinking: enhancedOptions.showThinking,
-            complexityLevel: enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex',
-            useContext
-          }
-      
-      onSendMessage(input.trim(), options)
-      setInput("")
-      setIsExpanded(false)
-    }
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      // Always use streaming path for both modes
-      // @ts-ignore - reuse event to trigger streaming submit
       handleSubmitStreaming(e as any)
     }
   }
@@ -1022,167 +917,6 @@ ${diagnostics.documents.length === 0
 
               {isProcessing && <EnhancedChatProcessingSkeleton phase="retrieving" />}
 
-              {/* If streamedAnswer, show it as the latest assistant message */}
-              {streamedAnswer && (
-                <div className="mb-4">
-                  <Card>
-                    <CardContent>
-                      <div className="flex gap-2 items-center mb-2"><Brain className="w-4 h-4 text-blue-500" /><span className="font-semibold">Assistant</span></div>
-                      {(metrics.confidence !== undefined || metrics.reliabilityScore !== undefined || metrics.sentiment) && (
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          {typeof metrics.confidence === 'number' && (
-                            <Badge variant="outline" className={`text-xs ${metrics.confidence >= 0.75 ? 'border-green-500 text-green-700' : metrics.confidence >= 0.5 ? 'border-yellow-500 text-yellow-700' : 'border-red-500 text-red-700'}`}>Confidence: {Math.round(metrics.confidence * 100)}%</Badge>
-                          )}
-                          {typeof metrics.reliabilityScore === 'number' && (
-                            <Badge variant="outline" className="text-xs">Reliability: {Math.round((metrics.reliabilityScore || 0) * 100)}%</Badge>
-                          )}
-                          {metrics.sentiment && (
-                            <Badge variant="outline" className="text-xs">Sentiment: {metrics.sentiment.toUpperCase()}</Badge>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Methodology Summary (Phase 3C) */}
-                      {metrics.methodologySummary && (
-                        <div className="mt-3 p-3 border border-blue-200 rounded bg-blue-50/30">
-                          <div className="text-sm font-semibold mb-2 text-blue-800">Methodology Summary</div>
-                          {Array.isArray(metrics.methodologySummary.top) && metrics.methodologySummary.top.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mb-2">
-                              {metrics.methodologySummary.top.map((m: string, idx: number) => (
-                                <Badge key={`meth-${idx}`} variant="outline" className="text-xs border-2 border-blue-300 text-blue-800">
-                                  {m}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                          {metrics.methodologySummary.breakdown && (
-                            <div className="space-y-1">
-                              {Object.entries(metrics.methodologySummary.breakdown).sort((a: any, b: any) => (b[1] as number) - (a[1] as number)).slice(0, 6).map(([k, v]: any, idx: number) => (
-                                <div key={`mb-${idx}`} className="flex items-center gap-2 text-xs text-gray-700">
-                                  <span className="w-48 truncate">{k}</span>
-                                  <div className="flex-1 h-2 bg-gray-100 rounded">
-                                    <div className="h-2 bg-blue-400 rounded" style={{ width: `${Math.min(100, Number(v) * 10)}%` }} />
-                                  </div>
-                                  <span className="w-6 text-right">{v as number}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex as any]}
-                        components={{
-                          code({ node, className, children, ...props }) {
-                            if (typeof children === "string" && children.startsWith("mermaid\n")) {
-                              return <Mermaid chart={children.replace(/^mermaid\n/, "")} />
-                            }
-                            return <code className={className} {...props}>{children}</code>
-                          },
-                        } as Components}
-                      >{streamedAnswer}</ReactMarkdown>
-                      {metrics.relatedQueries && metrics.relatedQueries.length > 0 && (
-                        <div className="mt-3">
-                          <div className="text-sm font-semibold mb-1">Related searches:</div>
-                          <div className="flex flex-wrap gap-2">
-                            {metrics.relatedQueries.map((rq, idx) => (
-                              <Button key={idx} variant="outline" size="sm" className="h-7 text-xs" onClick={() => setInput(rq)}>
-                                {rq}
-                              </Button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {/* Fact-checking results */}
-                      {metrics.factChecks && metrics.factChecks.length > 0 && (
-                        <div className="mt-3 p-3 border border-purple-200 rounded bg-purple-50/30">
-                          <div className="text-sm font-semibold mb-2 text-purple-800">Fact-checking Results:</div>
-                          <div className="space-y-2">
-                            {metrics.factChecks.map((check: any, idx: number) => (
-                              <div key={idx} className="flex items-start gap-2 text-xs">
-                                <div className="flex-shrink-0 mt-0.5">
-                                  {check.status === 'verified' && <CheckCircle className="w-3 h-3 text-green-600" />}
-                                  {check.status === 'disputed' && <XCircle className="w-3 h-3 text-red-600" />}
-                                  {check.status === 'unverified' && <Circle className="w-3 h-3 text-yellow-600" />}
-                                </div>
-                                <div className="flex-1">
-                                  <p className="text-gray-800 mb-1">{check.claim}</p>
-                                  <div className="flex gap-2 text-gray-600">
-                                    <Badge variant="outline" className={`text-xs ${
-                                      check.status === 'verified' ? 'border-green-500 text-green-700' :
-                                      check.status === 'disputed' ? 'border-red-500 text-red-700' :
-                                      'border-yellow-500 text-yellow-700'
-                                    }`}>
-                                      {check.status.toUpperCase()}
-                                    </Badge>
-                                    <span>Sources: {check.sources.map((s: number) => `[${s}]`).join(', ')}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Trend Analysis */}
-                      {metrics.trendAnalysis && (
-                        <div className="mt-3 p-3 border border-blue-200 rounded bg-blue-50/30">
-                          <div className="text-sm font-semibold mb-2 text-blue-800">Trend Analysis:</div>
-                          <div className="flex items-center gap-2 text-xs">
-                            <Badge variant="outline" className="border-blue-500 text-blue-700">
-                              {metrics.trendAnalysis.trend}
-                            </Badge>
-                            <span className="text-gray-600">
-                              Momentum: {metrics.trendAnalysis.momentum} ({metrics.trendAnalysis.timeframe})
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Query Enhancement & Synonyms (Phase 2A) */}
-                      {metrics.queryEnhancement && (
-                        <div className="mt-3 p-3 border border-yellow-200 rounded bg-yellow-50/30">
-                          <div className="text-sm font-semibold mb-2 text-yellow-800">Query Suggestions:</div>
-                          {Array.isArray(metrics.queryEnhancement.corrections) && metrics.queryEnhancement.corrections.length > 0 && (
-                            <div className="space-y-1 mb-2">
-                              {metrics.queryEnhancement.corrections.map((correction: string, idx: number) => (
-                                <p key={idx} className="text-xs text-yellow-700">{correction}</p>
-                              ))}
-                            </div>
-                          )}
-                          {Array.isArray(metrics.queryEnhancement.suggestions) && metrics.queryEnhancement.suggestions.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mb-2">
-                              {metrics.queryEnhancement.suggestions.map((s: string, idx: number) => (
-                                <Badge key={`sug-${idx}`} variant="outline" className="text-xs cursor-pointer border-2 border-yellow-400" onClick={() => setInput(s)}>
-                                  {s}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                          {Array.isArray(metrics.queryEnhancement.synonyms) && metrics.queryEnhancement.synonyms.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                              {metrics.queryEnhancement.synonyms.map((s: string, idx: number) => (
-                                <Badge key={`syn-${idx}`} variant="outline" className="text-xs cursor-pointer border-2 border-purple-300 text-purple-800" onClick={() => setInput(prev => (prev ? `${prev} ${s}` : s))}>
-                                  {s}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Search Analytics removed */}
-
-                      {/* Refinement history removed */}
-
-                      {/* Refine bar removed */}
-
-                      {/* Interactive sources removed */}
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
               <div ref={messagesEndRef} />
       </div>
       )}
@@ -1191,13 +925,13 @@ ${diagnostics.documents.length === 0
 
       {/* Input Area */}
       <div className="border-t-2 border-black bg-white sticky bottom-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-4xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4 md:py-6">
           <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
             {/* Search mode removed */}
 
             {/* Search URL guidance removed */}
 
-            <div className="flex items-start gap-2 w-full">
+            <div className="flex items-end gap-2 w-full">
               {/* Mode selector removed (Docs-only) */}
 
               {/* Output mode selector removed */}
@@ -1212,7 +946,7 @@ ${diagnostics.documents.length === 0
                   onKeyDown={handleKeyDown}
                   placeholder={disabled ? 'Configure AI provider and upload documents to start chatting...' : 'Ask a question about your documents... (Shift+Enter for new line)'}
                   disabled={disabled || isProcessing}
-                  className="min-h-[3rem] h-[3rem] sm:h-auto max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-sm sm:text-base leading-relaxed w-full"
+                  className="min-h-[2.5rem] h-[2.5rem] sm:min-h-[3rem] sm:h-[3rem] max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-xs sm:text-sm md:text-base leading-relaxed w-full p-2 sm:p-3"
                   rows={1}
                 />
               </div>
@@ -1222,13 +956,13 @@ ${diagnostics.documents.length === 0
                 <Button
                   type="submit"
                   disabled={(disabled || isProcessing) || !input.trim()}
-                  className="border-2 border-black bg-black text-white hover:bg-white hover:text-black px-3 sm:px-6 h-12 btn-enhanced"
+                  className="border-2 border-black bg-black text-white hover:bg-white hover:text-black px-2 sm:px-3 md:px-6 h-10 sm:h-12 btn-enhanced"
                   aria-label={'Send message'}
                 >
                   {isProcessing ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                   ) : (
-                    <Send className="w-5 h-5" />
+                    <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                   )}
                 </Button>
               </div>
@@ -1237,7 +971,7 @@ ${diagnostics.documents.length === 0
             {/* Search badges removed */}
 
             {!disabled && (
-              <div className="text-center text-sm text-gray-500 space-y-1">
+              <div className="text-center text-xs sm:text-sm text-gray-500 space-y-1 mt-2">
                 <p>
                   pls star the{' '}
                   <a href="https://github.com/Kedhareswer/QuantumPDF_ChatApp" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 underline">repo</a>{' '}if you liked it
