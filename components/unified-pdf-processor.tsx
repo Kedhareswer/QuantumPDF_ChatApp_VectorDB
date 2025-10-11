@@ -395,7 +395,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
             <FileText className="h-5 w-5" />
             Document Processor
           </CardTitle>
-          <div className="flex items-center gap-2 mt-3">
+          <div className="grid grid-cols-2 gap-2 mt-3">
             <Button
               variant={inputMode === 'pdf' ? 'default' : 'outline'}
               size="sm"
@@ -404,10 +404,10 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                 handleRemoveFile()
               }}
               disabled={isProcessing}
-              className={inputMode === 'pdf' ? 'bg-black text-white' : ''}
+              className={`${inputMode === 'pdf' ? 'bg-black text-white' : ''} w-full text-xs sm:text-sm`}
             >
-              <FileText className="w-4 h-4 mr-1" />
-              Upload PDF
+              <FileText className="w-4 h-4 mr-1 flex-shrink-0" />
+              <span className="truncate">Upload PDF</span>
             </Button>
             <Button
               variant={inputMode === 'docling' ? 'default' : 'outline'}
@@ -417,10 +417,10 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                 handleRemoveFile()
               }}
               disabled={isProcessing}
-              className={inputMode === 'docling' ? 'bg-black text-white' : ''}
+              className={`${inputMode === 'docling' ? 'bg-black text-white' : ''} w-full text-xs sm:text-sm`}
             >
-              <FileJson className="w-4 h-4 mr-1" />
-              Import Docling
+              <FileJson className="w-4 h-4 mr-1 flex-shrink-0" />
+              <span className="truncate">Import Docling</span>
             </Button>
           </div>
         </CardHeader>
