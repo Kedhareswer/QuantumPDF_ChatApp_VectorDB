@@ -656,13 +656,13 @@ export default function QuantumPDFChatbot() {
         </Button>
 
         {/* Sidebar */}
-        <div
+        <aside
           className={`
-          fixed lg:relative inset-y-0 left-0 z-40
+          fixed lg:sticky inset-y-0 left-0 top-0 z-40
           ${sidebarCollapsed ? "lg:w-16" : "lg:w-80"}
-          ${sidebarOpen ? "w-full lg:w-80 translate-x-0" : "w-full lg:w-80 -translate-x-full lg:translate-x-0"}
+          ${sidebarOpen ? "w-full sm:w-80 translate-x-0" : "w-full sm:w-80 -translate-x-full lg:translate-x-0"}
           transition-all duration-300 ease-in-out
-          bg-white border-r-2 border-black flex flex-col h-screen
+          bg-white border-r-2 border-black flex flex-col h-screen shrink-0
         `}
         >
           {/* Sidebar Header */}
@@ -857,7 +857,7 @@ export default function QuantumPDFChatbot() {
               </div>
             )}
           </div>
-        </div>
+        </aside>
 
         {/* Overlay for mobile */}
           <div

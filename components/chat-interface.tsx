@@ -20,9 +20,6 @@ import {
   Target,
   Sparkles,
   MessageSquare,
-  Copy,
-  ThumbsUp,
-  ThumbsDown,
   Zap,
   Settings,
   HelpCircle,
@@ -398,18 +395,6 @@ export function ChatInterface({
         variant: "destructive"
       })
     }
-  }
-  const handleThumbsUp = () => {
-    toast({
-      title: "Feedback received!",
-      description: "You liked this response."
-    })
-  }
-  const handleThumbsDown = () => {
-    toast({
-      title: "Feedback received!",
-      description: "You disliked this response."
-    })
   }
 
   const formatTimestamp = (date: Date) => {
@@ -843,41 +828,6 @@ ${diagnostics.documents.length === 0
                               return cleaned.trim()
                             })()}
                           />
-                      </div>
-
-                      {/* Message Actions */}
-                      <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleCopy(message.content)}
-                          className={`h-8 w-8 p-0 ${message.role === "user" ? "text-white hover:bg-white/20" : "text-gray-600 hover:bg-gray-100"}`}
-                          aria-label="Copy message"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                        {message.role === "assistant" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
-                              aria-label="Thumbs up"
-                              onClick={handleThumbsUp}
-                            >
-                              <ThumbsUp className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-gray-600 hover:bg-gray-100"
-                              aria-label="Thumbs down"
-                              onClick={handleThumbsDown}
-                            >
-                              <ThumbsDown className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
                       </div>
                     </div>
 
