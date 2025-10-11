@@ -21,6 +21,7 @@
 ## 📖 Table of Contents
 
 - [Overview](#-overview)
+- [Progressive Web App (PWA)](#-progressive-web-app-pwa)
 - [How It Works](#-how-it-works)
 - [Key Features](#-key-features)
 - [Architecture](#-architecture)
@@ -47,6 +48,72 @@ QuantumPDF ChatApp is an intelligent PDF document analysis platform built with N
 - **Adaptive semantic chunking** with importance scoring
 - **Real-time quality metrics** and token tracking
 - **Advanced vector search** with hybrid retrieval modes
+- **📱 Progressive Web App (PWA)** - Install on mobile devices and use offline
+
+---
+
+## 📱 Progressive Web App (PWA)
+
+QuantumPDF ChatApp is now a **fully-featured Progressive Web App**, allowing you to install it on your mobile devices and use it like a native app!
+
+### PWA Features
+
+| Feature | Description | Benefit |
+|---------|-------------|---------|
+| **📲 Installable** | Add to home screen on mobile/desktop | Quick access like a native app |
+| **🔌 Offline Support** | Works without internet connection | View cached documents anywhere |
+| **⚡ Lightning Fast** | Cached resources load instantly | Sub-second load times |
+| **🎨 Native Feel** | Full-screen without browser UI | Immersive experience |
+| **🔄 Auto-Updates** | Always get the latest version | No manual updates needed |
+| **📊 Background Sync** | Syncs data when connection restored | Seamless offline/online transition |
+
+### How to Install
+
+#### On Mobile (Android/iOS)
+
+1. Open the app in your mobile browser (Chrome, Safari, Edge)
+2. Look for the "Install" or "Add to Home Screen" prompt
+3. Tap "Install" or "Add"
+4. The app icon appears on your home screen
+5. Launch like any native app!
+
+**Android (Chrome/Edge):**
+- Tap the install banner that appears at the bottom
+- Or: Menu (⋮) → "Install app" or "Add to Home screen"
+
+**iOS (Safari):**
+- Tap the Share button (□↑)
+- Scroll down and tap "Add to Home Screen"
+- Tap "Add" in the top right
+
+#### On Desktop
+
+1. Open the app in Chrome or Edge
+2. Click the install icon (➕) in the address bar
+3. Click "Install" in the popup
+4. The app opens in its own window
+
+### Offline Capabilities
+
+When offline, you can:
+
+- ✅ View previously loaded documents
+- ✅ Browse chat history
+- ✅ Access cached PDF files
+- ✅ Review previous analysis results
+
+The app automatically syncs changes when you're back online.
+
+### PWA Technical Details
+
+For developers and advanced users, see the complete [PWA Guide](docs/PWA_GUIDE.md) which covers:
+
+- Implementation details
+- Icon generation
+- Service worker configuration
+- Testing and debugging
+- Browser support
+- Troubleshooting
 
 ---
 
@@ -453,6 +520,10 @@ cp .env.example .env.local
 
 # Start development server
 pnpm dev
+
+# For production (with PWA features)
+pnpm build
+pnpm start
 ```
 
 ### First Steps
@@ -460,6 +531,9 @@ pnpm dev
 1. **Configure AI Provider**: Settings → AI Configuration
 2. **Upload PDF**: Documents → Upload Document
 3. **Start Chatting**: Ask questions about your documents
+4. **Install as PWA** (Optional): Look for the install prompt or use browser menu
+
+**Note**: PWA features (offline support, service worker) work only in production mode. Run `pnpm build && pnpm start` to test PWA capabilities.
 
 ---
 

@@ -1,6 +1,8 @@
 "use client"
 
 import { LoadingScreen } from "@/components/loading-screen"
+import { ServiceWorkerRegistration } from "@/components/service-worker-registration"
+import { PWAInstallPrompt } from "@/components/pwa-install-prompt"
 import { useState } from "react"
 
 interface ClientLayoutProps {
@@ -12,6 +14,8 @@ export function ClientLayout({ children }: ClientLayoutProps) {
 
   return (
     <>
+      <ServiceWorkerRegistration />
+      <PWAInstallPrompt />
       {showLoading && (
         <LoadingScreen onComplete={() => setShowLoading(false)} />
       )}

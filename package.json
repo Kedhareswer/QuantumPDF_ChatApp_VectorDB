@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "pwa:icons:svg": "node scripts/create-pwa-icons.js",
+    "pwa:icons:png": "node scripts/generate-pwa-icons.js",
+    "pwa:test": "npm run build && npm start",
+    "pwa:validate": "npm run build && npx serve@latest out -l 3000"
   },
   "dependencies": {
     "@chroma-core/default-embed": "^0.1.8",

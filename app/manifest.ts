@@ -1,10 +1,10 @@
 import { MetadataRoute } from 'next'
- 
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'QuantumPDF ChatApp - AI-Powered PDF Analysis',
     short_name: 'QuantumPDF',
-    description: 'Transform your PDFs into intelligent conversations with AI-powered document analysis and chat capabilities.',
+    description: 'Transform your PDFs into intelligent conversations with AI-powered document analysis and chat capabilities. Works offline with full privacy.',
     start_url: '/',
     display: 'standalone',
     background_color: '#ffffff',
@@ -12,30 +12,82 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: 'portrait-primary',
     scope: '/',
     lang: 'en-US',
+    dir: 'ltr',
     categories: ['productivity', 'business', 'education', 'utilities'],
+    display_override: ['window-controls-overlay', 'standalone', 'fullscreen'],
     screenshots: [
       {
         src: '/screenshot-wide.png',
         sizes: '1280x720',
         type: 'image/png',
-        form_factor: 'wide'
+        form_factor: 'wide',
+        label: 'QuantumPDF ChatApp Desktop View'
       },
       {
         src: '/screenshot-narrow.png',
         sizes: '750x1334',
         type: 'image/png',
-        form_factor: 'narrow'
+        form_factor: 'narrow',
+        label: 'QuantumPDF ChatApp Mobile View'
       }
     ],
     icons: [
       {
+        src: '/icon-72.png',
+        sizes: '72x72',
+        type: 'image/png',
+        purpose: 'any'
+      },
+      {
+        src: '/icon-96.png',
+        sizes: '96x96',
+        type: 'image/png',
+        purpose: 'any'
+      },
+      {
+        src: '/icon-128.png',
+        sizes: '128x128',
+        type: 'image/png',
+        purpose: 'any'
+      },
+      {
+        src: '/icon-144.png',
+        sizes: '144x144',
+        type: 'image/png',
+        purpose: 'any'
+      },
+      {
+        src: '/icon-152.png',
+        sizes: '152x152',
+        type: 'image/png',
+        purpose: 'any'
+      },
+      {
         src: '/icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+        purpose: 'any'
+      },
+      {
+        src: '/icon-384.png',
+        sizes: '384x384',
+        type: 'image/png',
+        purpose: 'any'
+      },
+      {
+        src: '/icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any'
+      },
+      {
+        src: '/icon-192-maskable.png',
         sizes: '192x192',
         type: 'image/png',
         purpose: 'maskable'
       },
       {
-        src: '/icon-512.png',
+        src: '/icon-512-maskable.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable'
@@ -73,6 +125,8 @@ export default function manifest(): MetadataRoute.Manifest {
       }
     ],
     related_applications: [],
-    prefer_related_applications: false
+    prefer_related_applications: false,
+    iarc_rating_id: '',
+    edge_side_panel: {}
   }
 }
