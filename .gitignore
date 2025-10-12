@@ -31,3 +31,4 @@ next-env.d.ts
 .vscode
 .kiro
 __tests__/
+nul
