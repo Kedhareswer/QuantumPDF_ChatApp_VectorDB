@@ -25,6 +25,7 @@
 - [How It Works](#-how-it-works)
 - [Key Features](#-key-features)
 - [Architecture](#-architecture)
+- [Documentation](#-documentation)
 - [Use Cases](#-use-cases)
 - [Getting Started](#-getting-started)
 - [Configuration](#-configuration)
@@ -49,6 +50,14 @@ QuantumPDF ChatApp is an intelligent PDF document analysis platform built with N
 - **Real-time quality metrics** and token tracking
 - **Advanced vector search** with hybrid retrieval modes
 - **📱 Progressive Web App (PWA)** - Install on mobile devices and use offline
+- **📚 Comprehensive documentation** with 15+ visual architecture diagrams
+
+### Quick Links
+
+- 🏗️ [**System Architecture**](docs/ARCHITECTURE_FLOWS.md) - 15+ visual diagrams explaining the entire system
+- 🚀 [**Quick Start Guide**](docs/QUICK_START_GUIDE.md) - Get started in 10 minutes
+- 📖 [**Full Documentation**](#-documentation) - Complete guides and references
+- 💻 [**API Configuration**](#-configuration) - Setup your AI providers
 
 ---
 
@@ -470,6 +479,100 @@ sequenceDiagram
 4. **Context Retrieval** → Filtered chunks → AI generation
 5. **Response** → Quality metrics → User interface
 
+### 3-Phase RAG Processing
+
+QuantumPDF uses an advanced 3-phase self-reflective RAG system:
+
+```mermaid
+graph LR
+    subgraph "Phase 1: Context Analysis"
+        A[Query] --> B[Generate Embedding]
+        B --> C[Vector Search]
+        C --> D[Retrieve Chunks]
+        D --> E[Initial Response]
+    end
+
+    subgraph "Phase 2: Self-Critique"
+        E --> F[Validate Accuracy]
+        F --> G[Check Completeness]
+        G --> H[Identify Issues]
+    end
+
+    subgraph "Phase 3: Refinement"
+        H --> I[Apply Improvements]
+        I --> J[Clean Artifacts]
+        J --> K[Calculate Quality]
+    end
+
+    K --> L[Final Response with Metrics]
+```
+
+**Quality Metrics Provided:**
+- Accuracy Score (0-100)
+- Completeness Score (0-100)
+- Clarity Score (0-100)
+- Confidence Score (0-100)
+- Overall Rating
+
+**Token Budget Allocation** (Adaptive by complexity):
+- **Simple queries**: 60% context, 0% critique, 40% response
+- **Normal queries**: 40% context, 30% critique, 30% response
+- **Complex queries**: 30% context, 40% critique, 30% response
+
+For complete visual architecture, see [**ARCHITECTURE_FLOWS.md**](docs/ARCHITECTURE_FLOWS.md) with 15+ detailed diagrams.
+
+---
+
+## 📚 Documentation
+
+Comprehensive documentation is available in the [`docs/`](docs/) folder:
+
+### Core Documentation
+
+| Document | Description | Key Topics |
+|----------|-------------|------------|
+| [**ARCHITECTURE_FLOWS.md**](docs/ARCHITECTURE_FLOWS.md) | **Visual architecture guide with 15+ diagrams** | System overview, data flows, component interactions, processing pipelines |
+| [**RAG_ARCHITECTURE.md**](docs/RAG_ARCHITECTURE.md) | Detailed RAG implementation | 3-phase processing, diversity algorithm, quality metrics |
+| [**IMPLEMENTATION_GUIDE.md**](docs/IMPLEMENTATION_GUIDE.md) | Feature implementation guide | MessageItem memoization, lazy loading, annotations, search |
+| [**OPTIMIZATION_GUIDE.md**](docs/OPTIMIZATION_GUIDE.md) | Performance optimization infrastructure | Caching, rate limiting, diversity algorithms, telemetry |
+
+### PWA Documentation
+
+| Document | Description | Key Topics |
+|----------|-------------|------------|
+| [**PWA_GUIDE.md**](docs/PWA_GUIDE.md) | Progressive Web App implementation | Installation, offline support, service workers, testing |
+| [**PWA_TESTING_GUIDE.md**](docs/PWA_TESTING_GUIDE.md) | PWA testing procedures | Manual testing, scenarios, troubleshooting |
+| [**PWA_IMPLEMENTATION_SUMMARY.md**](docs/PWA_IMPLEMENTATION_SUMMARY.md) | Complete PWA implementation summary | Features, metrics, deployment checklist |
+
+### Quick References
+
+| Document | Description | Key Topics |
+|----------|-------------|------------|
+| [**QUICK_START_GUIDE.md**](docs/QUICK_START_GUIDE.md) | Fast implementation steps | Priority order, time estimates, command checklists |
+| [**REFACTORING_REPORT.md**](docs/REFACTORING_REPORT.md) | Code optimization report | Dead code removal, performance improvements |
+
+### Visual Diagrams Available
+
+The **ARCHITECTURE_FLOWS.md** includes comprehensive Mermaid diagrams for:
+
+- ✅ High-level system architecture (4 layers)
+- ✅ Technology stack visualization
+- ✅ RAG engine architecture (3-phase processing)
+- ✅ Multi-provider AI client architecture
+- ✅ Document upload & processing sequence
+- ✅ Query processing flow (3-phase RAG)
+- ✅ Vector search & diversity algorithm
+- ✅ React component hierarchy
+- ✅ Zustand state management
+- ✅ PDF text extraction pipeline
+- ✅ Adaptive chunking pipeline
+- ✅ Embedding generation pipeline
+- ✅ Token budget allocation
+- ✅ Caching strategy layers
+- ✅ Error propagation flow
+- ✅ Data privacy architecture
+- ✅ Production deployment architecture
+
 ---
 
 ## 💡 Use Cases
@@ -732,7 +835,100 @@ console.log('Provider health:', metrics.providers)
 console.log('Token usage:', metrics.tokens.total)
 ```
 
-For detailed implementation guides and integration steps, see [`OPTIMIZATION_GUIDE.md`](OPTIMIZATION_GUIDE.md).
+For detailed implementation guides and integration steps, see [`OPTIMIZATION_GUIDE.md`](docs/OPTIMIZATION_GUIDE.md).
+
+---
+
+## 📖 Documentation Navigation Guide
+
+### For New Users
+
+**Start Here:**
+1. Read this README for project overview
+2. Follow [Getting Started](#-getting-started) to install and configure
+3. Review [How It Works](#-how-it-works) to understand the system
+4. Try [Example Prompts](#-example-prompts) with your documents
+
+**For Visual Learners:**
+- View [ARCHITECTURE_FLOWS.md](docs/ARCHITECTURE_FLOWS.md) for comprehensive diagrams
+- Check out the GIF tutorials in [How to use this](#how-to-use-this)
+
+### For Developers
+
+**Implementation:**
+1. [ARCHITECTURE_FLOWS.md](docs/ARCHITECTURE_FLOWS.md) - Visual system architecture
+2. [RAG_ARCHITECTURE.md](docs/RAG_ARCHITECTURE.md) - RAG engine details
+3. [IMPLEMENTATION_GUIDE.md](docs/IMPLEMENTATION_GUIDE.md) - Feature implementation
+4. [QUICK_START_GUIDE.md](docs/QUICK_START_GUIDE.md) - Fast implementation steps
+
+**Optimization:**
+1. [OPTIMIZATION_GUIDE.md](docs/OPTIMIZATION_GUIDE.md) - Performance optimization
+2. [REFACTORING_REPORT.md](docs/REFACTORING_REPORT.md) - Code improvements
+
+**PWA:**
+1. [PWA_GUIDE.md](docs/PWA_GUIDE.md) - PWA implementation guide
+2. [PWA_TESTING_GUIDE.md](docs/PWA_TESTING_GUIDE.md) - Testing procedures
+3. [PWA_IMPLEMENTATION_SUMMARY.md](docs/PWA_IMPLEMENTATION_SUMMARY.md) - Complete summary
+
+### For Advanced Users
+
+**Customization:**
+- Modify `lib/rag-config.ts` for configuration tuning
+- Implement custom diversity algorithms in `lib/diversity-algorithm.ts`
+- Add caching strategies in `lib/cache-system.ts`
+- Configure rate limiting in `lib/rate-limiter.ts`
+
+**Monitoring:**
+- Use `lib/telemetry.ts` for performance tracking
+- View real-time metrics in System Status tab
+- Monitor cache hit rates and token usage
+
+### File Structure Reference
+
+```
+QuantumPDF_ChatApp_VectorDB/
+├── app/                          # Next.js app directory
+│   ├── layout.tsx               # Root layout with PWA meta tags
+│   ├── page.tsx                 # Main application page
+│   └── manifest.ts              # PWA manifest configuration
+├── components/                   # React components
+│   ├── chat-interface.tsx       # Chat UI and message handling
+│   ├── document-library.tsx     # Document management
+│   ├── unified-configuration.tsx # AI/Vector DB settings
+│   ├── system-status.tsx        # Health monitoring
+│   ├── pwa-install-prompt.tsx   # PWA installation UI
+│   └── service-worker-registration.tsx # SW registration
+├── lib/                          # Core libraries
+│   ├── rag-engine.ts            # 3-phase RAG implementation
+│   ├── ai-client.ts             # Multi-provider AI client
+│   ├── pdf-parser.ts            # PDF extraction & chunking
+│   ├── vector-database-client.ts # Vector DB abstraction
+│   ├── advanced-chunking.ts     # Semantic chunking
+│   ├── rag-config.ts            # Centralized configuration
+│   ├── cache-system.ts          # 3-tier caching
+│   ├── rate-limiter.ts          # Token bucket + circuit breaker
+│   ├── diversity-algorithm.ts   # MMR & enhanced diversity
+│   ├── telemetry.ts             # Performance monitoring
+│   └── store.ts                 # Zustand state management
+├── docs/                         # Documentation
+│   ├── ARCHITECTURE_FLOWS.md    # 15+ visual diagrams
+│   ├── RAG_ARCHITECTURE.md      # RAG implementation details
+│   ├── IMPLEMENTATION_GUIDE.md  # Feature implementation
+│   ├── OPTIMIZATION_GUIDE.md    # Performance optimization
+│   ├── QUICK_START_GUIDE.md     # Quick reference
+│   ├── PWA_GUIDE.md             # PWA guide
+│   ├── PWA_TESTING_GUIDE.md     # PWA testing
+│   ├── PWA_IMPLEMENTATION_SUMMARY.md # PWA summary
+│   └── REFACTORING_REPORT.md    # Code improvements
+├── public/                       # Static assets
+│   ├── sw.js                    # Service worker
+│   ├── offline.html             # Offline fallback
+│   ├── icon-*.png              # PWA icons
+│   └── *.gif                    # Tutorial GIFs
+└── scripts/                      # Utility scripts
+    ├── generate-pwa-icons.js    # PNG icon generator
+    └── create-pwa-icons.js      # SVG icon generator
+```
 
 ---
 

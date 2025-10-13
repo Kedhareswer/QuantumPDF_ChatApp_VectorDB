@@ -488,7 +488,7 @@ export class RAGEngine {
       documentId: string;
       documentName: string;
       semanticImportance: number;
-      // Docling metadata (optional)
+      // Optional metadata
       page?: number;
       bbox?: any;
       level?: number;
@@ -626,10 +626,10 @@ export class RAGEngine {
                   const chunkContent = typeof chunk === 'string' ? chunk : chunk.content
                   const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
 
-                  // Get semantic importance (enhanced for Docling metadata)
+                  // Get semantic importance
                   const semanticImportance = this.extractSemanticImportance(chunk, doc.metadata)
 
-                  // Build enhanced source string with Docling metadata
+                  // Build enhanced source string with metadata
                   let sourceString = `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`
                   if (chunkMetadata) {
                     if (chunkMetadata.page !== undefined) {
@@ -646,7 +646,7 @@ export class RAGEngine {
                     documentId: doc.id,
                     documentName: doc.name,
                     semanticImportance,
-                    // Include Docling metadata if available
+                    // Include metadata if available
                     ...(chunkMetadata?.page !== undefined && { page: chunkMetadata.page }),
                     ...(chunkMetadata?.bbox && { bbox: chunkMetadata.bbox }),
                     ...(chunkMetadata?.level !== undefined && { level: chunkMetadata.level }),
@@ -1530,13 +1530,13 @@ IMPORTANT:
   private extractSemanticImportance(chunk: string | any, docMetadata?: any): number {
     let importance = 1.0
 
-    // Enhanced: Check if chunk is a TextChunk object with Docling metadata
+    // Check if chunk is a TextChunk object with metadata
     const chunkMetadata = typeof chunk === 'object' && chunk.metadata ? chunk.metadata : null
     const chunkContent = typeof chunk === 'string' ? chunk : (chunk.content || '')
 
-    // DOCLING-SPECIFIC BOOSTS (higher priority)
+    // METADATA-SPECIFIC BOOSTS (higher priority)
     if (chunkMetadata) {
-      // Boost for Docling block type
+      // Boost for block type
       if (chunkMetadata.type === 'heading') {
         importance += 0.4
         // Additional boost based on heading level (if available)
@@ -1549,23 +1549,23 @@ IMPORTANT:
         importance += 0.15
       }
 
-      // Boost for high confidence (Docling OCR confidence)
+      // Boost for high confidence (OCR confidence)
       if (chunkMetadata.confidence && chunkMetadata.confidence > 90) {
         importance += 0.15
       }
 
-      // Boost for pre-calculated semantic importance (from Docling adapter)
+      // Boost for pre-calculated semantic importance
       if (chunkMetadata.semanticImportance && chunkMetadata.semanticImportance > 60) {
         importance += 0.2
       }
 
-      // Boost for page metadata presence (indicates structured Docling import)
+      // Boost for page metadata presence (indicates structured import)
       if (chunkMetadata.page !== undefined) {
         importance += 0.1 // Slight boost for having page attribution
       }
     }
 
-    // FALLBACK: Text-based heuristics (lower priority, for non-Docling content)
+    // FALLBACK: Text-based heuristics (lower priority, for non-structured content)
     // Boost for headings and titles
     if (/^#{1,6}\s|^[A-Z][^.]*:?$/m.test(chunkContent)) {
       importance += 0.25

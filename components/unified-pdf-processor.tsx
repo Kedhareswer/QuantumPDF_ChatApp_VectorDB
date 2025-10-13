@@ -7,12 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, FileText, Upload, X, CheckCircle, AlertTriangle, RefreshCw, Info, Loader2, FileJson } from "lucide-react"
+import { AlertCircle, FileText, Upload, X, CheckCircle, AlertTriangle, RefreshCw, Info, Loader2 } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { EnhancedPDFProcessor, type ProcessingProgress } from "@/lib/enhanced-pdf-processor"
 import { PDFProcessorSkeleton, DocumentCardSkeleton } from "@/components/skeleton-loaders"
 import { PDFClientWrapper } from "@/components/pdf-client-wrapper"
-import { ingestDoclingJson, ingestDoclingMarkdown } from "@/lib/docling-adapter"
 
 interface UnifiedPDFProcessorProps {
   onDocumentProcessed: (document: any) => void
@@ -29,10 +28,8 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const [retryCount, setRetryCount] = useState(0)
   const [isInitializing, setIsInitializing] = useState(false)
   const [pdfProcessorReady, setPdfProcessorReady] = useState(false)
-  const [inputMode, setInputMode] = useState<'pdf' | 'docling'>('pdf')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const doclingInputRef = useRef<HTMLInputElement>(null)
   const pdfProcessor = useRef<EnhancedPDFProcessor | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -53,55 +50,27 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   }
 
   const validateAndSetFile = (selectedFile: File) => {
-    // Validate based on input mode
-    if (inputMode === 'pdf') {
-      if (selectedFile.type !== "application/pdf") {
-        setError("Please select a PDF file")
-        setFile(null)
-        addError({
-          type: "error",
-          title: "Invalid File Type",
-          message: "Only PDF files are supported in PDF mode",
-        })
-        return
-      }
+    // Validate PDF file
+    if (selectedFile.type !== "application/pdf") {
+      setError("Please select a PDF file")
+      setFile(null)
+      addError({
+        type: "error",
+        title: "Invalid File Type",
+        message: "Only PDF files are supported",
+      })
+      return
+    }
 
-      if (selectedFile.size > 100 * 1024 * 1024) {
-        setError("File size exceeds 100MB limit")
-        setFile(null)
-        addError({
-          type: "error",
-          title: "File Too Large",
-          message: "Please select a file smaller than 100MB",
-        })
-        return
-      }
-    } else {
-      // Docling mode - accept .json or .md files
-      const isJson = selectedFile.name.endsWith('.json')
-      const isMd = selectedFile.name.endsWith('.md')
-
-      if (!isJson && !isMd) {
-        setError("Please select a Docling JSON or Markdown file (.json or .md)")
-        setFile(null)
-        addError({
-          type: "error",
-          title: "Invalid File Type",
-          message: "Only .json or .md files are supported for Docling import",
-        })
-        return
-      }
-
-      if (selectedFile.size > 50 * 1024 * 1024) {
-        setError("File size exceeds 50MB limit")
-        setFile(null)
-        addError({
-          type: "error",
-          title: "File Too Large",
-          message: "Please select a file smaller than 50MB",
-        })
-        return
-      }
+    if (selectedFile.size > 100 * 1024 * 1024) {
+      setError("File size exceeds 100MB limit")
+      setFile(null)
+      addError({
+        type: "error",
+        title: "File Too Large",
+        message: "Please select a file smaller than 100MB",
+      })
+      return
     }
 
     if (selectedFile.size === 0) {
@@ -141,12 +110,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const handleProcessFile = async () => {
     if (!file) return
 
-    // Route to appropriate processor based on input mode
-    if (inputMode === 'docling') {
-      return handleProcessDocling()
-    }
-
-    // PDF processing (existing logic)
+    // PDF processing
     if (!pdfProcessor.current) return
 
     try {
@@ -238,104 +202,6 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
     }
   }
 
-  const handleProcessDocling = async () => {
-    if (!file) return
-
-    try {
-      setIsProcessing(true)
-      setError(null)
-      setProgress({ stage: "Reading Docling file", progress: 10 })
-      setProcessingStats(null)
-
-      const startTime = Date.now()
-      const fileContent = await file.text()
-
-      setProgress({ stage: "Parsing Docling output", progress: 30 })
-
-      let result
-      const isJson = file.name.endsWith('.json')
-
-      if (isJson) {
-        // Parse JSON
-        setProgress({ stage: "Ingesting Docling JSON", progress: 50 })
-        const jsonData = JSON.parse(fileContent)
-        result = ingestDoclingJson(jsonData, Date.now().toString(), file.name)
-      } else {
-        // Parse Markdown
-        setProgress({ stage: "Ingesting Docling Markdown", progress: 50 })
-        result = ingestDoclingMarkdown(fileContent, Date.now().toString(), file.name)
-      }
-
-      setProgress({ stage: "Creating document structure", progress: 80 })
-
-      // Validate result
-      if (!result.chunks || result.chunks.length === 0) {
-        throw new Error("No text chunks could be created from the Docling file")
-      }
-
-      const processingTime = Date.now() - startTime
-
-      // Create document object
-      const document = {
-        id: Date.now().toString(),
-        name: file.name,
-        content: result.chunks.map(c => c.content).join('\n\n'),
-        chunks: result.chunks,
-        embeddings: [], // Will be generated by RAG engine
-        uploadedAt: new Date(),
-        metadata: {
-          title: result.docMeta.title,
-          author: result.docMeta.author,
-          pages: result.docMeta.pages,
-          language: result.docMeta.language,
-          fileSize: file.size,
-          processingTime,
-          extractionQuality: 'high',
-          processingMethod: isJson ? 'Docling JSON Import' : 'Docling Markdown Import',
-          confidence: 95,
-          source: 'docling',
-        },
-      }
-
-      setProcessingStats({
-        pages: result.docMeta.pages || 0,
-        successfulPages: result.docMeta.pages || 0,
-        failedPages: 0,
-        processingTime,
-        extractionQuality: 'high',
-        chunks: result.chunks.length,
-        method: isJson ? 'Docling JSON' : 'Docling Markdown',
-        confidence: 95,
-        warnings: [],
-      })
-
-      setProgress({ stage: "Processing complete", progress: 100 })
-
-      onDocumentProcessed(document)
-
-      addError({
-        type: "success",
-        title: "Docling Import Complete",
-        message: `Successfully imported ${file.name} - ${result.chunks.length} chunks created`,
-      })
-
-      // Clear file after successful processing
-      handleRemoveFile()
-    } catch (error) {
-      console.error("Error processing Docling file:", error)
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-      setError(`Failed to process Docling file: ${errorMessage}`)
-
-      addError({
-        type: "error",
-        title: "Docling Import Failed",
-        message: errorMessage,
-      })
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
   const handleRetry = () => {
     if (file && retryCount < 3) {
       setRetryCount((prev) => prev + 1)
@@ -393,36 +259,8 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         <CardHeader className="p-3 sm:p-6">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
             <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
-            <span className="text-sm sm:text-base md:text-lg">Document Processor</span>
+            <span className="text-sm sm:text-base md:text-lg">PDF Document Processor</span>
           </CardTitle>
-          <div className="grid grid-cols-2 gap-2 mt-3">
-            <Button
-              variant={inputMode === 'pdf' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => {
-                setInputMode('pdf')
-                handleRemoveFile()
-              }}
-              disabled={isProcessing}
-              className={`${inputMode === 'pdf' ? 'bg-black text-white' : ''} w-full text-[10px] sm:text-xs md:text-sm h-8 sm:h-9 px-2 sm:px-3`}
-            >
-              <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-              <span className="truncate">Upload PDF</span>
-            </Button>
-            <Button
-              variant={inputMode === 'docling' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => {
-                setInputMode('docling')
-                handleRemoveFile()
-              }}
-              disabled={isProcessing}
-              className={`${inputMode === 'docling' ? 'bg-black text-white' : ''} w-full text-[10px] sm:text-xs md:text-sm h-8 sm:h-9 px-2 sm:px-3`}
-            >
-              <FileJson className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-              <span className="truncate">Import Docling</span>
-            </Button>
-          </div>
         </CardHeader>
 
       <CardContent className="p-2 sm:p-3 md:p-4">
@@ -435,21 +273,13 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
           }`}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          onClick={() => !isProcessing && (inputMode === 'pdf' ? fileInputRef.current?.click() : doclingInputRef.current?.click())}
+          onClick={() => !isProcessing && fileInputRef.current?.click()}
         >
           <input
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
             accept=".pdf"
-            className="hidden"
-            disabled={isProcessing}
-          />
-          <input
-            type="file"
-            ref={doclingInputRef}
-            onChange={handleFileChange}
-            accept=".json,.md"
             className="hidden"
             disabled={isProcessing}
           />
@@ -479,17 +309,8 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
               <div className="flex flex-col items-center space-y-2 sm:space-y-3">
                 <Upload className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-gray-400" />
                 <div className="text-center px-2">
-                  {inputMode === 'pdf' ? (
-                    <>
-                      <p className="text-xs sm:text-sm font-medium">Click or drag & drop to upload PDF</p>
-                      <p className="text-[10px] sm:text-xs text-gray-500 mt-1">PDF files up to 100MB • Enhanced processing</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xs sm:text-sm font-medium">Click or drag & drop to import Docling output</p>
-                      <p className="text-[10px] sm:text-xs text-gray-500 mt-1">JSON or Markdown files up to 50MB</p>
-                    </>
-                  )}
+                  <p className="text-xs sm:text-sm font-medium">Click or drag & drop to upload PDF</p>
+                  <p className="text-[10px] sm:text-xs text-gray-500 mt-1">PDF files up to 100MB • Enhanced processing</p>
                 </div>
               </div>
             )}
@@ -633,10 +454,10 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
             {isProcessing ? (
               <div className="flex items-center space-x-2">
                 <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
-                <span className="text-[10px] sm:text-xs md:text-sm">{inputMode === 'pdf' ? 'Processing PDF...' : 'Importing Docling...'}</span>
+                <span className="text-[10px] sm:text-xs md:text-sm">Processing PDF...</span>
               </div>
             ) : (
-              <span className="text-[10px] sm:text-xs md:text-sm">{inputMode === 'pdf' ? 'Process PDF with Enhanced Engine' : 'Import Docling Output'}</span>
+              <span className="text-[10px] sm:text-xs md:text-sm">Process PDF with Enhanced Engine</span>
             )}
           </Button>
         </CardFooter>
@@ -644,55 +465,27 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
 
       {/* Enhanced Processing Tips */}
       <div className="text-[10px] sm:text-xs text-gray-500 space-y-1 sm:space-y-2 bg-gray-50 p-2 sm:p-3 md:p-4 rounded-md mt-3">
-        {inputMode === 'pdf' ? (
-          <>
-            <h4 className="font-medium text-gray-700 mb-1 sm:mb-2 text-xs sm:text-sm">Enhanced PDF Processing Features:</h4>
-            <p className="flex items-center">
-              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-              <span>Advanced text extraction with structure preservation</span>
-            </p>
-            <p className="flex items-center">
-              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-              <span>Intelligent chunking with semantic splitting</span>
-            </p>
-            <p className="flex items-center">
-              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-              <span>Quality assessment and confidence scoring</span>
-            </p>
-            <p className="flex items-center">
-              <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />
-              <span>Real-time progress tracking with detailed feedback</span>
-            </p>
-            <p className="flex items-center">
-              <AlertTriangle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-yellow-500 flex-shrink-0" />
-              <span>Comprehensive error handling and recovery</span>
-            </p>
-          </>
-        ) : (
-          <>
-            <h4 className="font-medium text-gray-700 mb-1 sm:mb-2 text-xs sm:text-sm">Docling Import Features:</h4>
-            <p className="flex items-center">
-              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-              <span>Structure-aware ingestion (headings, tables, lists)</span>
-            </p>
-            <p className="flex items-center">
-              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-              <span>Page numbers and bounding boxes preserved</span>
-            </p>
-            <p className="flex items-center">
-              <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-              <span>High-fidelity text with OCR/VLM support</span>
-            </p>
-            <p className="flex items-center">
-              <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />
-              <span>Accepts both JSON and Markdown exports</span>
-            </p>
-            <p className="flex items-center">
-              <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />
-              <span>Pre-process with Docling CLI for best results</span>
-            </p>
-          </>
-        )}
+        <h4 className="font-medium text-gray-700 mb-1 sm:mb-2 text-xs sm:text-sm">Enhanced PDF Processing Features:</h4>
+        <p className="flex items-center">
+          <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+          <span>Advanced text extraction with structure preservation</span>
+        </p>
+        <p className="flex items-center">
+          <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+          <span>Intelligent chunking with semantic splitting</span>
+        </p>
+        <p className="flex items-center">
+          <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+          <span>Quality assessment and confidence scoring</span>
+        </p>
+        <p className="flex items-center">
+          <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />
+          <span>Real-time progress tracking with detailed feedback</span>
+        </p>
+        <p className="flex items-center">
+          <AlertTriangle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-yellow-500 flex-shrink-0" />
+          <span>Comprehensive error handling and recovery</span>
+        </p>
         </div>
   </div>
   )
