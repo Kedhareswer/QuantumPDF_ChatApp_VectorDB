@@ -5,12 +5,16 @@ export interface TextChunk {
     startChar: number
     endChar: number
     wordCount: number
-    type: "paragraph" | "heading" | "list" | "table" | "other"
+    type: "paragraph" | "heading" | "list" | "table" | "code" | "image" | "other"
     confidence: number
     documentId?: string
     documentName?: string
     semanticImportance: number
     keywordDensity: number
+    // Optional fields used by downstream components when available
+    page?: number
+    bbox?: any
+    level?: number
   }
 }
 
@@ -122,7 +126,10 @@ export class AdvancedChunker {
     }
   }
 
-  private detectChunkType(content: string): "paragraph" | "heading" | "list" | "table" | "other" {
+  private detectChunkType(content: string): "paragraph" | "heading" | "list" | "table" | "code" | "image" | "other" {
+    if (this.isLikelyImageCaption(content)) return "image"
+    if (this.isLikelyCode(content)) return "code"
+
     if (content.length < 50 && /^[A-Z][^.!?]*$/.test(content.trim())) {
       return "heading"
     }
@@ -131,7 +138,7 @@ export class AdvancedChunker {
       return "list"
     }
 
-    if (content.includes("|") || content.includes("\t")) {
+    if (this.isLikelyTable(content)) {
       return "table"
     }
 
@@ -196,16 +203,90 @@ export class AdvancedChunker {
   private identifySemanticSections(text: string): Array<{content: string, startChar: number}> {
     const sections: Array<{content: string, startChar: number}> = []
     const lines = text.split('\n')
-    
+
     let currentSection = ''
     let sectionStart = 0
     let currentPos = 0
-    
+    let inCodeBlock = false
+    let inTableBlock = false
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       const lineLength = line.length + 1 // +1 for newline
-      
-      // Check for section boundaries
+
+      const trimmed = line.trim()
+
+      // Handle fenced code blocks
+      if (/^```/.test(trimmed)) {
+        if (!inCodeBlock) {
+          // Starting a code block: flush previous section
+          if (currentSection.trim()) {
+            sections.push({ content: currentSection.trim(), startChar: sectionStart })
+          }
+          currentSection = line
+          sectionStart = currentPos
+          inCodeBlock = true
+        } else {
+          // Closing a code block
+          currentSection += (currentSection ? '\n' : '') + line
+          sections.push({ content: currentSection.trim(), startChar: sectionStart })
+          currentSection = ''
+          sectionStart = currentPos + lineLength
+          inCodeBlock = false
+        }
+        currentPos += lineLength
+        continue
+      }
+
+      // If inside a fenced code block, keep accumulating lines as-is
+      if (inCodeBlock) {
+        currentSection += (currentSection ? '\n' : '') + line
+        currentPos += lineLength
+        continue
+      }
+
+      // Detect table block starts/continues
+      const isTableLine = this.isTableLine(line)
+      if (isTableLine) {
+        if (!inTableBlock) {
+          // Starting a table block: flush previous section
+          if (currentSection.trim()) {
+            sections.push({ content: currentSection.trim(), startChar: sectionStart })
+          }
+          currentSection = line
+          sectionStart = currentPos
+          inTableBlock = true
+        } else {
+          // Continuing an existing table block
+          currentSection += (currentSection ? '\n' : '') + line
+        }
+        currentPos += lineLength
+        continue
+      }
+
+      // If we were in a table block and encounter a non-table line, close the table block
+      if (inTableBlock && !isTableLine) {
+        if (currentSection.trim()) {
+          sections.push({ content: currentSection.trim(), startChar: sectionStart })
+        }
+        currentSection = ''
+        sectionStart = currentPos
+        inTableBlock = false
+      }
+
+      // Image captions or figure references as standalone sections
+      if (this.isLikelyImageCaption(line)) {
+        if (currentSection.trim()) {
+          sections.push({ content: currentSection.trim(), startChar: sectionStart })
+        }
+        sections.push({ content: line.trim(), startChar: currentPos })
+        currentSection = ''
+        sectionStart = currentPos + lineLength
+        currentPos += lineLength
+        continue
+      }
+
+      // General semantic boundaries (headings, lists, etc.)
       if (this.isSemanticBoundary(line, lines[i - 1], lines[i + 1])) {
         if (currentSection.trim()) {
           sections.push({ content: currentSection.trim(), startChar: sectionStart })
@@ -215,15 +296,21 @@ export class AdvancedChunker {
       } else {
         currentSection += (currentSection ? '\n' : '') + line
       }
-      
+
       currentPos += lineLength
     }
-    
+
+    // Close any open table block
+    if (inTableBlock && currentSection.trim()) {
+      sections.push({ content: currentSection.trim(), startChar: sectionStart })
+      currentSection = ''
+    }
+
     // Add final section
     if (currentSection.trim()) {
       sections.push({ content: currentSection.trim(), startChar: sectionStart })
     }
-    
+
     return sections
   }
 
@@ -260,17 +347,56 @@ export class AdvancedChunker {
   }
 
   private splitLargeSection(section: {content: string, startChar: number}): Array<{content: string, startChar: number}> {
+    const content = section.content
+    const isCode = this.isLikelyCode(content)
+    const isTable = this.isLikelyTable(content)
+
+    // For code and tables: split by lines to avoid breaking semantics
+    if (isCode || isTable) {
+      const chunks: Array<{content: string, startChar: number}> = []
+      const lines = content.split('\n')
+
+      let buf = ''
+      let bufStart = section.startChar
+
+      // Map each line to its start char relative to the section
+      const lineStarts: number[] = []
+      let rel = 0
+      for (const l of lines) {
+        lineStarts.push(rel)
+        rel += l.length + 1 // include newline
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        const lineWithNl = (buf ? '\n' : '') + line
+        if (buf.length + lineWithNl.length > this.options.maxChunkSize && buf.length > 0) {
+          // flush
+          const relStart = lineStarts[i - buf.split('\n').length]
+          chunks.push({ content: buf.trim(), startChar: section.startChar + relStart })
+          buf = ''
+        }
+        buf += lineWithNl
+      }
+      if (buf.trim()) {
+        const relStart = content.length - buf.length
+        chunks.push({ content: buf.trim(), startChar: section.startChar + Math.max(0, relStart) })
+      }
+      return chunks
+    }
+
+    // Default: sentence-based splitting
     const chunks: Array<{content: string, startChar: number}> = []
-    const sentences = this.splitIntoSentences(section.content)
-    
+    const sentences = this.splitIntoSentences(content)
+
     let currentChunk = ''
     let chunkStart = section.startChar
     let currentPos = section.startChar
-    
+
     for (const sentence of sentences) {
       if (currentChunk.length + sentence.length > this.options.maxChunkSize && currentChunk.length > 0) {
         chunks.push({ content: currentChunk.trim(), startChar: chunkStart })
-        
+
         // Start new chunk with overlap
         const overlapSentences = this.getOverlapSentences(currentChunk)
         currentChunk = overlapSentences + sentence
@@ -278,14 +404,14 @@ export class AdvancedChunker {
       } else {
         currentChunk += (currentChunk ? ' ' : '') + sentence
       }
-      
+
       currentPos += sentence.length + 1
     }
-    
+
     if (currentChunk.trim()) {
       chunks.push({ content: currentChunk.trim(), startChar: chunkStart })
     }
-    
+
     return chunks
   }
 
@@ -310,6 +436,8 @@ export class AdvancedChunker {
       'heading': 0.5,
       'list': 0.8,
       'table': 1.2,
+      'code': 1.5,
+      'image': 0.6,
       'paragraph': 1.0,
       'other': 0.9
     }[chunkType] || 1.0
@@ -376,5 +504,43 @@ export class AdvancedChunker {
     const words = content.toLowerCase().split(/\s+/)
     const uniqueWords = new Set(words)
     return (uniqueWords.size / words.length) * 100
+  }
+
+  // Heuristics
+  private isLikelyCode(content: string): boolean {
+    const trimmed = content.trim()
+    if (/^```/.test(trimmed) || /```$/.test(trimmed)) return true
+    const lines = trimmed.split('\n')
+    const indentedLines = lines.filter(l => /^\s{4,}/.test(l)).length
+    const symbolHeavy = /[{};()\[\]<>\/=+\-*%]|\b(function|class|def|const|let|var|import|export|public|private|static|if|else|for|while|return|try|catch)\b/.test(trimmed)
+    const averageLineLen = lines.reduce((a, b) => a + b.length, 0) / Math.max(1, lines.length)
+    return (indentedLines >= Math.max(2, Math.floor(lines.length * 0.3))) || (symbolHeavy && averageLineLen > 20)
+  }
+
+  private isTableLine(line: string): boolean {
+    const t = line.trim()
+    if (!t) return false
+    // Markdown style table or visually separated columns
+    if ((t.includes('|') && (t.split('|').length - 1) >= 2)) return true
+    if (/^\s*[-:]{2,}\s*(\|\s*[-:]{2,}\s*)+$/.test(t)) return true // header separator
+    if (/^[\u2500-\u257F\-\+\|]+$/.test(t)) return true // box drawing characters
+    // multiple consecutive spaces separating columns
+    if (/\S\s{2,}\S/.test(t) && t.split(/\s{2,}/).length >= 3) return true
+    return false
+  }
+
+  private isLikelyTable(content: string): boolean {
+    const lines = content.split('\n')
+    const tableLines = lines.filter(l => this.isTableLine(l)).length
+    return tableLines >= Math.max(2, Math.floor(lines.length * 0.4))
+  }
+
+  private isLikelyImageCaption(content: string): boolean {
+    const t = content.trim()
+    if (!t) return false
+    if (/^!\[.*\]\(.*\)/.test(t)) return true // markdown image
+    if (/^(figure|fig\.|image|diagram|chart|graph)\b/i.test(t)) return true
+    if (/This page appears to be image-based/i.test(t)) return true
+    return false
   }
 }

@@ -9,6 +9,7 @@ This guide provides the fastest path to implement the remaining features.
 3. Enhanced error handling
 4. Fixed mobile UI issues
 5. Cleaned up codebase
+6. Robust Chunking for code, tables, and images (structure preserved)
 
 ---
 

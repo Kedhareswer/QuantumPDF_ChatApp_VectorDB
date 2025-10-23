@@ -201,40 +201,31 @@ async extractText(file: File): Promise<PDFContent> {
 
 The system implements **two chunking strategies**:
 
-### 1. Basic Chunking (Default)
+### 1. Default Chunking (Unified)
 
-**Algorithm**: Word-based sliding window with overlap
+**Algorithm**: Delegates to `AdvancedChunker` to preserve structure (code blocks, tables, image captions) while returning `string[]` for embeddings.
 
 ```typescript
+// lib/pdf-parser.ts
 chunkText(text: string, chunkSize = 1000, overlap = 100): string[] {
-  // Preserve page boundaries
-  const pageSections = text.split(/--- Page \d+ ---/)
-  
-  for (const section of pageSections) {
-    const words = section.split(/\s+/)
-    let currentChunk: string[] = []
-    let currentLength = 0
-    
-    for (const word of words) {
-      if (currentLength + word.length > chunkSize) {
-        chunks.push(currentChunk.join(' '))
-        currentChunk = []
-        currentLength = 0
-      }
-      currentChunk.push(word)
-      currentLength += word.length + 1
-    }
-  }
-  
-  // Add overlap between chunks
-  return addOverlap(chunks, overlap)
+  const chunker = new AdvancedChunker({
+    maxChunkSize: chunkSize,
+    minChunkSize: Math.max(100, Math.floor(chunkSize * 0.25)),
+    overlap,
+    preserveStructure: true,
+    semanticSplitting: true,
+    documentAware: true,
+    adaptiveThreshold: true,
+  })
+  return chunker.chunkText(text).map(c => c.content)
 }
 ```
 
-**Parameters**:
-- **Chunk Size**: Adaptive (400-1200 chars based on document length)
-- **Overlap**: 10% of chunk size (40-120 chars)
-- **Boundary Preservation**: Maintains page markers
+**Behavior**:
+- **Structure preservation**: Fenced/indented code and markdown/ASCII tables are treated as atomic sections.
+- **Smart splitting**: If a code/table block exceeds `maxChunkSize`, it is split by lines, not sentences.
+- **Images**: Figure captions and markdown images are captured as standalone sections.
+- **Overlap**: Applied via semantic overlap from the advanced chunker.
 
 ### 2. Advanced Semantic Chunking
 
@@ -245,6 +236,7 @@ chunkText(text: string, chunkSize = 1000, overlap = 100): string[] {
 - Adaptive chunk sizing
 - Structure preservation
 - Importance scoring
+- Code/table/image awareness
 
 **Algorithm**:
 ```typescript
@@ -287,7 +279,7 @@ interface TextChunk {
     startChar: number
     endChar: number
     wordCount: number
-    type: "paragraph" | "heading" | "list" | "table" | "other"
+    type: "paragraph" | "heading" | "list" | "table" | "code" | "image" | "other"
     confidence: number
     semanticImportance: number  // 0-2.0 score
     keywordDensity: number      // Unique words / total words

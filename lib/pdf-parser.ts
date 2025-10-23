@@ -1,4 +1,5 @@
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
+import { AdvancedChunker } from './advanced-chunking'
 
 export interface PDFParseResult {
   text: string
@@ -237,65 +238,19 @@ export class PDFParser {
       return [];
     }
 
-    // Preserve page boundaries
-    const pageSections = text.split(/--- Page \d+ ---/);
-    const chunks: string[] = [];
+    // Delegate to AdvancedChunker to preserve structure (code, tables, images)
+    const chunker = new AdvancedChunker({
+      maxChunkSize: chunkSize,
+      minChunkSize: Math.max(100, Math.floor(chunkSize * 0.25)),
+      overlap,
+      preserveStructure: true,
+      semanticSplitting: true,
+      documentAware: true,
+      adaptiveThreshold: true,
+    })
 
-    for (const section of pageSections) {
-      const cleanSection = section.trim();
-      if (!cleanSection) continue;
-
-      // For certificate content, we want to keep sections together
-      if (cleanSection.includes('certificate') || cleanSection.includes('awarded to')) {
-        chunks.push(cleanSection);
-        continue;
-      }
-
-      // Process regular text with improved chunking
-      const words = cleanSection.split(/\s+/);
-      let currentChunk: string[] = [];
-      let currentLength = 0;
-
-      for (const word of words) {
-        const wordLength = word.length + 1; // +1 for space
-        
-        if (currentLength + wordLength > chunkSize && currentChunk.length > 0) {
-          chunks.push(currentChunk.join(' '));
-          currentChunk = [];
-          currentLength = 0;
-        }
-        
-        currentChunk.push(word);
-        currentLength += wordLength;
-      }
-
-      // Add the last chunk if there's anything left
-      if (currentChunk.length > 0) {
-        chunks.push(currentChunk.join(' '));
-      }
-    }
-
-    // Add overlap between chunks
-    if (overlap > 0 && chunks.length > 1) {
-      const overlappedChunks: string[] = [chunks[0]];
-      
-      for (let i = 1; i < chunks.length; i++) {
-        const prevChunk = chunks[i - 1];
-        const currentChunk = chunks[i];
-        
-        // Get the last 'overlap' characters from previous chunk
-        const overlapText = prevChunk
-          .split('\n')
-          .filter(Boolean)
-          .slice(-2) // Take last 2 lines for context
-          .join('\n');
-          
-        overlappedChunks.push(`${overlapText}\n${currentChunk}`);
-      }
-      
-      return overlappedChunks;
-    }
-
-    return chunks.filter(chunk => chunk.trim().length > 0);
+    const advanced = chunker.chunkText(text)
+    // Return plain strings for embedding pipeline compatibility
+    return advanced.map(c => c.content).filter(c => c.trim().length > 0)
   }
 }

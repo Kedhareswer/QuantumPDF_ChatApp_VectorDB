@@ -128,8 +128,10 @@ Complete implementations available in `IMPLEMENTATION_GUIDE.md`:
 ### Code Modifications
 - `components/chat-interface.tsx` - Removed 380+ lines dead code
 - `lib/ai-client.ts` - Enhanced errors, optimized embeddings (38% faster)
-- `lib/rag-engine.ts` - Improved prompts & diversity, removed Docling references
-- `lib/advanced-chunking.ts` - Better semantic boundaries
+- `lib/rag-engine.ts` - Improved prompts & diversity, removed Docling references, added chunk type helpers
+- `lib/advanced-chunking.ts` - Enhanced with code/table/image detection, line-wise splitting for large blocks
+- `lib/pdf-parser.ts` - Delegates to AdvancedChunker for robust structure preservation
+- `lib/unified-pdf-processor.tsx` - Uses AdvancedChunker for unified chunking behavior
 - `components/unified-pdf-processor.tsx` - Removed Docling UI, simplified to PDF-only
 - `lib/docling-adapter.ts` - DELETED (removed Docling integration)
 - `types/docling.d.ts` - DELETED (removed Docling types)
@@ -303,6 +305,5 @@ performanceMonitor.logSlowOperations(100) // Log ops > 100ms
 ---
 
 **Generated**: October 13, 2025
-**Completed by**: Claude Code Assistant
 **Project**: QuantumPDF ChatApp v2.0
 **Achievement**: 🎉 ALL CORE TASKS COMPLETE

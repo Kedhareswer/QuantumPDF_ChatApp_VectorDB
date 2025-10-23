@@ -42,6 +42,20 @@ This document outlines the remaining features to be implemented in QuantumPDF Ch
 
 ---
 
+### 5. Robust Chunking for Complex Elements
+- **Status**: ✅ COMPLETED
+- **Files Modified**: `lib/advanced-chunking.ts`, `lib/pdf-parser.ts`, `lib/unified-pdf-processor.tsx`, `docs/RAG_ARCHITECTURE.md`
+- **Changes**:
+  - Added new chunk types: `code`, `image` in `TextChunk.metadata.type`
+  - Improved semantic sectioning to treat fenced/indented code and tables as atomic blocks
+  - Implemented line-wise splitting for oversized code/table blocks (avoids breaking syntax)
+  - Image captions and markdown images detected as standalone sections
+  - `PDFParser.chunkText()` now delegates to `AdvancedChunker` while returning `string[]` for embedding compatibility
+  - Unified `createChunks` in `unified-pdf-processor.tsx` to use `AdvancedChunker`
+  - Updated documentation to reflect unified, structure-preserving chunking
+
+---
+
 ## Pending Implementations 🚧
 
 ### 1. Memoized Message Rendering

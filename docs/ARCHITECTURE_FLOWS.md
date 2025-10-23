@@ -28,6 +28,7 @@ graph TB
         PDF[PDF Parser<br/>PDF.js + Tesseract]
         RAG[RAG Engine<br/>3-Phase Processing]
         CHUNK[Advanced Chunking<br/>Semantic Aware]
+        %% Note: Chunker now treats fenced code blocks, markdown tables, and image captions as atomic units, preserving structure for better RAG quality.
     end
 
     subgraph "AI Layer"

@@ -229,7 +229,8 @@ export class RAGEngine {
         console.log("Re-generating embeddings for existing documents...")
         for (const document of this.documents) {
           if (document.chunks && document.chunks.length > 0) {
-            document.embeddings = await this.aiClient.generateEmbeddings(document.chunks)
+            const plainChunks = this.toPlainChunks(document.chunks as any)
+            document.embeddings = await this.aiClient.generateEmbeddings(plainChunks)
           }
         }
         console.log("Embeddings updated for all documents")
@@ -381,7 +382,8 @@ export class RAGEngine {
 
       console.log("First few chunks preview:")
       document.chunks.slice(0, 3).forEach((chunk, i) => {
-        console.log(`  Chunk ${i}: ${chunk.substring(0, 100)}...`)
+        const preview = typeof chunk === 'string' ? chunk.substring(0, 100) : (chunk as any).content?.substring(0, 100) || ''
+        console.log(`  Chunk ${i}: ${preview}...`)
       })
 
       // Check AI client status
@@ -405,7 +407,8 @@ export class RAGEngine {
         
         try {
           const startTime = Date.now()
-          document.embeddings = await this.aiClient.generateEmbeddings(document.chunks)
+          const plainChunks = this.toPlainChunks(document.chunks as any)
+          document.embeddings = await this.aiClient.generateEmbeddings(plainChunks)
           const endTime = Date.now()
           console.log(`✅ Embeddings generated successfully in ${endTime - startTime}ms`)
           console.log("- Generated embeddings count:", document.embeddings.length)
@@ -707,10 +710,25 @@ export class RAGEngine {
       'heading': 'Heading',
       'table': 'Table',
       'list': 'List',
+      'code': 'Code',
+      'image': 'Image',
       'paragraph': 'Para',
       'other': 'Content'
     }
     return typeMap[type] || type
+  }
+
+  // Normalize chunks to plain strings for embedding generation
+  private toPlainChunks(chunks: any[]): string[] {
+    if (!Array.isArray(chunks)) return []
+    return chunks.map((c: any) => (typeof c === 'string' ? c : (c?.content ?? '')))
+  }
+
+  // Safe preview extraction for union chunk types
+  private getChunkPreview(chunk: any): string {
+    if (!chunk) return ''
+    const text = typeof chunk === 'string' ? chunk : (chunk?.content ?? '')
+    return text?.substring ? text.substring(0, 100) : ''
   }
 
   async query(question: string, options?: { 
@@ -886,7 +904,9 @@ export class RAGEngine {
           console.log("- Embeddings length:", firstDoc.embeddings?.length)
           
           if (firstDoc.chunks && firstDoc.chunks.length > 0) {
-            console.log("- First chunk preview:", firstDoc.chunks[0].substring(0, 100))
+            const c0: any = firstDoc.chunks[0] as any
+            const prev = typeof c0 === 'string' ? c0.substring(0, 100) : c0.content?.substring(0, 100)
+            console.log("- First chunk preview:", prev)
           }
           
           if (firstDoc.embeddings && firstDoc.embeddings.length > 0) {
@@ -1454,7 +1474,7 @@ IMPORTANT:
       chunksCount: doc.chunks?.length || 0,
       embeddingsCount: doc.embeddings?.length || 0,
       hasValidStructure: !!(doc.chunks && doc.embeddings && doc.chunks.length === doc.embeddings.length),
-      firstChunkPreview: doc.chunks?.[0]?.substring(0, 100) + "..." || "No chunks",
+      firstChunkPreview: this.getChunkPreview(doc.chunks?.[0]) + "..." || "No chunks",
       embeddingDimension: doc.embeddings?.[0]?.length || 0
     }))
 

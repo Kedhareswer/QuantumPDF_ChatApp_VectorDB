@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import { AdvancedChunker } from './advanced-chunking'
+
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 
 // Set the worker source path
@@ -42,26 +44,23 @@ interface UnifiedPDFProcessorReturn {
   createChunks: (text: string, chunkSize: number, overlap: number) => string[];
 }
 
-// Helper function to split text into overlapping chunks
+// Helper function to split text into overlapping chunks using AdvancedChunker to preserve structure
 const createChunks = (text: string, chunkSize: number, overlap: number): string[] => {
-  if (!text) return [];
-  const chunks: string[] = [];
-  let startIndex = 0;
-  
-  if (chunkSize <= 0) return [text];
-  if (overlap >= chunkSize) {
-    throw new Error('Overlap must be smaller than chunk size');
-  }
+  if (!text) return []
+  if (chunkSize <= 0) return [text]
+  if (overlap >= chunkSize) throw new Error('Overlap must be smaller than chunk size')
 
-  while (startIndex < text.length) {
-    const endIndex = Math.min(startIndex + chunkSize, text.length);
-    chunks.push(text.slice(startIndex, endIndex));
-    startIndex = endIndex - overlap;
-    if (startIndex >= text.length) break;
-  }
-
-  return chunks;
-};
+  const chunker = new AdvancedChunker({
+    maxChunkSize: chunkSize,
+    minChunkSize: Math.max(100, Math.floor(chunkSize * 0.25)),
+    overlap,
+    preserveStructure: true,
+    semanticSplitting: true,
+    documentAware: true,
+    adaptiveThreshold: true,
+  })
+  return chunker.chunkText(text).map(c => c.content)
+}
 
 const UnifiedPDFProcessor = ({
   onDocumentProcessed,

@@ -13,6 +13,7 @@ This document describes all the optimizations applied to the QuantumPDF RAG syst
 
 **Features:**
 - ✅ Configurable chunking parameters (size, overlap, boundaries)
+- ✅ Robust chunking preserving code blocks, markdown tables, and image captions as atomic sections
 - ✅ Embedding cache settings (TTL, max size, batch processing)
 - ✅ Rate limiting configuration (token bucket, adaptive backoff)
 - ✅ Query token allocation by complexity
