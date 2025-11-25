@@ -1,5 +1,7 @@
 // Browser-compatible Hugging Face client without Node.js dependencies
 
+import { DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
+
 export interface EmbeddingResponse {
   embeddings: number[][]
 }
@@ -93,7 +95,10 @@ export class BrowserHuggingFaceClient {
 
   private generateHashBasedEmbedding(text: string): number[] {
     // Generate deterministic embedding based on text content
-    const dimension = 384 // Standard dimension for sentence-transformers/all-MiniLM-L6-v2
+    // Note: Using default dimension for consistency. If using HuggingFace models with different
+    // dimensions (e.g., all-MiniLM-L6-v2 uses 384), ensure your vector database is configured
+    // to match the model's output dimension.
+    const dimension = DEFAULT_EMBEDDING_DIMENSION
     const embedding = new Array(dimension).fill(0)
 
     // Simple but deterministic hash-based embedding

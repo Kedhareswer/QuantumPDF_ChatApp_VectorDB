@@ -22,10 +22,10 @@ const AI_PROVIDERS = {
   // Major Providers
   openai: {
     name: "OpenAI",
-    description: "Industry-leading GPT models with high quality responses",
+    description: "GPT-5 family, GPT-4o Omni, and o-series reasoning models",
     category: "Major",
-    models: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo", "gpt-4.1", "gpt-realtime"],
-    defaultModel: "gpt-4o-mini",
+    models: ["gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-4o", "o3-2025-04-16", "gpt-4.1", "gpt-realtime-preview"],
+    defaultModel: "gpt-5-mini",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.openai.com/v1",
@@ -36,10 +36,16 @@ const AI_PROVIDERS = {
   },
   anthropic: {
     name: "Anthropic",
-    description: "Claude models with strong reasoning and safety focus",
+    description: "Claude 3.5/3.7 models with extended thinking and safety focus",
     category: "Major",
-    models: ["claude-4-opus", "claude-4.1-opus", "claude-4-sonnet", "claude-3.7-sonnet", "claude-3.5-haiku"],
-    defaultModel: "claude-4-sonnet",
+    models: [
+      "claude-3-5-sonnet-20241022",
+      "claude-3-5-haiku-latest",
+      "claude-3-sonnet-20250219",
+      "claude-3-7-sonnet-latest",
+      "claude-opus-4-0"
+    ],
+    defaultModel: "claude-3-5-sonnet-20241022",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.anthropic.com",
@@ -51,9 +57,9 @@ const AI_PROVIDERS = {
   },
   googleai: {
     name: "Google AI",
-    description: "Gemini models with multimodal capabilities",
+    description: "Gemini 2.5 family with multimodal capabilities",
     category: "Major",
-    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-image-preview", "gemini-2.0-flash-exp"],
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash-image", "gemini-2.5-flash-preview-09-2025"],
     defaultModel: "gemini-2.5-flash",
     apiKeyRequired: true,
     baseUrlRequired: false,
@@ -68,8 +74,8 @@ const AI_PROVIDERS = {
     name: "Groq",
     description: "Ultra-fast inference with specialized hardware",
     category: "Fast",
-    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "kimi-k2-instruct", "qwen3-32b"],
-    defaultModel: "llama-3.1-8b-instant",
+    models: ["llama-3.3-70b-versatile", "mixtral-8x22b", "deepseek-r1-distill-llama-70b", "gemma2-27b-it", "qwen2.5-32b"],
+    defaultModel: "llama-3.3-70b-versatile",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.groq.com/openai/v1",
@@ -146,13 +152,13 @@ const AI_PROVIDERS = {
     description: "Access to multiple AI models through one API",
     category: "Aggregator",
     models: [
-      "openai/gpt-4o",
-      "openai/gpt-4o-mini",
-      "anthropic/claude-3.5-sonnet",
-      "google/gemini-pro-1.5",
-      "meta-llama/llama-3.1-405b-instruct",
+      "openai/gpt-5.1",
+      "openai/gpt-5-mini",
+      "anthropic/claude-3.5-sonnet-20241022",
+      "google/gemini-2.5-pro",
+      "meta-llama/llama-3.3-405b-instruct",
     ],
-    defaultModel: "openai/gpt-4o-mini",
+    defaultModel: "openai/gpt-5-mini",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://openrouter.ai/api/v1",
@@ -167,13 +173,14 @@ const AI_PROVIDERS = {
     description: "Unified access to 200+ AI providers",
     category: "Aggregator",
     models: [
-      "gpt-4o",
-      "gpt-4o-mini", 
-      "claude-3-5-sonnet",
-      "deepseek-v3",
+      "gpt-5.1",
+      "claude-3-5-sonnet-20241022",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
       "llama-3.3-70b-instruct",
+      "deepseek-v3",
     ],
-    defaultModel: "gpt-4o-mini",
+    defaultModel: "gpt-5.1",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.aimlapi.com/v1",
@@ -191,8 +198,10 @@ const AI_PROVIDERS = {
     category: "Open Source",
     models: [
       "meta-llama/Meta-Llama-3.3-70B-Instruct",
-      "microsoft/DialoGPT-medium",
-      "google/flan-t5-large",
+      "Qwen/Qwen2.5-72B-Instruct",
+      "deepseek-ai/DeepSeek-V3",
+      "mistralai/Mistral-Small-3.2-Instruct",
+      "google/gemma-2-27b-it",
     ],
     defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     apiKeyRequired: true,
@@ -225,8 +234,8 @@ const AI_PROVIDERS = {
     category: "Open Source",
     models: [
       "meta-llama/Meta-Llama-3.3-70B-Instruct",
-      "microsoft/WizardLM-2-8x22B",
-      "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "deepseek-ai/DeepSeek-V3",
+      "mistralai/Mistral-Small-3.2-Instruct",
     ],
     defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     apiKeyRequired: true,
@@ -242,8 +251,12 @@ const AI_PROVIDERS = {
     name: "Replicate",
     description: "Run open source models via API",
     category: "Open Source",
-    models: ["meta/llama-3.3-70b-instruct", "mistralai/mixtral-8x7b-instruct-v0.1"],
-    defaultModel: "meta/llama-3.3-70b-instruct",
+    models: [
+      "meta-llama/Meta-Llama-3.3-70B-Instruct",
+      "deepseek-ai/DeepSeek-V3",
+      "mistralai/Mistral-Small-3.2-Instruct",
+    ],
+    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.replicate.com/v1",
@@ -256,8 +269,12 @@ const AI_PROVIDERS = {
     name: "Anyscale",
     description: "Scalable AI infrastructure",
     category: "Infrastructure",
-    models: ["meta-llama/Llama-3.3-70b-instruct", "mistralai/Mixtral-8x7B-Instruct-v0.1"],
-    defaultModel: "meta-llama/Llama-3.3-70b-instruct",
+    models: [
+      "meta-llama/Meta-Llama-3.3-70B-Instruct",
+      "mistralai/Mistral-Small-3.2-Instruct",
+      "deepseek-ai/DeepSeek-V3",
+    ],
+    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.endpoints.anyscale.com/v1",
@@ -311,14 +328,23 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
   const [showApiKeys, setShowApiKeys] = useState({
     ai: false,
     vectordb: false,
+    mathpix: false,
   })
 
   const [testingStatus, setTestingStatus] = useState({
     ai: "idle" as "idle" | "testing" | "success" | "error",
     vectordb: "idle" as "idle" | "testing" | "success" | "error",
+    mathpix: "idle" as "idle" | "testing" | "success" | "error",
   })
 
   const [selectedCategory, setSelectedCategory] = useState("Major")
+  
+  // Mathpix configuration state
+  const [mathpixConfig, setMathpixConfig] = useState({
+    appId: '',
+    appKey: '',
+    enabled: false,
+  })
 
   const handleAIProviderChange = (provider: keyof typeof AI_PROVIDERS) => {
     const providerInfo = AI_PROVIDERS[provider]
@@ -472,7 +498,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
       </div>
 
       <Tabs defaultValue="ai" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
+        <TabsList className="grid w-full grid-cols-3 gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
           <TabsTrigger 
             value="ai"
             className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
@@ -488,6 +514,14 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
           >
             <Database className="w-4 h-4 mr-1" />
             <span className="text-sm truncate">Vector DB</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="advanced"
+            className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
+                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
+          >
+            <Settings className="w-4 h-4 mr-1" />
+            <span className="text-sm truncate">Advanced</span>
           </TabsTrigger>
         </TabsList>
 
@@ -867,6 +901,278 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Advanced Configuration - Mathpix */}
+        <TabsContent value="advanced">
+          <div className="space-y-4">
+            {/* Mathpix Configuration */}
+            <Card className="border-2 border-black shadow-none">
+              <CardHeader className="border-b border-black">
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    <span>MATHPIX EQUATION OCR</span>
+                  </div>
+                  {mathpixConfig.enabled && mathpixConfig.appId && mathpixConfig.appKey && (
+                    <Badge variant="outline" className="text-xs border-green-500 text-green-600">
+                      Configured
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <Alert className="border-blue-200 bg-blue-50">
+                  <Info className="w-4 h-4 text-blue-600" />
+                  <AlertDescription className="text-xs text-blue-800">
+                    <p className="mb-2">
+                      <strong>Mathpix</strong> provides professional-grade equation OCR for extracting
+                      mathematical formulas from PDF documents with high accuracy.
+                    </p>
+                    <p className="mb-2">
+                      Without Mathpix, equations are detected using regex patterns (less accurate for complex math).
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="h-6 text-xs border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white"
+                      >
+                        <a href="https://mathpix.com/" target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          Get Mathpix API Keys
+                        </a>
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">App ID</Label>
+                    <Input
+                      type="text"
+                      value={mathpixConfig.appId}
+                      onChange={(e) => setMathpixConfig(prev => ({ ...prev, appId: e.target.value }))}
+                      placeholder="your-mathpix-app-id"
+                      className="border-2 border-black"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">App Key</Label>
+                    <div className="relative">
+                      <Input
+                        type={showApiKeys.mathpix ? "text" : "password"}
+                        value={mathpixConfig.appKey}
+                        onChange={(e) => setMathpixConfig(prev => ({ ...prev, appKey: e.target.value }))}
+                        placeholder="Enter your Mathpix app key"
+                        className="border-2 border-black pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKeys((prev) => ({ ...prev, mathpix: !prev.mathpix }))}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1"
+                      >
+                        {showApiKeys.mathpix ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm font-medium">Enable Mathpix OCR</Label>
+                      <p className="text-xs text-gray-500">Use Mathpix for equation extraction in PDF processing</p>
+                    </div>
+                    <Button
+                      variant={mathpixConfig.enabled ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        const newEnabled = !mathpixConfig.enabled
+                        setMathpixConfig(prev => ({ ...prev, enabled: newEnabled }))
+                        
+                        // Configure the Mathpix processor if enabling
+                        if (newEnabled && mathpixConfig.appId && mathpixConfig.appKey) {
+                          import('@/lib/mathpix-processor').then(({ configureMathpix }) => {
+                            try {
+                              configureMathpix({
+                                appId: mathpixConfig.appId,
+                                appKey: mathpixConfig.appKey,
+                              })
+                              addError({
+                                type: 'success',
+                                title: 'Mathpix Configured',
+                                message: 'Mathpix equation OCR is now active for PDF processing',
+                              })
+                            } catch (err) {
+                              addError({
+                                type: 'error',
+                                title: 'Mathpix Configuration Failed',
+                                message: err instanceof Error ? err.message : 'Unknown error',
+                              })
+                            }
+                          })
+                        }
+                      }}
+                      disabled={!mathpixConfig.appId || !mathpixConfig.appKey}
+                      className={mathpixConfig.enabled ? "bg-green-600 hover:bg-green-700" : ""}
+                    >
+                      {mathpixConfig.enabled ? (
+                        <>
+                          <Check className="w-4 h-4 mr-1" />
+                          Enabled
+                        </>
+                      ) : (
+                        "Enable"
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Test Button */}
+                  <Button
+                    onClick={async () => {
+                      if (!mathpixConfig.appId || !mathpixConfig.appKey) {
+                        addError({
+                          type: 'error',
+                          title: 'Configuration Required',
+                          message: 'Please enter both App ID and App Key',
+                        })
+                        return
+                      }
+
+                      setTestingStatus(prev => ({ ...prev, mathpix: 'testing' }))
+
+                      try {
+                        const { configureMathpix, getMathpixProcessor } = await import('@/lib/mathpix-processor')
+                        configureMathpix({
+                          appId: mathpixConfig.appId,
+                          appKey: mathpixConfig.appKey,
+                        })
+                        
+                        const processor = getMathpixProcessor()
+                        if (processor.isReady()) {
+                          setTestingStatus(prev => ({ ...prev, mathpix: 'success' }))
+                          setMathpixConfig(prev => ({ ...prev, enabled: true }))
+                          addError({
+                            type: 'success',
+                            title: 'Mathpix Connected',
+                            message: 'API credentials are valid. Mathpix is ready for use.',
+                          })
+                        } else {
+                          throw new Error('Processor not ready')
+                        }
+                      } catch (err) {
+                        setTestingStatus(prev => ({ ...prev, mathpix: 'error' }))
+                        addError({
+                          type: 'error',
+                          title: 'Mathpix Test Failed',
+                          message: err instanceof Error ? err.message : 'Failed to configure Mathpix',
+                        })
+                      }
+                    }}
+                    disabled={!mathpixConfig.appId || !mathpixConfig.appKey || testingStatus.mathpix === 'testing'}
+                    className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
+                  >
+                    {testingStatus.mathpix === 'testing' ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Testing...
+                      </>
+                    ) : (
+                      <>
+                        {getStatusIcon(testingStatus.mathpix)}
+                        <span className="ml-2">Test Mathpix Connection</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Features */}
+                <div className="pt-4 border-t border-gray-200">
+                  <Label className="text-sm font-medium mb-2 block">Mathpix Features:</Label>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Check className="w-3 h-3 text-green-500" />
+                      LaTeX output
+                    </div>
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Check className="w-3 h-3 text-green-500" />
+                      MathML support
+                    </div>
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Check className="w-3 h-3 text-green-500" />
+                      ASCII math
+                    </div>
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Check className="w-3 h-3 text-green-500" />
+                      High accuracy
+                    </div>
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Check className="w-3 h-3 text-green-500" />
+                      Complex equations
+                    </div>
+                    <div className="flex items-center gap-1 text-gray-600">
+                      <Check className="w-3 h-3 text-green-500" />
+                      Handwritten math
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Domain Agents Info */}
+            <Card className="border-2 border-black shadow-none">
+              <CardHeader className="border-b border-black">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Brain className="w-4 h-4" />
+                  <span>DOMAIN AGENTS</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                <Alert className="border-purple-200 bg-purple-50">
+                  <Brain className="w-4 h-4 text-purple-600" />
+                  <AlertDescription className="text-xs text-purple-800">
+                    <p className="mb-2">
+                      <strong>Domain Agents</strong> are specialized AI chains that run post-retrieval analysis
+                      on your documents. Access them via the <strong>Agents</strong> button in the chat header.
+                    </p>
+                  </AlertDescription>
+                </Alert>
+
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 p-2 rounded bg-purple-50 border border-purple-100">
+                    <Sparkles className="w-4 h-4 text-purple-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">Analogy Maker</p>
+                      <p className="text-xs text-gray-600">Creates relatable analogies for complex concepts</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-2 rounded bg-amber-50 border border-amber-100">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">Compliance Checker</p>
+                      <p className="text-xs text-gray-600">Identifies ambiguous clauses and policy issues</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-2 rounded bg-blue-50 border border-blue-100">
+                    <Search className="w-4 h-4 text-blue-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">Key Terms Extractor</p>
+                      <p className="text-xs text-gray-600">Extracts and defines important terminology</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 p-2 rounded bg-green-50 border border-green-100">
+                    <Cpu className="w-4 h-4 text-green-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium">Quick Summary</p>
+                      <p className="text-xs text-gray-600">Generates concise document summaries locally</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

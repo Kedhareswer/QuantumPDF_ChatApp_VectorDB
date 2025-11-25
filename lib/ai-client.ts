@@ -1,5 +1,7 @@
 // lib/ai-client.ts
 
+import { DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
+
 // Simplified AIConfig for text-only focus
 interface AIConfig {
   provider:
@@ -834,7 +836,7 @@ export class AIClient {
       }
 
       // Use consistent dimension for fallback embeddings
-      const dimension = 1024
+      const dimension = DEFAULT_EMBEDDING_DIMENSION
       const embedding = new Float32Array(dimension) // Use typed array for performance
 
       // Improved hash-based embedding with single pass
@@ -895,7 +897,7 @@ export class AIClient {
     } catch (error) {
       console.error("Error in fallback embedding generation:", error)
       // Return a minimal valid embedding vector
-      const dimension = 1024
+      const dimension = DEFAULT_EMBEDDING_DIMENSION
       const minimal = new Array(dimension).fill(0)
       minimal[0] = 1.0 // Set first element to 1 for a valid unit vector
       return minimal
@@ -946,8 +948,65 @@ export class AIClient {
       const errorData = await response.json().catch(() => ({}))
       throw new Error(errorData.error || `Server error: ${response.statusText}`)
     }
-    const result = await response.json()
-    return result.text || "No response generated"
+    const contentType = response.headers.get("Content-Type")?.toLowerCase() || ""
+    if (contentType.includes("text/event-stream")) {
+      return await this.consumeSSEStream(response)
+    }
+    const result = await response.json().catch(() => null)
+    if (result?.text) {
+      return result.text
+    }
+    if (result?.step === "answer" && result?.status === "done" && result?.text) {
+      return result.text
+    }
+    throw new Error("Unexpected response format from Hugging Face backend")
+  }
+
+  private async consumeSSEStream(response: Response): Promise<string> {
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error("Streaming not supported in this environment")
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ""
+    let finalText = ""
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const events = buffer.split("\n\n")
+      buffer = events.pop() || ""
+
+      for (const event of events) {
+        const dataLine = event
+          .split("\n")
+          .map((line) => line.trim())
+          .find((line) => line.startsWith("data:"))
+        if (!dataLine) continue
+
+        const payloadRaw = dataLine.replace(/^data:\s*/, "")
+        if (!payloadRaw) continue
+
+        let payload: any
+        try {
+          payload = JSON.parse(payloadRaw)
+        } catch {
+          continue
+        }
+
+        if (payload.step === "error" || payload.status === "error") {
+          throw new Error(payload.message || "Hugging Face stream error")
+        }
+        if (payload.step === "answer" && payload.text) {
+          finalText = payload.text
+        }
+      }
+    }
+
+    return finalText || "No response generated"
   }
 
   private async testHuggingFaceConnection(): Promise<boolean> {
@@ -1065,7 +1124,7 @@ export class AIClient {
 
     if (isEmbeddingModel) {
       console.warn(`AIML model '${textModel}' is for embeddings, switching to text generation model`)
-      textModel = "gpt-4o-mini" // Default text generation model
+      textModel = "gpt-5-mini" // Default text generation model
     }
 
     const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -1396,12 +1455,47 @@ export class AIClient {
   }
 
   private async generateReplicateText(messages: ChatMessage[]): Promise<string> {
-    // Replicate has a different API structure, simplified implementation
-    return this.simpleGenerateText("replicate", messages)
+    const baseUrl = this.config.baseUrl || "https://api.replicate.com/v1"
+    const apiKey = this.config.apiKey?.trim()
+    if (!apiKey) {
+      throw new Error("Replicate API key is not configured")
+    }
+
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.config.model,
+        messages,
+        max_tokens: 1024,
+        temperature: 0.7,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Replicate API error (${response.status}): ${response.statusText} - ${errorText}`)
+    }
+
+    const result = await response.json()
+    const content = result.choices?.[0]?.message?.content || result.output_text
+    if (!content || typeof content !== "string") {
+      throw new Error("Invalid response format from Replicate API")
+    }
+    return content
   }
 
   private async testReplicateConnection(): Promise<boolean> {
-    return this.simpleTestConnection("replicate")
+    try {
+      await this.generateReplicateText([{ role: "user", content: "test" }])
+      return true
+    } catch (error) {
+      console.error("Replicate connection test failed:", error)
+      return false
+    }
   }
 
   private async generateAnyscaleText(messages: ChatMessage[]): Promise<string> {
@@ -1499,10 +1593,53 @@ export class AIClient {
     }
   }
 
+  private extractVertexProjectId(): string {
+    // Try to extract project ID from baseUrl if provided
+    // Format: https://REGION-aiplatform.googleapis.com/v1/projects/PROJECT_ID/...
+    if (this.config.baseUrl) {
+      const projectMatch = this.config.baseUrl.match(/projects\/([^\/]+)/)
+      if (projectMatch) {
+        return projectMatch[1]
+      }
+    }
+    
+    // Check if project ID is passed via model config (format: "project:model")
+    if (this.config.model && this.config.model.includes(':')) {
+      const parts = this.config.model.split(':')
+      if (parts.length === 2) {
+        return parts[0]
+      }
+    }
+    
+    // Try to extract from environment variable (browser-safe check)
+    if (typeof process !== 'undefined' && process.env?.VERTEX_PROJECT_ID) {
+      return process.env.VERTEX_PROJECT_ID
+    }
+    
+    throw new Error('Vertex AI project ID not configured. Set it via baseUrl (https://REGION-aiplatform.googleapis.com/v1/projects/YOUR_PROJECT_ID/...) or model config (project_id:model_name)')
+  }
+
+  private extractVertexRegion(): string {
+    // Try to extract region from baseUrl
+    if (this.config.baseUrl) {
+      const regionMatch = this.config.baseUrl.match(/https:\/\/([^-]+(?:-[^-]+)*)-aiplatform/)
+      if (regionMatch) {
+        return regionMatch[1]
+      }
+    }
+    // Default to us-central1
+    return 'us-central1'
+  }
+
   private async generateVertexText(messages: ChatMessage[]): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://us-central1-aiplatform.googleapis.com/v1"
-    // Note: Vertex AI requires more complex authentication, this is a simplified version
-    const response = await fetch(`${baseUrl}/projects/YOUR_PROJECT/locations/us-central1/publishers/google/models/${this.config.model}:generateContent`, {
+    const projectId = this.extractVertexProjectId()
+    const region = this.extractVertexRegion()
+    const model = this.config.model.includes(':') ? this.config.model.split(':')[1] : this.config.model
+    
+    const baseUrl = `https://${region}-aiplatform.googleapis.com/v1`
+    const endpoint = `${baseUrl}/projects/${projectId}/locations/${region}/publishers/google/models/${model}:generateContent`
+    
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { 
         Authorization: `Bearer ${this.config.apiKey}`, 
@@ -1512,19 +1649,38 @@ export class AIClient {
         contents: messages.map(msg => ({
           role: msg.role === "assistant" ? "model" : "user",
           parts: [{ text: msg.content }]
-        }))
+        })),
+        generationConfig: {
+          maxOutputTokens: 500,
+          temperature: 0.7
+        }
       }),
     })
-    if (!response.ok) throw new Error(`Vertex AI API error: ${response.statusText}`)
+    
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '')
+      throw new Error(`Vertex AI API error: ${response.status} ${response.statusText}${errorBody ? ` - ${errorBody}` : ''}`)
+    }
+    
     const result = await response.json()
+    
+    if (!result.candidates?.[0]?.content?.parts?.[0]?.text) {
+      throw new Error('Unexpected Vertex AI response format')
+    }
+    
     return result.candidates[0].content.parts[0].text
   }
 
   private async testVertexConnection(): Promise<boolean> {
     try {
-      await this.generateVertexText([{ role: "user", content: "test" }])
+      // First validate that we can extract project ID
+      this.extractVertexProjectId()
+      
+      // Then attempt a minimal API call
+      await this.generateVertexText([{ role: "user", content: "Hi" }])
       return true
-    } catch {
+    } catch (error) {
+      console.error('Vertex AI connection test failed:', error)
       return false
     }
   }
@@ -1657,12 +1813,42 @@ export class AIClient {
 
   private async simpleTestConnection(provider: string): Promise<boolean> {
     try {
-      console.log(`Testing ${provider} connection (simplified)`)
-      return !!this.config.apiKey
-    } catch {
+      console.log(`Testing ${provider} connection...`)
+      
+      if (!this.config.apiKey) {
+        console.warn(`${provider} API key not provided`)
+        return false
+      }
+      
+      // Attempt an actual API call for each provider
+      switch (provider) {
+        case "openrouter":
+          return await this.testOpenRouterConnection()
+        case "deepseek":
+          return await this.testDeepSeekConnection()
+        case "mistral":
+          return await this.testMistralConnection()
+        case "perplexity":
+          return await this.testPerplexityConnection()
+        case "xai":
+          return await this.testXAIConnection()
+        case "alibaba":
+          return await this.testAlibabaConnection()
+        case "minimax":
+          return await this.testMiniMaxConnection()
+        case "vertex":
+          return await this.testVertexConnection()
+        default:
+          // For unknown providers, at least verify the API key exists
+          console.warn(`No specific test available for ${provider}, checking API key only`)
+          return !!this.config.apiKey
+      }
+    } catch (error) {
+      console.error(`${provider} connection test failed:`, error)
       return false
     }
   }
+
   private async simpleGenerateText(provider: string, messages: ChatMessage[]): Promise<string> {
     console.log(`Generating text with ${provider} (simplified fallback)`)
     if (!this.config.apiKey) throw new Error(`${provider} API key not provided`)
@@ -1707,7 +1893,7 @@ export class AIClient {
       }
       
       console.log(`Generating text embedding with ${provider} (simplified hash) for: ${text.substring(0, 30)}`)
-      const dimension = 384;
+      const dimension = DEFAULT_EMBEDDING_DIMENSION;
       const embedding = new Array<number>(dimension).fill(0);
       
       // Simple hash-based embedding
@@ -1726,7 +1912,7 @@ export class AIClient {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`Error in ${provider} simple embedding generation:`, errorMessage);
       // Return a zero vector of the expected dimension
-      return new Array(384).fill(0);
+      return new Array(DEFAULT_EMBEDDING_DIMENSION).fill(0);
     }
   }
 

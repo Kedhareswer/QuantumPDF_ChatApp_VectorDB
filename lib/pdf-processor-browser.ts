@@ -1,5 +1,11 @@
-// This is a browser-compatible version of the PDF processor
-// It avoids using Node.js specific modules
+/**
+ * @deprecated This file is no longer used in the codebase.
+ * Use `enhanced-pdf-processor.ts` directly instead.
+ * This file is kept for backwards compatibility but may be removed in future versions.
+ * 
+ * This was originally a browser-compatible version of the PDF processor
+ * that avoided using Node.js specific modules.
+ */
 
 import { EnhancedPDFProcessor } from "./enhanced-pdf-processor"
 

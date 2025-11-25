@@ -1,5 +1,7 @@
+import { getEmbeddingDimension, createZeroVector, DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
+
 interface VectorDBConfig {
-  provider: "pinecone" | "weaviate" | "chroma" | "local"
+  provider: "pinecone" | "weaviate" | "local"
   apiKey?: string
   environment?: string
   indexName?: string
@@ -89,7 +91,7 @@ class PineconeDatabase extends VectorDatabase {
         console.log(`Creating Pinecone index: ${indexName}`)
         await this.pinecone.createIndex({
           name: indexName,
-          dimension: this.config.dimension || 1536,
+          dimension: getEmbeddingDimension(this.config.dimension),
           metric: "cosine",
           spec: {
             serverless: {
@@ -179,7 +181,7 @@ class PineconeDatabase extends VectorDatabase {
         // Pure keyword search using metadata filtering
         // Since Pinecone doesn't have native text search, we'll fetch more results and filter locally
         const searchParams: any = {
-          vector: embedding.length > 0 ? embedding : new Array(1536).fill(0), // Use zero vector if no embedding
+          vector: embedding.length > 0 ? embedding : createZeroVector(this.config.dimension), // Use zero vector if no embedding
           topK: Math.min(1000, (options.limit || 10) * 10), // Fetch more to filter locally
           includeMetadata: true,
           includeValues: false,
@@ -218,7 +220,7 @@ class PineconeDatabase extends VectorDatabase {
       } else if (options.mode === "hybrid") {
         // Hybrid search - combine semantic and keyword approaches
         const searchParams: any = {
-          vector: embedding.length > 0 ? embedding : new Array(1536).fill(0),
+          vector: embedding.length > 0 ? embedding : createZeroVector(this.config.dimension),
           topK: Math.min(1000, (options.limit || 10) * 5), // Fetch more for better hybrid results
           includeMetadata: true,
           includeValues: false,
@@ -412,12 +414,35 @@ class WeaviateDatabase extends VectorDatabase {
         ],
       }
 
+      // Check if class already exists before attempting creation
       try {
-        await this.client.schema.classCreator().withClass(schema).do()
-      } catch (error) {
-        // Class might already exist
-        console.log("Weaviate class might already exist:", error)
+        const existingSchema = await this.client.schema.getter().do()
+        const classExists = existingSchema.classes?.some(
+          (cls: { class?: string }) => cls.class === className
+        )
+        
+        if (classExists) {
+          console.log(`Weaviate class '${className}' already exists, skipping creation`)
+        } else {
+          console.log(`Creating Weaviate class '${className}'...`)
+          await this.client.schema.classCreator().withClass(schema).do()
+          console.log(`Weaviate class '${className}' created successfully`)
+        }
+      } catch (schemaError) {
+        // If we can't check the schema, try to create (will fail silently if exists)
+        console.warn("Could not check existing schema, attempting to create class:", schemaError)
+        try {
+          await this.client.schema.classCreator().withClass(schema).do()
+          console.log(`Weaviate class '${className}' created`)
+        } catch (createError: any) {
+          // Only log if it's not an "already exists" error
+          if (!createError?.message?.includes('already exists')) {
+            console.error("Failed to create Weaviate class:", createError)
+          }
+        }
       }
+      
+      this.isInitialized = true
     } catch (error) {
       console.error("Failed to initialize Weaviate:", error)
       throw error
@@ -617,409 +642,6 @@ class WeaviateDatabase extends VectorDatabase {
   }
 }
 
-import type { ChromaClient, Collection as ChromaCollection } from "chromadb";
-
-class ChromaDatabase extends VectorDatabase {
-  private client!: ChromaClient
-  private collection!: ChromaCollection
-
-  async initialize(): Promise<void> {
-    try {
-      this.validateConfig()
-
-      const chromaUrl = this.config.url || "http://localhost:8000"
-
-      // Dynamic import to avoid build issues
-      const { ChromaClient } = await import("chromadb")
-
-      this.client = new ChromaClient({
-        path: chromaUrl,
-      })
-
-      const collectionName = this.config.collection || "documents"
-
-      try {
-        this.collection = await this.client.getCollection({
-          name: collectionName,
-        })
-      } catch (error) {
-        // Collection doesn't exist, create it
-        this.collection = await this.client.createCollection({
-          name: collectionName,
-          metadata: { description: "PDF document chunks" },
-        })
-      }
-
-      this.isInitialized = true
-    } catch (error) {
-      console.error("Failed to initialize Chroma:", error)
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      throw new Error(
-        `Chroma initialization failed: ${errorMessage}. Make sure ChromaDB server is running at ${this.config.url || "http://localhost:8000"}`,
-      )
-    }
-  }
-
-  async addDocuments(documents: VectorDocument[]): Promise<void> {
-    if (!this.isInitialized) {
-      await this.initialize()
-    }
-
-    try {
-      const ids = documents.map((doc) => doc.id)
-      const embeddings = documents.map((doc) => doc.embedding)
-      const metadatas = documents.map((doc) => ({
-        source: doc.metadata.source,
-        documentId: doc.metadata.documentId,
-        chunkIndex: doc.metadata.chunkIndex,
-        timestamp: doc.metadata.timestamp.toISOString(),
-      }))
-      const documents_content = documents.map((doc) => doc.content)
-
-      await this.collection.add({
-        ids,
-        embeddings,
-        metadatas,
-        documents: documents_content,
-      })
-    } catch (error) {
-      console.error("Failed to add documents to Chroma:", error)
-      throw error
-    }
-  }
-
-  async search(query: string, embedding: number[], options: SearchOptions): Promise<SearchResult[]> {
-    if (!this.isInitialized) {
-      await this.initialize()
-    }
-
-    try {
-      let results: SearchResult[] = []
-
-      if (options.mode === "semantic") {
-        // Pure semantic search using embeddings
-        if (!embedding || embedding.length === 0) {
-          console.warn("No embedding provided for semantic search")
-          return []
-        }
-
-        const searchParams: any = {
-          queryEmbeddings: [embedding],
-          nResults: options.limit || 10,
-        }
-
-        if (options.filters) {
-          searchParams.where = options.filters
-        }
-
-        const chromaResults = await this.collection.query(searchParams)
-
-        results = chromaResults.ids[0]?.map((id: string, index: number) => ({
-          id,
-          content: chromaResults.documents[0][index] || "",
-          score: 1 - (chromaResults.distances[0][index] || 0),
-          metadata: {
-            ...chromaResults.metadatas[0][index],
-            searchMode: "semantic"
-          },
-        })) || []
-
-      } else if (options.mode === "keyword") {
-        // Pure keyword search - use a zero vector to get documents, then filter locally
-        // Since ChromaDB doesn't have native text search, we use query with zero vector
-        const zeroVector = new Array(1536).fill(0) // Assuming 1536 dimensions
-        
-        const searchParams: any = {
-          queryEmbeddings: [zeroVector],
-          nResults: Math.min(1000, (options.limit || 10) * 20), // Get more to filter locally
-        }
-
-        if (options.filters) {
-          searchParams.where = options.filters
-        }
-
-        const chromaResults = await this.collection.query(searchParams)
-
-        // Filter using keyword matching
-        const keywordResults = []
-        const ids = chromaResults.ids[0] || []
-        const documents = chromaResults.documents[0] || []
-        const metadatas = chromaResults.metadatas[0] || []
-        
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i]
-          const content = documents[i] || ""
-          const metadata = metadatas[i] || {}
-          
-          const keywordScore = this.calculateKeywordScore(query, content)
-          
-          if (keywordScore >= (options.threshold || 0.01)) {
-            keywordResults.push({
-              id,
-              content,
-              score: keywordScore,
-              metadata: {
-                ...metadata,
-                searchMode: "keyword"
-              }
-            })
-          }
-        }
-
-        // Sort by score and limit results
-        results = keywordResults
-          .sort((a, b) => b.score - a.score)
-          .slice(0, options.limit || 10)
-
-      } else if (options.mode === "hybrid") {
-        // Hybrid search - combine semantic and keyword approaches
-        let semanticResults: any[] = []
-        let keywordResults: any[] = []
-
-        // Get semantic results if embedding is available
-        if (embedding && embedding.length > 0) {
-          const searchParams: any = {
-            queryEmbeddings: [embedding],
-            nResults: Math.min(100, (options.limit || 10) * 5), // Get more for better mixing
-          }
-
-          if (options.filters) {
-            searchParams.where = options.filters
-          }
-
-          const chromaResults = await this.collection.query(searchParams)
-          semanticResults = chromaResults.ids[0]?.map((id: string, index: number) => ({
-            id,
-            content: chromaResults.documents[0][index] || "",
-            semanticScore: 1 - (chromaResults.distances[0][index] || 0),
-            metadata: chromaResults.metadatas[0][index] || {},
-          })) || []
-        }
-
-        // Get keyword results using zero vector query
-        const zeroVector = new Array(1536).fill(0)
-        const allDocsParams: any = {
-          queryEmbeddings: [zeroVector],
-          nResults: Math.min(200, (options.limit || 10) * 10),
-        }
-
-        if (options.filters) {
-          allDocsParams.where = options.filters
-        }
-
-        const allDocsResults = await this.collection.query(allDocsParams)
-        
-        const keywordMap = new Map<string, number>()
-        const allIds = allDocsResults.ids[0] || []
-        const allDocuments = allDocsResults.documents[0] || []
-        
-        for (let i = 0; i < allIds.length; i++) {
-          const id = allIds[i]
-          const content = allDocuments[i] || ""
-          const keywordScore = this.calculateKeywordScore(query, content)
-          keywordMap.set(id, keywordScore)
-        }
-
-        // Combine semantic and keyword scores
-        const hybridMap = new Map<string, any>()
-
-        // Add semantic results
-        semanticResults.forEach(result => {
-          hybridMap.set(result.id, {
-            ...result,
-            keywordScore: keywordMap.get(result.id) || 0
-          })
-        })
-
-        // Add any keyword-only results
-        keywordMap.forEach((keywordScore, id) => {
-          if (!hybridMap.has(id) && keywordScore > 0) {
-            const docIndex = allIds.indexOf(id)
-            if (docIndex >= 0) {
-              hybridMap.set(id, {
-                id,
-                content: allDocuments[docIndex] || "",
-                semanticScore: 0,
-                keywordScore,
-                metadata: (allDocsResults.metadatas![0] || [])[docIndex] || {}
-              })
-            }
-          }
-        })
-
-        // Calculate final hybrid scores
-        const hybridResults = Array.from(hybridMap.values()).map(result => {
-          const semanticScore = result.semanticScore || 0
-          const keywordScore = result.keywordScore || 0
-          
-          // Weighted combination (60% semantic, 40% keyword if both available)
-          let hybridScore: number
-          if (semanticScore > 0 && keywordScore > 0) {
-            hybridScore = semanticScore * 0.6 + keywordScore * 0.4
-          } else {
-            hybridScore = semanticScore + keywordScore
-          }
-
-          return {
-            id: result.id,
-            content: result.content,
-            score: hybridScore,
-            metadata: {
-              ...result.metadata,
-              searchMode: "hybrid",
-              semanticScore,
-              keywordScore,
-              hybridScore
-            }
-          }
-        })
-
-        // Filter and sort results
-        results = hybridResults
-          .filter(result => result.score >= (options.threshold || 0.05))
-          .sort((a, b) => b.score - a.score)
-          .slice(0, options.limit || 10)
-      }
-
-      return results
-
-    } catch (error) {
-      console.error("Failed to search Chroma:", error)
-      throw error
-    }
-  }
-
-  // Helper method for keyword scoring in ChromaDB
-  private calculateKeywordScore(query: string, content: string): number {
-    if (!content || !query) return 0
-
-    // Normalize text
-    const normalizeText = (text: string) => {
-      return text
-        .toLowerCase()
-        .replace(/[^\w\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-    }
-
-    const normalizedQuery = normalizeText(query)
-    const normalizedContent = normalizeText(content)
-    
-    const queryWords = normalizedQuery.split(/\s+/).filter(word => word.length > 0)
-    const contentWords = normalizedContent.split(/\s+/)
-    
-    if (queryWords.length === 0) return 0
-
-    let exactMatches = 0
-    let partialMatches = 0
-    
-    for (const queryWord of queryWords) {
-      if (contentWords.includes(queryWord)) {
-        exactMatches++
-      } else {
-        const partialMatch = contentWords.some(contentWord => 
-          contentWord.includes(queryWord) || queryWord.includes(contentWord)
-        )
-        if (partialMatch) {
-          partialMatches++
-        }
-      }
-    }
-
-    const exactScore = exactMatches / queryWords.length
-    const partialScore = (partialMatches / queryWords.length) * 0.5
-    let finalScore = exactScore + partialScore
-
-    // Boost single word matches
-    if (queryWords.length === 1 && exactMatches > 0) {
-      finalScore = Math.min(1.0, finalScore * 2)
-    }
-
-    // Frequency bonus
-    if (exactMatches > 0) {
-      const queryText = queryWords.join(' ')
-      const occurrences = (normalizedContent.match(new RegExp(queryText, 'g')) || []).length
-      const frequencyBonus = Math.min(0.3, occurrences * 0.1)
-      finalScore += frequencyBonus
-    }
-
-    return Math.min(1.0, finalScore)
-  }
-
-  async deleteDocument(documentId: string): Promise<void> {
-    if (!this.isInitialized) {
-      await this.initialize()
-    }
-
-    try {
-      await this.collection.delete({
-        where: { documentId },
-      })
-    } catch (error) {
-      console.error("Failed to delete document from Chroma:", error)
-      throw error
-    }
-  }
-
-  async clear(): Promise<void> {
-    if (!this.isInitialized) {
-      await this.initialize()
-    }
-
-    try {
-      const collectionName = this.config.collection || "documents"
-      // Get the collection first, then delete it if it exists
-      try {
-        const collection = await this.client.getCollection({
-          name: collectionName
-        })
-        if (collection) {
-          // Delete all documents by passing an empty where filter
-          await collection.delete({
-            where: {}
-          })
-        }
-      } catch (err) {
-        // Collection might not exist, which is fine for a clear operation
-        console.log(`Collection ${collectionName} might not exist or couldn't be deleted.`)
-      }
-
-      // Recreate the collection
-      this.collection = await this.client.createCollection({
-        name: collectionName
-      })
-      
-      // Note: metadata handling would typically go here, but the current type definitions
-      // don't expose a metadata property directly
-    } catch (error) {
-      console.error("Failed to clear Chroma collection:", error)
-      throw error
-    }
-  }
-
-  async testConnection(): Promise<boolean> {
-    try {
-      const chromaUrl = this.config.url || "http://localhost:8000"
-
-      // Test with a simple fetch request first
-      const response = await fetch(`${chromaUrl}/api/v1/heartbeat`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      return true
-    } catch (error) {
-      console.error("Chroma connection test failed:", error)
-      return false
-    }
-  }
-}
 
 class LocalVectorDatabase extends VectorDatabase {
   private documents: VectorDocument[] = []
@@ -1198,9 +820,7 @@ export function createVectorDatabase(config: VectorDBConfig): VectorDatabase {
     case "pinecone":
       return new PineconeDatabase(config)
     case "weaviate":
-      return new WeaviateDatabase(config) // Keep existing implementation
-    case "chroma":
-      return new ChromaDatabase(config)
+      return new WeaviateDatabase(config)
     case "local":
     default:
       return new LocalVectorDatabase(config)

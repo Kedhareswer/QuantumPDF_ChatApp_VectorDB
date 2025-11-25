@@ -32,3 +32,4 @@ next-env.d.ts
 .kiro
 __tests__/
 nul
+.claude

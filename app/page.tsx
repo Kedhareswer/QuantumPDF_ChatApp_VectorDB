@@ -878,6 +878,8 @@ export default function QuantumPDFChatbot() {
               isProcessing={isProcessing}
               disabled={!isChatReady}
               ragEngine={ragEngine}
+              documentContext={documents.map(d => d.chunks?.join('\n') || '').join('\n\n')}
+              aiClient={modelStatus === 'ready' ? new AIClient(aiConfig) : undefined}
             />
           </div>
         </main>

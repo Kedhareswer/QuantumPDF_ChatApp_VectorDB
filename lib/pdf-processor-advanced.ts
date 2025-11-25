@@ -1,3 +1,9 @@
+/**
+ * @deprecated This file is no longer used in the codebase.
+ * Use `enhanced-pdf-processor.ts` instead, which is the actively maintained implementation.
+ * This file is kept for reference but may be removed in future versions.
+ */
+
 import { BrowserOCRProcessor } from "./ocr-processor"
 import { AdvancedChunker, type TextChunk } from "./advanced-chunking"
 

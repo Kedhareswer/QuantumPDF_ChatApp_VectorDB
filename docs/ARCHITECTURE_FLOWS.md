@@ -1,6 +1,7 @@
 # QuantumPDF Architecture & Flow Diagrams
 
 > **Comprehensive visual guide to system architecture, data flows, and component interactions**
+> **Last Updated: November 2025 | Version 3.0.0**
 
 ## Table of Contents
 - [System Overview](#system-overview)
@@ -8,6 +9,8 @@
 - [Data Flow Diagrams](#data-flow-diagrams)
 - [Component Interactions](#component-interactions)
 - [Processing Pipelines](#processing-pipelines)
+- [Domain Agents System](#domain-agents-system)
+- [Multimodal Processing](#multimodal-processing)
 - [State Management](#state-management)
 
 ---
@@ -22,44 +25,54 @@ graph TB
         UI[React UI Components]
         STATE[Zustand State Store]
         PWA[PWA Service Worker]
+        AGENT_UI[Agent Selector UI]
     end
 
     subgraph "Processing Layer"
         PDF[PDF Parser<br/>PDF.js + Tesseract]
         RAG[RAG Engine<br/>3-Phase Processing]
         CHUNK[Advanced Chunking<br/>Semantic Aware]
-        %% Note: Chunker now treats fenced code blocks, markdown tables, and image captions as atomic units, preserving structure for better RAG quality.
+        MULTI[Multimodal Extraction<br/>Images/Tables/Equations]
     end
 
     subgraph "AI Layer"
         AI[AI Client<br/>19+ Providers]
         EMB[Embedding Generation<br/>with Fallback]
         TEXT[Text Generation<br/>Streaming Support]
+        AGENTS[Domain Agents<br/>Specialized Analysis]
+        LOCAL[Local Models<br/>Transformers.js]
     end
 
     subgraph "Storage Layer"
-        VDB[(Vector Database<br/>Pinecone/Chroma/<br/>Weaviate/Local)]
+        VDB[(Vector Database<br/>Pinecone/Weaviate/<br/>Local In-Memory)]
         CACHE[Browser Cache<br/>IndexedDB]
     end
 
     UI -->|User Actions| STATE
+    AGENT_UI -->|Agent Selection| AGENTS
     STATE -->|Document Upload| PDF
     PDF -->|Extracted Text| CHUNK
+    PDF -->|Multimodal Data| MULTI
     CHUNK -->|Text Chunks| RAG
     RAG -->|Generate Embeddings| AI
     AI -->|Embeddings| VDB
     UI -->|Query| RAG
     RAG -->|Search| VDB
     VDB -->|Retrieved Chunks| RAG
+    RAG -->|Run Agent| AGENTS
+    AGENTS -->|Specialized Analysis| AI
     RAG -->|Generate Response| AI
     AI -->|Answer| UI
     PWA -->|Offline Support| CACHE
     STATE -->|Persist Config| CACHE
+    LOCAL -->|Summarization| AGENTS
 
     style UI fill:#e1f5ff
     style RAG fill:#fff4e1
     style AI fill:#f3e1ff
     style VDB fill:#e1ffe1
+    style AGENTS fill:#ffe1e8
+    style MULTI fill:#e1f0ff
 ```
 
 ### Technology Stack
@@ -79,9 +92,11 @@ graph LR
         LOCAL[LocalStorage]
     end
 
-    subgraph "PDF Processing"
+    subgraph "Document Processing"
         PDFJS[PDF.js]
         TESS[Tesseract.js]
+        MAMMOTH[Mammoth.js]
+        SHEETJS[SheetJS/Papa Parse]
     end
 
     subgraph "AI Providers"
@@ -92,11 +107,15 @@ graph LR
         MORE[+15 More]
     end
 
+    subgraph "Local AI"
+        TRANS[Transformers.js]
+        MATHPIX[Mathpix OCR]
+    end
+
     subgraph "Vector DBs"
         PINE[Pinecone]
-        CHROMA[ChromaDB]
         WEAV[Weaviate]
-        MEM[In-Memory]
+        MEM[Local In-Memory]
     end
 
     NEXT --> REACT
@@ -109,6 +128,8 @@ graph LR
     style NEXT fill:#000,color:#fff
     style REACT fill:#61dafb
     style TS fill:#3178c6,color:#fff
+    style TRANS fill:#ff6f61
+    style MATHPIX fill:#6b5b95
 ```
 
 ---
@@ -124,12 +145,20 @@ graph TD
         DOC[Document Management]
         EMB[Embedding Manager]
         QUERY[Query Processor]
+        AGENT_MGR[Agent Manager]
     end
 
     subgraph "3-Phase Query Processing"
         P1[Phase 1: Context Analysis<br/>- Generate query embedding<br/>- Retrieve relevant chunks<br/>- Apply diversity algorithm<br/>- Generate initial response]
         P2[Phase 2: Self-Critique<br/>- Validate accuracy<br/>- Check completeness<br/>- Identify improvements]
         P3[Phase 3: Refinement<br/>- Apply improvements<br/>- Clean artifacts<br/>- Calculate quality metrics]
+    end
+
+    subgraph "Domain Agents"
+        ANALOGY[Analogy Maker Agent<br/>Simple explanations]
+        COMPLY[Compliance Checker<br/>Legal/policy analysis]
+        KEYTERMS[Key Terms Extractor<br/>Vocabulary & definitions]
+        SUMMARY[Summary Agent<br/>Local model summarization]
     end
 
     subgraph "Supporting Systems"
@@ -147,11 +176,20 @@ graph TD
     P1 -.-> DIV
     P1 -.-> TOKEN
     P3 -.-> QUALITY
+    QUERY --> AGENT_MGR
+    AGENT_MGR --> ANALOGY
+    AGENT_MGR --> COMPLY
+    AGENT_MGR --> KEYTERMS
+    AGENT_MGR --> SUMMARY
 
     style P1 fill:#e3f2fd
     style P2 fill:#fff3e0
     style P3 fill:#f3e5f5
     style QUALITY fill:#e8f5e9
+    style ANALOGY fill:#fce4ec
+    style COMPLY fill:#e8eaf6
+    style KEYTERMS fill:#e0f7fa
+    style SUMMARY fill:#f3e5f5
 ```
 
 ### Multi-Provider AI Client Architecture
@@ -176,9 +214,15 @@ graph TB
         OTHERS[+13 More Providers]
     end
 
+    subgraph "Local Models"
+        TFJS[Transformers.js<br/>Xenova/distilbart-cnn-6-6]
+        CAPTION[Image Captioning<br/>Xenova/vit-gpt2-image-captioning]
+        TEXTGEN[Text Generation<br/>Xenova/distilgpt2]
+    end
+
     subgraph "Fallback System"
         RETRY[Retry Logic]
-        HASHEMB[Hash-Based<br/>Embedding<br/>1024-dim]
+        HASHEMB[Hash-Based<br/>Embedding<br/>1536-dim]
         NOSTREAM[Non-Streaming<br/>Fallback]
     end
 
@@ -197,10 +241,13 @@ graph TB
 
     GEN -.->|On Failure| HASHEMB
     STREAM -.->|On Failure| NOSTREAM
+    CHAT -->|Local Option| TFJS
 
     style CONFIG fill:#fff9c4
     style HASHEMB fill:#ffebee
     style NOSTREAM fill:#ffebee
+    style TFJS fill:#e8f5e9
+    style CAPTION fill:#e8f5e9
 ```
 
 ---
@@ -213,33 +260,43 @@ graph TB
 sequenceDiagram
     participant User
     participant UI as React UI
-    participant PDF as PDF Parser
+    participant PDF as Enhanced PDF Processor
+    participant MULTI as Multimodal Extractor
     participant CHUNK as Chunking Engine
     participant AI as AI Client
     participant VDB as Vector Database
     participant STORE as Zustand Store
 
     User->>UI: Upload PDF File
-    UI->>PDF: Extract Text
+    UI->>PDF: Process Document
 
     activate PDF
     PDF->>PDF: Load with PDF.js
     PDF->>PDF: Extract Text per Page
     PDF->>PDF: Extract Metadata
-    PDF-->>UI: PDFContent {text, metadata}
+    PDF->>MULTI: Extract Multimodal Content
+    
+    activate MULTI
+    MULTI->>MULTI: Extract Images
+    MULTI->>MULTI: Extract Tables
+    MULTI->>MULTI: Extract Equations (Mathpix)
+    MULTI->>MULTI: Generate Image Captions
+    MULTI-->>PDF: Multimodal Data
+    deactivate MULTI
+    
+    PDF-->>UI: ProcessedDocument {text, images, tables, equations}
     deactivate PDF
 
     UI->>CHUNK: Chunk Text
-
     activate CHUNK
     CHUNK->>CHUNK: Calculate Adaptive Parameters
+    CHUNK->>CHUNK: Detect Code Blocks & Tables
     CHUNK->>CHUNK: Split at Boundaries
     CHUNK->>CHUNK: Apply Overlap
-    CHUNK-->>UI: Text Chunks[]
+    CHUNK-->>UI: Text Chunks[] with Metadata
     deactivate CHUNK
 
     UI->>AI: Generate Embeddings
-
     activate AI
     loop For Each Chunk
         AI->>AI: Call Provider API
@@ -250,7 +307,6 @@ sequenceDiagram
 
     UI->>STORE: Add Document
     UI->>VDB: Store Vectors
-
     activate VDB
     VDB->>VDB: Index Vectors
     VDB-->>UI: Success
@@ -259,18 +315,21 @@ sequenceDiagram
     UI-->>User: Document Ready
 ```
 
-### Query Processing Flow (3-Phase RAG)
+### Query Processing Flow (3-Phase RAG with Agents)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant UI as React UI
+    participant AGENT_SEL as Agent Selector
     participant RAG as RAG Engine
+    participant AGENT as Domain Agent
     participant AI as AI Client
     participant VDB as Vector Database
 
     User->>UI: Ask Question
-    UI->>RAG: query(question, options)
+    User->>AGENT_SEL: Select Agent (Optional)
+    UI->>RAG: query(question, options, selectedAgent)
 
     activate RAG
 
@@ -290,6 +349,14 @@ sequenceDiagram
     RAG->>AI: Generate Initial Response
     AI-->>RAG: Initial Answer
 
+    alt Agent Selected
+        Note over RAG,AGENT: Run Domain Agent
+        RAG->>AGENT: Process with Agent
+        AGENT->>AI: Agent-Specific Analysis
+        AI-->>AGENT: Agent Response
+        AGENT-->>RAG: Enhanced Analysis
+    end
+
     alt Complexity: Normal or Complex
         Note over RAG: PHASE 2: Self-Critique
         RAG->>AI: Critique Response
@@ -304,48 +371,384 @@ sequenceDiagram
 
     RAG->>RAG: Clean Artifacts
     RAG->>RAG: Calculate Quality Metrics
-    RAG-->>UI: EnhancedQueryResponse
+    RAG-->>UI: EnhancedQueryResponse + Agent Output
     deactivate RAG
 
-    UI-->>User: Display Answer with Sources
+    UI-->>User: Display Answer with Sources & Agent Analysis
 ```
 
-### Vector Search & Diversity Algorithm Flow
+---
+
+## Domain Agents System
+
+### Agent Architecture
+
+```mermaid
+graph TB
+    subgraph "Agent Manager"
+        MGR[Agent Manager<br/>Orchestration & Selection]
+    end
+
+    subgraph "Available Agents"
+        A1[Analogy Maker Agent<br/>- Simplifies complex concepts<br/>- Uses everyday analogies<br/>- For educational contexts]
+        A2[Compliance Checker Agent<br/>- Legal document analysis<br/>- Policy gap detection<br/>- Risk identification]
+        A3[Key Terms Extractor<br/>- Vocabulary extraction<br/>- Definition generation<br/>- Domain terminology]
+        A4[Summary Agent<br/>- Concise summaries<br/>- Uses local models<br/>- Token-efficient]
+    end
+
+    subgraph "Agent Processing"
+        INPUT[Retrieved Context + Query]
+        PROMPT[Agent-Specific Prompt]
+        PROCESS[AI Processing]
+        OUTPUT[Specialized Analysis]
+    end
+
+    subgraph "Integration Points"
+        UI[Agent Selector UI]
+        RAG[RAG Engine Query]
+        STORE[State Management]
+    end
+
+    UI -->|User Selection| MGR
+    MGR --> A1
+    MGR --> A2
+    MGR --> A3
+    MGR --> A4
+    
+    INPUT --> PROMPT
+    PROMPT --> PROCESS
+    PROCESS --> OUTPUT
+    
+    RAG -->|Context| INPUT
+    OUTPUT -->|Results| RAG
+
+    style A1 fill:#fce4ec
+    style A2 fill:#e8eaf6
+    style A3 fill:#e0f7fa
+    style A4 fill:#f3e5f5
+    style MGR fill:#fff9c4
+```
+
+### Agent Selection Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant AgentSelector as Agent Selector UI
+    participant Store as Zustand Store
+    participant RAG as RAG Engine
+    participant Agent as Selected Agent
+    participant AI as AI Client
+
+    User->>AgentSelector: Select Agent Type
+    AgentSelector->>Store: Update selectedAgent
+    AgentSelector->>Store: Update agentSettings
+
+    User->>RAG: Submit Query
+    RAG->>Store: Get selectedAgent
+    
+    alt Agent Selected
+        RAG->>Agent: Initialize Agent
+        Agent->>Agent: Build Specialized Prompt
+        Agent->>AI: Generate Analysis
+        AI-->>Agent: Agent Response
+        Agent-->>RAG: Structured Analysis
+        RAG->>RAG: Merge with RAG Response
+    end
+    
+    RAG-->>User: Combined Response
+```
+
+---
+
+## Multimodal Processing
+
+### Multimodal Extraction Pipeline
 
 ```mermaid
 graph TD
-    START[Query Embedding] --> SEARCH[Search All Documents]
-
-    SEARCH --> DOC1[Document 1<br/>Calculate Similarities]
-    SEARCH --> DOC2[Document 2<br/>Calculate Similarities]
-    SEARCH --> DOC3[Document 3<br/>Calculate Similarities]
-
-    DOC1 --> FILTER1[Apply Filters<br/>Author/Date/Tags]
-    DOC2 --> FILTER2[Apply Filters]
-    DOC3 --> FILTER3[Apply Filters]
-
-    FILTER1 --> METRICS1[Calculate<br/>Document Metrics]
-    FILTER2 --> METRICS2[Calculate<br/>Document Metrics]
-    FILTER3 --> METRICS3[Calculate<br/>Document Metrics]
-
-    METRICS1 --> POOL[All Chunks Pool]
-    METRICS2 --> POOL
-    METRICS3 --> POOL
-
-    POOL --> DIV[Enhanced Diversity Algorithm]
-
-    subgraph "Diversity Algorithm"
-        DIV --> RANK[Rank by Similarity × Importance]
-        RANK --> FAIR[Ensure Min Chunks Per Doc]
-        FAIR --> FILL[Fill to TopK with Max Limit]
-        FILL --> SORT[Sort by Composite Score]
+    START[PDF Document] --> PARSE[PDF.js Parsing]
+    
+    PARSE --> TEXT[Text Extraction]
+    PARSE --> IMG[Image Extraction]
+    PARSE --> TBL[Table Detection]
+    PARSE --> EQ[Equation Detection]
+    
+    subgraph "Text Processing"
+        TEXT --> CHUNK[Semantic Chunking]
+        CHUNK --> EMB[Embedding Generation]
     end
+    
+    subgraph "Image Processing"
+        IMG --> EXTRACT_IMG[Extract Embedded Images]
+        EXTRACT_IMG --> CAPTION[Image Captioning<br/>Xenova/vit-gpt2-image-captioning]
+        CAPTION --> IMG_META[Image Metadata]
+    end
+    
+    subgraph "Table Processing"
+        TBL --> DETECT_TBL[Detect Table Patterns]
+        DETECT_TBL --> PARSE_TBL[Parse Table Structure]
+        PARSE_TBL --> TBL_META[Table Metadata]
+    end
+    
+    subgraph "Equation Processing"
+        EQ --> REGEX[Regex Detection]
+        EQ --> MATHPIX[Mathpix OCR<br/>Professional Math OCR]
+        REGEX --> LATEX[LaTeX Output]
+        MATHPIX --> LATEX
+        LATEX --> MATHML[MathML + ASCII]
+        MATHML --> RENDER[KaTeX Rendering]
+    end
+    
+    EMB --> VDB[(Vector Storage)]
+    IMG_META --> DOC[Document Record]
+    TBL_META --> DOC
+    RENDER --> DOC
+    
+    style CAPTION fill:#e8f5e9
+    style MATHPIX fill:#e3f2fd
+    style VDB fill:#e1ffe1
+```
 
-    SORT --> RESULT[Top K Diverse Chunks]
+### Mathpix Integration Flow
+
+```mermaid
+sequenceDiagram
+    participant PDF as PDF Processor
+    participant EQ as Equation Extractor
+    participant MATHPIX as Mathpix Service
+    participant EVAL as Math Evaluator
+
+    PDF->>EQ: Extract Equations
+    
+    alt Mathpix Enabled
+        EQ->>EQ: Render Pages as Images
+        loop For Each Page
+            EQ->>MATHPIX: Send Page Image
+            MATHPIX->>MATHPIX: OCR Processing
+            MATHPIX-->>EQ: LaTeX + MathML + Text
+        end
+    else Regex Fallback
+        EQ->>EQ: Regex Pattern Detection
+        EQ->>EQ: Extract LaTeX Patterns
+    end
+    
+    EQ->>EVAL: Parse Expressions
+    EVAL->>EVAL: math.js Evaluation
+    EVAL-->>EQ: Simplified Results
+    
+    EQ-->>PDF: ExtractedEquation[]
+```
+
+---
+
+## Processing Pipelines
+
+### Adaptive Chunking Pipeline
+
+```mermaid
+graph TD
+    START[Extracted Text] --> LENGTH{Text Length?}
+
+    LENGTH -->|> 20K chars| LARGE[Large Doc<br/>Chunk Size: 1000<br/>Overlap: 100]
+    LENGTH -->|10K - 20K| MEDIUM[Medium Doc<br/>Chunk Size: 800<br/>Overlap: 80]
+    LENGTH -->|5K - 10K| SMALL[Small Doc<br/>Chunk Size: 600<br/>Overlap: 60]
+    LENGTH -->|< 5K| TINY[Tiny Doc<br/>Chunk Size: 400<br/>Overlap: 40]
+
+    LARGE --> DETECT
+    MEDIUM --> DETECT
+    SMALL --> DETECT
+    TINY --> DETECT
+
+    DETECT[Detect Special Content]
+    DETECT --> CODE{Code Block?}
+    DETECT --> TABLE{Table?}
+    DETECT --> IMG_CAP{Image Caption?}
+    
+    CODE -->|Yes| ATOMIC_CODE[Preserve as Atomic Unit]
+    TABLE -->|Yes| ATOMIC_TBL[Preserve as Atomic Unit]
+    IMG_CAP -->|Yes| ATOMIC_IMG[Preserve as Atomic Unit]
+    
+    CODE -->|No| BOUNDARY
+    TABLE -->|No| BOUNDARY
+    IMG_CAP -->|No| BOUNDARY
+
+    BOUNDARY[Find Sentence Boundaries]
+    ATOMIC_CODE --> BOUNDARY
+    ATOMIC_TBL --> BOUNDARY
+    ATOMIC_IMG --> BOUNDARY
+    
+    BOUNDARY --> PRESERVE[Preserve Page Markers]
+    PRESERVE --> OVERLAP[Apply Overlap]
+    OVERLAP --> VALIDATE[Validate Chunks]
+
+    VALIDATE --> META[Add Chunk Metadata<br/>- Index<br/>- Start/End Position<br/>- Type (paragraph/code/table/image)<br/>- Semantic Importance]
+    META --> OUTPUT[Text Chunks Array]
 
     style START fill:#e1f5ff
-    style RESULT fill:#e8f5e9
-    style DIV fill:#fff3e0
+    style OUTPUT fill:#e8f5e9
+    style LARGE fill:#ffebee
+    style MEDIUM fill:#fff9c4
+    style SMALL fill:#e0f2f1
+    style TINY fill:#f3e5f5
+    style ATOMIC_CODE fill:#e8eaf6
+    style ATOMIC_TBL fill:#e8eaf6
+```
+
+### Multi-Format Document Processing
+
+```mermaid
+graph TD
+    subgraph "File Input"
+        PDF[PDF Files]
+        XLSX[Excel Files<br/>XLSX/XLS]
+        CSV[CSV/TSV Files]
+        DOCX[Word Files<br/>DOCX/DOC]
+    end
+    
+    subgraph "Processors"
+        PDF_PROC[Enhanced PDF Processor<br/>PDF.js + Tesseract.js]
+        SHEET_PROC[Spreadsheet Processor<br/>SheetJS + PapaParse]
+        DOCX_PROC[DOCX Processor<br/>Mammoth.js]
+    end
+    
+    subgraph "Output"
+        TEXT_OUT[Extracted Text]
+        META_OUT[Document Metadata]
+        STRUCT_OUT[Structured Data]
+    end
+    
+    PDF --> PDF_PROC
+    XLSX --> SHEET_PROC
+    CSV --> SHEET_PROC
+    DOCX --> DOCX_PROC
+    
+    PDF_PROC --> TEXT_OUT
+    PDF_PROC --> META_OUT
+    PDF_PROC --> STRUCT_OUT
+    
+    SHEET_PROC --> TEXT_OUT
+    SHEET_PROC --> META_OUT
+    SHEET_PROC --> STRUCT_OUT
+    
+    DOCX_PROC --> TEXT_OUT
+    DOCX_PROC --> META_OUT
+    
+    TEXT_OUT --> CHUNK[Chunking Engine]
+    CHUNK --> EMB[Embedding Generation]
+    
+    style PDF fill:#e3f2fd
+    style XLSX fill:#e8f5e9
+    style CSV fill:#fff3e0
+    style DOCX fill:#fce4ec
+```
+
+---
+
+## State Management
+
+### Application State Structure
+
+```typescript
+interface AppState {
+  // Session State (Not Persisted)
+  messages: Message[]           // Chat history
+  documents: Document[]         // Uploaded documents
+  isProcessing: boolean        // Processing state
+  modelStatus: ModelStatus     // AI model status
+  errors: ErrorMessage[]       // Error messages
+
+  // Persisted State
+  aiConfig: AIConfig           // AI provider configuration
+  vectorDBConfig: VectorDBConfig // Vector DB configuration
+  wandbConfig: WandbConfig     // W&B configuration (optional)
+  mathpixConfig: MathpixConfig // Mathpix API configuration
+
+  // Agent State
+  selectedAgent: AgentType | 'none'  // Current agent selection
+  agentSettings: {              // Per-agent settings
+    [key in AgentType]?: {
+      enabled: boolean
+      useLocalModels?: boolean
+    }
+  }
+
+  // UI State (Persisted)
+  activeTab: TabType          // Current active tab
+  sidebarOpen: boolean        // Sidebar visibility (mobile)
+  sidebarCollapsed: boolean   // Sidebar collapsed state
+
+  // Actions
+  addMessage: (message: Message) => void
+  updateMessage: (id: string, partial: Partial<Message>) => void
+  clearMessages: () => void
+  addDocument: (document: Document) => void
+  removeDocument: (id: string) => void
+  clearDocuments: () => void
+  setAIConfig: (config: AIConfig) => void
+  setVectorDBConfig: (config: VectorDBConfig) => void
+  setMathpixConfig: (config: MathpixConfig) => void
+  setSelectedAgent: (agent: AgentType | 'none') => void
+  // ... more actions
+}
+```
+
+### State Management Flow
+
+```mermaid
+graph LR
+    subgraph "Zustand Store"
+        STATE[Global State]
+        PERSIST[Persist Middleware]
+        LOCAL[(LocalStorage)]
+    end
+
+    subgraph "State Slices"
+        MSGS[Messages<br/>Session Only]
+        DOCS[Documents<br/>Session Only]
+        AI[AI Config<br/>Persisted]
+        VDB[Vector DB Config<br/>Persisted]
+        MATHPIX[Mathpix Config<br/>Persisted]
+        AGENTS[Agent Settings<br/>Persisted]
+        UI[UI Preferences<br/>Persisted]
+    end
+
+    subgraph "Components"
+        CHAT[ChatInterface]
+        LIB[DocumentLibrary]
+        CFG[Configuration]
+        APP[App Layout]
+        AGENT_UI[AgentSelector]
+    end
+
+    STATE --> MSGS
+    STATE --> DOCS
+    STATE --> AI
+    STATE --> VDB
+    STATE --> MATHPIX
+    STATE --> AGENTS
+    STATE --> UI
+
+    AI --> PERSIST
+    VDB --> PERSIST
+    MATHPIX --> PERSIST
+    AGENTS --> PERSIST
+    UI --> PERSIST
+    PERSIST --> LOCAL
+
+    CHAT -->|useAppStore| MSGS
+    LIB -->|useAppStore| DOCS
+    CFG -->|useAppStore| AI
+    CFG -->|useAppStore| VDB
+    CFG -->|useAppStore| MATHPIX
+    APP -->|useAppStore| UI
+    AGENT_UI -->|useAppStore| AGENTS
+
+    style STATE fill:#fff9c4
+    style PERSIST fill:#e8f5e9
+    style LOCAL fill:#f3e5f5
+    style MATHPIX fill:#e3f2fd
+    style AGENTS fill:#fce4ec
 ```
 
 ---
@@ -369,9 +772,10 @@ graph TB
 
     subgraph "Core Features"
         CHAT[ChatInterface<br/>Message Display + Input]
+        AGENT_SEL[AgentSelector<br/>RAG Agent Selection]
         DOCS[DocumentLibrary<br/>Document Management]
-        UPLOAD[UnifiedPDFProcessor<br/>File Upload + Processing]
-        CONFIG[UnifiedConfiguration<br/>AI & Vector DB Settings]
+        UPLOAD[UnifiedPDFProcessor<br/>Multi-Format Upload]
+        CONFIG[UnifiedConfiguration<br/>AI, VectorDB & Mathpix Settings]
         STATUS[SystemStatus<br/>Health Monitoring]
     end
 
@@ -392,7 +796,7 @@ graph TB
     SIDEBAR --> STATUS
 
     MAIN --> CHAT
-
+    CHAT --> AGENT_SEL
     CHAT --> MSG
     CHAT --> QUICK
     CHAT --> THINKING
@@ -403,303 +807,8 @@ graph TB
     style CLIENT fill:#e3f2fd
     style CHAT fill:#f3e5f5
     style UPLOAD fill:#fff3e0
-```
-
-### State Management Flow
-
-```mermaid
-graph LR
-    subgraph "Zustand Store"
-        STATE[Global State]
-        PERSIST[Persist Middleware]
-        LOCAL[(LocalStorage)]
-    end
-
-    subgraph "State Slices"
-        MSGS[Messages<br/>Session Only]
-        DOCS[Documents<br/>Session Only]
-        AI[AI Config<br/>Persisted]
-        VDB[Vector DB Config<br/>Persisted]
-        UI[UI Preferences<br/>Persisted]
-    end
-
-    subgraph "Components"
-        CHAT[ChatInterface]
-        LIB[DocumentLibrary]
-        CFG[Configuration]
-        APP[App Layout]
-    end
-
-    STATE --> MSGS
-    STATE --> DOCS
-    STATE --> AI
-    STATE --> VDB
-    STATE --> UI
-
-    AI --> PERSIST
-    VDB --> PERSIST
-    UI --> PERSIST
-    PERSIST --> LOCAL
-
-    CHAT -->|useAppStore| MSGS
-    LIB -->|useAppStore| DOCS
-    CFG -->|useAppStore| AI
-    CFG -->|useAppStore| VDB
-    APP -->|useAppStore| UI
-
-    style STATE fill:#fff9c4
-    style PERSIST fill:#e8f5e9
-    style LOCAL fill:#f3e5f5
-```
-
----
-
-## Processing Pipelines
-
-### PDF Text Extraction Pipeline
-
-```mermaid
-graph TD
-    START[PDF File] --> READER[FileReader API]
-    READER --> BUFFER[ArrayBuffer]
-    BUFFER --> PDFJS[PDF.js Loader]
-
-    PDFJS --> INIT{Initialize Success?}
-    INIT -->|No| ERROR1[Error: CDN/Worker Issue]
-    INIT -->|Yes| PAGES[Iterate Pages]
-
-    PAGES --> PAGE1[Page 1]
-    PAGES --> PAGE2[Page 2]
-    PAGES --> PAGEN[Page N]
-
-    PAGE1 --> TEXT1[Extract Text Content]
-    PAGE2 --> TEXT2[Extract Text Content]
-    PAGEN --> TEXTN[Extract Text Content]
-
-    TEXT1 --> CHECK1{Has Text?}
-    TEXT2 --> CHECK2{Has Text?}
-    TEXTN --> CHECKN{Has Text?}
-
-    CHECK1 -->|No| OCR1[Tesseract OCR]
-    CHECK2 -->|No| OCR2[Tesseract OCR]
-    CHECKN -->|No| OCRN[Tesseract OCR]
-
-    CHECK1 -->|Yes| COMBINE[Combine All Pages]
-    CHECK2 -->|Yes| COMBINE
-    CHECKN -->|Yes| COMBINE
-    OCR1 --> COMBINE
-    OCR2 --> COMBINE
-    OCRN --> COMBINE
-
-    COMBINE --> META[Extract Metadata]
-    META --> OUTPUT[PDFContent<br/>text + metadata]
-
-    style START fill:#e1f5ff
-    style OUTPUT fill:#e8f5e9
-    style ERROR1 fill:#ffebee
-```
-
-### Adaptive Chunking Pipeline
-
-```mermaid
-graph TD
-    START[Extracted Text] --> LENGTH{Text Length?}
-
-    LENGTH -->|> 20K chars| LARGE[Large Doc<br/>Chunk Size: 1000<br/>Overlap: 100]
-    LENGTH -->|10K - 20K| MEDIUM[Medium Doc<br/>Chunk Size: 800<br/>Overlap: 80]
-    LENGTH -->|5K - 10K| SMALL[Small Doc<br/>Chunk Size: 600<br/>Overlap: 60]
-    LENGTH -->|< 5K| TINY[Tiny Doc<br/>Chunk Size: 400<br/>Overlap: 40]
-
-    LARGE --> SPLIT[Split Text]
-    MEDIUM --> SPLIT
-    SMALL --> SPLIT
-    TINY --> SPLIT
-
-    SPLIT --> BOUNDARY[Find Sentence Boundaries]
-    BOUNDARY --> PRESERVE[Preserve Page Markers]
-    PRESERVE --> OVERLAP[Apply Overlap]
-    OVERLAP --> VALIDATE[Validate Chunks]
-
-    VALIDATE --> META[Add Chunk Metadata<br/>- Index<br/>- Start/End Position<br/>- Type<br/>- Importance]
-    META --> OUTPUT[Text Chunks Array]
-
-    style START fill:#e1f5ff
-    style OUTPUT fill:#e8f5e9
-    style LARGE fill:#ffebee
-    style MEDIUM fill:#fff9c4
-    style SMALL fill:#e0f2f1
-    style TINY fill:#f3e5f5
-```
-
-### Embedding Generation Pipeline
-
-```mermaid
-graph TD
-    START[Text Chunks] --> BATCH[Batch Processing]
-
-    BATCH --> CHUNK1[Chunk 1]
-    BATCH --> CHUNK2[Chunk 2]
-    BATCH --> CHUNKN[Chunk N]
-
-    CHUNK1 --> VALIDATE1{Valid Text?}
-    CHUNK2 --> VALIDATE2{Valid Text?}
-    CHUNKN --> VALIDATEN{Valid Text?}
-
-    VALIDATE1 -->|Yes| API1[Call Provider API]
-    VALIDATE2 -->|Yes| API2[Call Provider API]
-    VALIDATEN -->|Yes| APIN[Call Provider API]
-
-    VALIDATE1 -->|No| FALLBACK1[Fallback Embedding]
-    VALIDATE2 -->|No| FALLBACK2[Fallback Embedding]
-    VALIDATEN -->|No| FALLBACKN[Fallback Embedding]
-
-    API1 --> SUCCESS1{Success?}
-    API2 --> SUCCESS2{Success?}
-    APIN --> SUCCESSN{Success?}
-
-    SUCCESS1 -->|Yes| EMB1[Embedding Vector]
-    SUCCESS2 -->|Yes| EMB2[Embedding Vector]
-    SUCCESSN -->|Yes| EMBN[Embedding Vector]
-
-    SUCCESS1 -->|No| FALLBACK1
-    SUCCESS2 -->|No| FALLBACK2
-    SUCCESSN -->|No| FALLBACKN
-
-    FALLBACK1 --> EMB1
-    FALLBACK2 --> EMB2
-    FALLBACKN --> EMBN
-
-    EMB1 --> RATE[Rate Limit Delay<br/>100ms]
-    EMB2 --> RATE
-    EMBN --> RATE
-
-    RATE --> COLLECT[Collect All Embeddings]
-    COLLECT --> OUTPUT[Embeddings Array]
-
-    style START fill:#e1f5ff
-    style OUTPUT fill:#e8f5e9
-    style FALLBACK1 fill:#ffebee
-    style FALLBACK2 fill:#ffebee
-    style FALLBACKN fill:#ffebee
-```
-
-### Token Budget Allocation
-
-```mermaid
-graph TB
-    subgraph "Simple Query"
-        S_BUDGET[Token Budget: 4000]
-        S_CONTEXT[Context: 60%<br/>2400 tokens]
-        S_CRITIQUE[Critique: 0%<br/>0 tokens]
-        S_REFINE[Refinement: 40%<br/>1600 tokens]
-
-        S_BUDGET --> S_CONTEXT
-        S_BUDGET --> S_CRITIQUE
-        S_BUDGET --> S_REFINE
-    end
-
-    subgraph "Normal Query"
-        N_BUDGET[Token Budget: 4000]
-        N_CONTEXT[Context: 40%<br/>1600 tokens]
-        N_CRITIQUE[Critique: 30%<br/>1200 tokens]
-        N_REFINE[Refinement: 30%<br/>1200 tokens]
-
-        N_BUDGET --> N_CONTEXT
-        N_BUDGET --> N_CRITIQUE
-        N_BUDGET --> N_REFINE
-    end
-
-    subgraph "Complex Query"
-        C_BUDGET[Token Budget: 4000]
-        C_CONTEXT[Context: 30%<br/>1200 tokens]
-        C_CRITIQUE[Critique: 40%<br/>1600 tokens]
-        C_REFINE[Refinement: 30%<br/>1200 tokens]
-
-        C_BUDGET --> C_CONTEXT
-        C_BUDGET --> C_CRITIQUE
-        C_BUDGET --> C_REFINE
-    end
-
-    style S_CONTEXT fill:#e8f5e9
-    style N_CONTEXT fill:#fff9c4
-    style C_CONTEXT fill:#ffebee
-    style S_CRITIQUE fill:#f5f5f5
-    style N_CRITIQUE fill:#fff9c4
-    style C_CRITIQUE fill:#ffebee
-```
-
----
-
-## State Management
-
-### Application State Structure
-
-```typescript
-interface AppState {
-  // Session State (Not Persisted)
-  messages: Message[]           // Chat history
-  documents: Document[]         // Uploaded documents
-  isProcessing: boolean        // Processing state
-  modelStatus: ModelStatus     // AI model status
-  errors: ErrorMessage[]       // Error messages
-
-  // Persisted State
-  aiConfig: AIConfig           // AI provider configuration
-  vectorDBConfig: VectorDBConfig // Vector DB configuration
-  wandbConfig: WandbConfig     // W&B configuration (optional)
-
-  // UI State (Persisted)
-  activeTab: TabType          // Current active tab
-  sidebarOpen: boolean        // Sidebar visibility (mobile)
-  sidebarCollapsed: boolean   // Sidebar collapsed state
-
-  // Actions
-  addMessage: (message: Message) => void
-  updateMessage: (id: string, partial: Partial<Message>) => void
-  clearMessages: () => void
-  addDocument: (document: Document) => void
-  removeDocument: (id: string) => void
-  clearDocuments: () => void
-  setAIConfig: (config: AIConfig) => void
-  setVectorDBConfig: (config: VectorDBConfig) => void
-  // ... more actions
-}
-```
-
-### Message Flow Through State
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant UI
-    participant Store as Zustand Store
-    participant RAG as RAG Engine
-    participant AI as AI Client
-
-    User->>UI: Type Message
-    User->>UI: Click Send
-
-    UI->>Store: addMessage(userMessage)
-    Store->>Store: Update messages[]
-    Store-->>UI: State Updated
-    UI->>UI: Re-render with new message
-
-    UI->>RAG: query(messageContent)
-
-    activate RAG
-    RAG->>AI: Generate embedding
-    RAG->>RAG: Find relevant chunks
-    RAG->>AI: Generate response
-    AI-->>RAG: Response
-    RAG-->>UI: EnhancedQueryResponse
-    deactivate RAG
-
-    UI->>Store: addMessage(assistantMessage)
-    Store->>Store: Update messages[]
-    Store-->>UI: State Updated
-    UI->>UI: Re-render with response
-
-    UI-->>User: Display Complete Conversation
+    style AGENT_SEL fill:#fce4ec
+    style CONFIG fill:#e8f5e9
 ```
 
 ---
@@ -717,97 +826,32 @@ graph TB
         MEM[Memory Cache<br/>Active Session]
     end
 
+    subgraph "Optimization Features"
+        EMBED_CACHE[Embedding Cache<br/>80-90% API reduction]
+        QUERY_CACHE[Query Cache<br/>10-100x faster]
+        RATE_LIMIT[Rate Limiter<br/>Token Bucket]
+        CIRCUIT[Circuit Breaker<br/>Graceful degradation]
+    end
+
     subgraph "Cache Strategies"
         STATIC[Static Assets<br/>Cache First]
         API[API Calls<br/>Network First]
         HTML[HTML Pages<br/>Stale While Revalidate]
     end
 
-    subgraph "Data Lifecycle"
-        UPLOAD[Upload Document] --> IDB
-        QUERY[Run Query] --> MEM
-        CONFIG[Save Config] --> LOCAL
-        OFFLINE[Offline Mode] --> PWA
-    end
-
     STATIC --> PWA
     API --> MEM
     HTML --> PWA
+    
+    EMBED_CACHE --> MEM
+    QUERY_CACHE --> MEM
 
     style PWA fill:#e3f2fd
     style IDB fill:#f3e5f5
     style LOCAL fill:#fff9c4
     style MEM fill:#e8f5e9
-```
-
-### Fallback Mechanisms
-
-```mermaid
-graph TD
-    START[Operation Request] --> TRY1[Try Primary Method]
-
-    TRY1 --> CHECK1{Success?}
-    CHECK1 -->|Yes| SUCCESS[Return Result]
-    CHECK1 -->|No| LOG1[Log Error]
-
-    LOG1 --> TRY2[Try Fallback Method]
-    TRY2 --> CHECK2{Success?}
-    CHECK2 -->|Yes| SUCCESS
-    CHECK2 -->|No| LOG2[Log Error]
-
-    LOG2 --> TRY3[Try Secondary Fallback]
-    TRY3 --> CHECK3{Success?}
-    CHECK3 -->|Yes| SUCCESS
-    CHECK3 -->|No| FAIL[Return Error]
-
-    subgraph "Examples"
-        EX1[Embedding: API → Hash-based]
-        EX2[Streaming: Stream → Batch]
-        EX3[Search: Strict → Relaxed Threshold]
-    end
-
-    style SUCCESS fill:#e8f5e9
-    style FAIL fill:#ffebee
-    style LOG1 fill:#fff9c4
-    style LOG2 fill:#fff9c4
-```
-
----
-
-## Error Handling
-
-### Error Propagation Flow
-
-```mermaid
-graph TD
-    ERROR[Error Occurs] --> CATCH[Try-Catch Block]
-
-    CATCH --> LOG[Console.error]
-    LOG --> IDENTIFY{Error Type?}
-
-    IDENTIFY -->|Network| RETRY[Retry with Backoff]
-    IDENTIFY -->|API| FALLBACK[Use Fallback]
-    IDENTIFY -->|Validation| USER_MSG[Show User Message]
-    IDENTIFY -->|Unknown| GENERIC[Generic Error]
-
-    RETRY --> SUCCESS1{Retry Success?}
-    SUCCESS1 -->|Yes| RECOVER[Recovered]
-    SUCCESS1 -->|No| USER_MSG
-
-    FALLBACK --> SUCCESS2{Fallback Success?}
-    SUCCESS2 -->|Yes| RECOVER
-    SUCCESS2 -->|No| USER_MSG
-
-    USER_MSG --> STORE[Add to Error Store]
-    GENERIC --> STORE
-
-    STORE --> UI[Display Toast/Banner]
-    UI --> DISMISS[User Dismisses]
-    DISMISS --> REMOVE[Remove from Store]
-
-    style ERROR fill:#ffebee
-    style RECOVER fill:#e8f5e9
-    style UI fill:#fff9c4
+    style EMBED_CACHE fill:#e1f5ff
+    style QUERY_CACHE fill:#e1f5ff
 ```
 
 ---
@@ -819,7 +863,7 @@ graph TD
 ```mermaid
 graph TB
     subgraph "Client-Side Processing"
-        UPLOAD[User Uploads PDF]
+        UPLOAD[User Uploads Document]
         PARSE[Parse in Browser]
         EMBED[Generate Embeddings]
         STORE[Store Locally]
@@ -828,6 +872,7 @@ graph TB
     subgraph "API Calls"
         AI_API[AI Provider API<br/>Text Only]
         VDB_API[Vector DB API<br/>Optional]
+        MATHPIX_API[Mathpix API<br/>Equation Images Only]
     end
 
     subgraph "No Server Storage"
@@ -843,9 +888,11 @@ graph TB
     EMBED --> STORE
 
     STORE -.->|Optional| VDB_API
+    PARSE -.->|Equation Images| MATHPIX_API
 
     AI_API -.->|No Data Retention| NO_SERVER
     VDB_API -.->|User Controlled| NO_SERVER
+    MATHPIX_API -.->|Processing Only| NO_SERVER
 
     style UPLOAD fill:#e8f5e9
     style PARSE fill:#e8f5e9
@@ -858,77 +905,24 @@ graph TB
 
 ---
 
-## Deployment Architecture
-
-### Production Deployment
-
-```mermaid
-graph TB
-    subgraph "Build Process"
-        SRC[Source Code]
-        BUILD[Next.js Build]
-        STATIC[Static Export]
-        SW[Service Worker]
-    end
-
-    subgraph "Hosting"
-        CDN[CDN<br/>Vercel/Netlify]
-        EDGE[Edge Functions]
-        ASSETS[Static Assets]
-    end
-
-    subgraph "External Services"
-        AI_PROVIDERS[AI Providers<br/>19+ Options]
-        VECTOR_DBS[Vector Databases<br/>4 Options]
-    end
-
-    subgraph "Client"
-        BROWSER[User Browser]
-        CACHE[Browser Cache]
-        SW_CLIENT[Service Worker]
-    end
-
-    SRC --> BUILD
-    BUILD --> STATIC
-    BUILD --> SW
-
-    STATIC --> CDN
-    SW --> CDN
-    CDN --> EDGE
-    CDN --> ASSETS
-
-    BROWSER --> CDN
-    BROWSER --> CACHE
-    BROWSER --> SW_CLIENT
-
-    BROWSER -.->|API Calls| AI_PROVIDERS
-    BROWSER -.->|Optional| VECTOR_DBS
-
-    style CDN fill:#e3f2fd
-    style BROWSER fill:#e8f5e9
-    style AI_PROVIDERS fill:#f3e5f5
-```
-
----
-
 ## Summary
 
 This document provides comprehensive visual representations of:
 
-1. **System Architecture** - Overall structure and technology stack
-2. **Core Components** - RAG engine, AI client, and their interactions
-3. **Data Flows** - Document processing, query handling, and vector search
-4. **Component Interactions** - React component hierarchy and state management
-5. **Processing Pipelines** - PDF extraction, chunking, embedding generation
-6. **State Management** - Zustand store structure and message flow
-7. **Performance** - Caching strategies and fallback mechanisms
-8. **Security** - Privacy-focused architecture
-9. **Deployment** - Production deployment architecture
+1. **System Architecture** - Overall structure with agents and multimodal support
+2. **Core Components** - RAG engine, AI client, domain agents
+3. **Data Flows** - Document processing, query handling with agents
+4. **Domain Agents** - Specialized analysis capabilities
+5. **Multimodal Processing** - Images, tables, equations with Mathpix
+6. **Processing Pipelines** - PDF extraction, chunking, multi-format support
+7. **State Management** - Zustand store with agent settings
+8. **Performance** - Caching strategies and optimizations
+9. **Security** - Privacy-focused architecture
 
 These diagrams serve as a visual guide to understanding the complex interactions within the QuantumPDF ChatApp system.
 
 ---
 
-**Last Updated**: 2025-10-13
-**Version**: 1.0.0
-**Purpose**: Comprehensive architecture visualization
+**Last Updated**: November 2025
+**Version**: 3.0.0
+**New Features**: Domain Agents, Mathpix Integration, Multimodal Processing, Agent UI

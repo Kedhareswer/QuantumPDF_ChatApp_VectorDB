@@ -19,10 +19,10 @@ const PROVIDER_INFO = {
     description: "Open-source models via Inference Providers",
     models: [
       "meta-llama/Meta-Llama-3.3-70B-Instruct", 
-      "Qwen/Qwen2.5-7B-Instruct-1M", 
-      "microsoft/Phi-4", 
-      "deepseek-ai/DeepSeek-R1",
-      "google/gemma-2-2b-it"
+      "Qwen/Qwen2.5-72B-Instruct", 
+      "deepseek-ai/DeepSeek-V3", 
+      "mistralai/Mistral-Small-3.2-Instruct",
+      "google/gemma-2-27b-it"
     ],
     defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     baseUrl: "https://api-inference.huggingface.co",
@@ -35,8 +35,8 @@ const PROVIDER_INFO = {
   openai: {
     name: "OpenAI",
     description: "Premium API with high-quality models",
-    models: ["gpt-4o", "gpt-4o-mini", "o1-preview", "o1-mini", "gpt-4-turbo"],
-    defaultModel: "gpt-4o-mini",
+    models: ["gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-4o", "o3-2025-04-16"],
+    defaultModel: "gpt-5-mini",
     baseUrl: "https://api.openai.com/v1",
     features: ["High Quality", "Fast Response", "Latest Models"],
     limitations: ["Paid Service", "Usage Limits", "API Costs"],
@@ -47,7 +47,13 @@ const PROVIDER_INFO = {
   anthropic: {
     name: "Anthropic",
     description: "Claude models with strong reasoning",
-    models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
+    models: [
+      "claude-3-5-sonnet-20241022",
+      "claude-3-5-haiku-latest",
+      "claude-3-sonnet-20250219",
+      "claude-3-7-sonnet-latest",
+      "claude-opus-4-0"
+    ],
     defaultModel: "claude-3-5-sonnet-20241022",
     baseUrl: "https://api.anthropic.com",
     features: ["Strong Reasoning", "Long Context", "Safety Focused"],
@@ -60,16 +66,16 @@ const PROVIDER_INFO = {
     name: "AI/ML API",
     description: "Unified access to 200+ AI models",
     models: [
-      "gpt-4o",
-      "gpt-4o-mini", 
-      "claude-3-5-sonnet",
-      "deepseek-v3",
-      "deepseek-r1",
-      "llama-3.3-70b",
+      "gpt-5.1",
+      "gpt-5-mini", 
+      "claude-3-5-sonnet-20241022",
       "gemini-2.5-pro",
-      "gemini-2.5-flash"
+      "gemini-2.5-flash",
+      "llama-3.3-70b-instruct",
+      "deepseek-v3",
+      "mistral-small-2506"
     ],
-    defaultModel: "gpt-4o-mini",
+    defaultModel: "gpt-5-mini",
     baseUrl: "https://api.aimlapi.com/v1",
     features: ["200+ Models", "Competitive Pricing", "OpenAI Compatible"],
     limitations: ["Paid Service", "Third Party", "Model Availability"],
@@ -82,11 +88,12 @@ const PROVIDER_INFO = {
     description: "Ultra-fast inference with specialized hardware",
     models: [
       "llama-3.3-70b-versatile", 
-      "llama-3.1-8b-instant", 
-      "gemma2-9b-it",
-      "deepseek-r1-distill-llama-70b"
+      "mixtral-8x22b", 
+      "gemma2-27b-it",
+      "deepseek-r1-distill-llama-70b",
+      "qwen2.5-32b"
     ],
-    defaultModel: "llama-3.1-8b-instant",
+    defaultModel: "llama-3.3-70b-versatile",
     baseUrl: "https://api.groq.com/openai/v1",
     features: ["Ultra Fast", "Low Latency", "Open Source Models"],
     limitations: ["Limited Models", "No Embeddings", "Rate Limits"],
@@ -98,15 +105,15 @@ const PROVIDER_INFO = {
     name: "OpenRouter",
     description: "Universal gateway to 400+ AI models",
     models: [
-      "openai/gpt-4o",
-      "openai/gpt-4o-mini", 
-      "anthropic/claude-3.5-sonnet",
-      "meta-llama/llama-3.3-70b-instruct",
-      "google/gemini-2.0-flash-exp",
+      "openai/gpt-5.1",
+      "openai/gpt-5-mini", 
+      "anthropic/claude-3.5-sonnet-20241022",
+      "meta-llama/llama-3.3-405b-instruct",
+      "google/gemini-2.5-pro",
       "deepseek/deepseek-v3",
-      "openai/o1-preview"
+      "openai/o3-2025-04-16"
     ],
-    defaultModel: "openai/gpt-4o-mini",
+    defaultModel: "openai/gpt-5-mini",
     baseUrl: "https://openrouter.ai/api/v1",
     features: ["400+ Models", "Unified API", "Fallback Options"],
     limitations: ["Third Party", "Added Latency", "Cost Markup"],
@@ -149,8 +156,9 @@ const PROVIDER_INFO = {
     models: [
       "gemini-2.5-pro", 
       "gemini-2.5-flash", 
-      "gemini-2.0-flash-exp",
-      "gemini-1.5-pro"
+      "gemini-2.5-flash-lite",
+      "gemini-2.5-flash-image",
+      "gemini-2.5-flash-preview-09-2025"
     ],
     defaultModel: "gemini-2.5-flash",
     baseUrl: "https://generativelanguage.googleapis.com/v1",

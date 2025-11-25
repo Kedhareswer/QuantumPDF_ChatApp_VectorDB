@@ -2,12 +2,21 @@
 
 export interface TelemetryEvent {
   timestamp: Date
-  category: 'embedding' | 'query' | 'retrieval' | 'provider' | 'cache' | 'performance'
+  category: 'embedding' | 'query' | 'retrieval' | 'provider' | 'cache' | 'performance' | 'ingestion'
   action: string
   metadata?: Record<string, any>
   duration?: number
   success?: boolean
   error?: string
+}
+
+// Ingestion type tracking
+export type DocumentType = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'tsv' | 'xls' | 'ods' | 'unknown'
+
+export interface IngestionStats {
+  byType: Map<DocumentType, { count: number; totalChunks: number; avgProcessingTime: number; ocrUsed: number }>
+  totalOCRUsage: number
+  totalMultimodalExtracted: { images: number; tables: number; equations: number }
 }
 
 export interface PerformanceMetrics {
@@ -75,8 +84,145 @@ export class TelemetryCollector {
     }
   > = new Map()
 
+  // Document stats - actual tracking
+  private documentStats: {
+    documents: Map<string, { name: string; chunkCount: number; addedAt: Date; docType?: DocumentType; ocrUsed?: boolean }>
+    totalChunks: number
+  } = {
+    documents: new Map(),
+    totalChunks: 0
+  }
+
+  // Ingestion stats - track document types and processing methods
+  private ingestionStats: IngestionStats = {
+    byType: new Map(),
+    totalOCRUsage: 0,
+    totalMultimodalExtracted: { images: 0, tables: 0, equations: 0 }
+  }
+
   constructor(enabled: boolean = true) {
     this.enabled = enabled
+  }
+
+  // Track document addition with enhanced metadata
+  trackDocumentAdded(
+    documentId: string, 
+    name: string, 
+    chunkCount: number,
+    options?: { 
+      docType?: DocumentType
+      ocrUsed?: boolean
+      processingTime?: number
+      multimodal?: { images?: number; tables?: number; equations?: number }
+    }
+  ): void {
+    if (!this.enabled) return
+
+    const docType = options?.docType ?? this.detectDocumentType(name)
+    const ocrUsed = options?.ocrUsed ?? false
+
+    // Update document stats
+    this.documentStats.documents.set(documentId, {
+      name,
+      chunkCount,
+      addedAt: new Date(),
+      docType,
+      ocrUsed
+    })
+    this.documentStats.totalChunks += chunkCount
+
+    // Update ingestion stats by type
+    const typeStats = this.ingestionStats.byType.get(docType) ?? { 
+      count: 0, 
+      totalChunks: 0, 
+      avgProcessingTime: 0, 
+      ocrUsed: 0 
+    }
+    
+    const newCount = typeStats.count + 1
+    const newAvgTime = options?.processingTime 
+      ? (typeStats.avgProcessingTime * typeStats.count + options.processingTime) / newCount
+      : typeStats.avgProcessingTime
+    
+    this.ingestionStats.byType.set(docType, {
+      count: newCount,
+      totalChunks: typeStats.totalChunks + chunkCount,
+      avgProcessingTime: newAvgTime,
+      ocrUsed: typeStats.ocrUsed + (ocrUsed ? 1 : 0)
+    })
+
+    // Track OCR usage globally
+    if (ocrUsed) {
+      this.ingestionStats.totalOCRUsage++
+    }
+
+    // Track multimodal extractions
+    if (options?.multimodal) {
+      this.ingestionStats.totalMultimodalExtracted.images += options.multimodal.images ?? 0
+      this.ingestionStats.totalMultimodalExtracted.tables += options.multimodal.tables ?? 0
+      this.ingestionStats.totalMultimodalExtracted.equations += options.multimodal.equations ?? 0
+    }
+
+    this.record({
+      category: 'ingestion',
+      action: 'document_added',
+      metadata: { 
+        documentId, 
+        name, 
+        chunkCount, 
+        docType, 
+        ocrUsed,
+        multimodal: options?.multimodal
+      },
+      duration: options?.processingTime,
+      success: true
+    })
+  }
+
+  // Detect document type from filename
+  private detectDocumentType(filename: string): DocumentType {
+    const ext = filename.toLowerCase().split('.').pop() ?? ''
+    const typeMap: Record<string, DocumentType> = {
+      'pdf': 'pdf',
+      'docx': 'docx',
+      'doc': 'docx',
+      'xlsx': 'xlsx',
+      'xls': 'xls',
+      'csv': 'csv',
+      'tsv': 'tsv',
+      'ods': 'ods'
+    }
+    return typeMap[ext] ?? 'unknown'
+  }
+
+  // Track document removal
+  trackDocumentRemoved(documentId: string): void {
+    if (!this.enabled) return
+
+    const doc = this.documentStats.documents.get(documentId)
+    if (doc) {
+      this.documentStats.totalChunks -= doc.chunkCount
+      this.documentStats.documents.delete(documentId)
+
+      this.record({
+        category: 'performance',
+        action: 'document_removed',
+        metadata: { documentId, name: doc.name },
+        success: true
+      })
+    }
+  }
+
+  // Update document stats externally (for sync with RAG engine)
+  updateDocumentStats(total: number, totalChunks: number): void {
+    if (!this.enabled) return
+    
+    // If external update provides different numbers, reconcile
+    // This allows RAG engine to sync its state with telemetry
+    const currentDocCount = this.documentStats.documents.size
+    if (total !== currentDocCount || totalChunks !== this.documentStats.totalChunks) {
+      console.log(`Telemetry: Syncing document stats (${currentDocCount} -> ${total} docs, ${this.documentStats.totalChunks} -> ${totalChunks} chunks)`)
+    }
   }
 
   // Record an event
@@ -312,6 +458,8 @@ export class TelemetryCollector {
     this.cacheHits.clear()
     this.cacheMisses.clear()
     this.providerStats.clear()
+    this.clearDocumentStats()
+    this.clearIngestionStats()
   }
 
   // Helper methods
@@ -394,13 +542,63 @@ export class TelemetryCollector {
     totalChunks: number
     avgChunksPerDoc: number
   } {
-    // This would need to be updated by the RAG engine
-    // For now, return placeholder
+    const total = this.documentStats.documents.size
+    const totalChunks = this.documentStats.totalChunks
+    const avgChunksPerDoc = total > 0 ? totalChunks / total : 0
+
     return {
-      total: 0,
-      totalChunks: 0,
-      avgChunksPerDoc: 0,
+      total,
+      totalChunks,
+      avgChunksPerDoc,
     }
+  }
+
+  // Get detailed document list
+  getDocumentList(): Array<{ id: string; name: string; chunkCount: number; addedAt: Date; docType?: DocumentType; ocrUsed?: boolean }> {
+    return Array.from(this.documentStats.documents.entries()).map(([id, doc]) => ({
+      id,
+      ...doc
+    }))
+  }
+
+  // Get ingestion statistics
+  getIngestionStats(): {
+    byType: Array<{ type: DocumentType; count: number; totalChunks: number; avgProcessingTime: number; ocrUsageRate: number }>
+    totalDocuments: number
+    totalOCRUsage: number
+    ocrUsageRate: number
+    multimodalExtracted: { images: number; tables: number; equations: number }
+  } {
+    const byType = Array.from(this.ingestionStats.byType.entries()).map(([type, stats]) => ({
+      type,
+      count: stats.count,
+      totalChunks: stats.totalChunks,
+      avgProcessingTime: stats.avgProcessingTime,
+      ocrUsageRate: stats.count > 0 ? stats.ocrUsed / stats.count : 0
+    }))
+
+    const totalDocuments = this.documentStats.documents.size
+    
+    return {
+      byType,
+      totalDocuments,
+      totalOCRUsage: this.ingestionStats.totalOCRUsage,
+      ocrUsageRate: totalDocuments > 0 ? this.ingestionStats.totalOCRUsage / totalDocuments : 0,
+      multimodalExtracted: { ...this.ingestionStats.totalMultimodalExtracted }
+    }
+  }
+
+  // Clear all document stats
+  clearDocumentStats(): void {
+    this.documentStats.documents.clear()
+    this.documentStats.totalChunks = 0
+  }
+
+  // Clear ingestion stats
+  clearIngestionStats(): void {
+    this.ingestionStats.byType.clear()
+    this.ingestionStats.totalOCRUsage = 0
+    this.ingestionStats.totalMultimodalExtracted = { images: 0, tables: 0, equations: 0 }
   }
 }
 

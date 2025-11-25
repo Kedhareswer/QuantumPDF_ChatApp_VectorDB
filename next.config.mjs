@@ -1,9 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -11,7 +8,7 @@ const nextConfig = {
     unoptimized: true,
   },
   // Fix: Move serverComponentsExternalPackages to root level as serverExternalPackages
-  serverExternalPackages: ['onnxruntime-node', 'chromadb', '@huggingface/transformers'],
+  serverExternalPackages: ['onnxruntime-node', '@huggingface/transformers'],
   // Combine all experimental features into one property
   experimental: {
     // Fix: Remove serverComponentsExternalPackages from experimental
@@ -19,7 +16,7 @@ const nextConfig = {
   },
   // Configure page extensions
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
-  // Configure webpack
+  // Configure webpack (requires running Next with the webpack bundler)
   webpack: (config, { isServer, dev }) => {
     // Fixes npm packages that depend on `node:` protocol
     config.resolve.fallback = {
@@ -41,9 +38,7 @@ const nextConfig = {
         ...config.resolve.alias,
         // Replace server-only modules with empty mocks
         'onnxruntime-node': './src/utils/empty-module.js',
-        'chromadb': './src/utils/empty-module.js',
         '@huggingface/transformers': './src/utils/empty-module.js',
-        '@chroma-core/default-embed': './src/utils/empty-module.js',
         // Don't alias PDF.js, but ensure it's properly loaded
         // 'pdfjs-dist': 'pdfjs-dist/legacy/build/pdf',
       };
@@ -51,9 +46,7 @@ const nextConfig = {
       // Add more externals if needed
       config.externals = [...(config.externals || []), {
         'onnxruntime-node': 'commonjs onnxruntime-node',
-        'chromadb': 'commonjs chromadb',
         '@huggingface/transformers': 'commonjs @huggingface/transformers',
-        '@chroma-core/default-embed': 'commonjs @chroma-core/default-embed',
       }];
     }
 

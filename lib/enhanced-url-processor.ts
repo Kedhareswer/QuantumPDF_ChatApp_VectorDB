@@ -4,6 +4,16 @@
  */
 
 import { AIClient } from './ai-client'
+import * as pdfjsLib from 'pdfjs-dist'
+
+// Configure PDF.js worker
+if (typeof window !== 'undefined') {
+  const workerOptions = (pdfjsLib as any).GlobalWorkerOptions
+  const pdfjsVersion = (pdfjsLib as any).version || '3.11.174'
+  if (workerOptions) {
+    workerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsVersion}/pdf.worker.min.js`
+  }
+}
 
 export interface ProcessedContent {
   id: string
@@ -19,6 +29,7 @@ export interface ProcessedContent {
     wordCount: number
     language?: string
     title?: string
+    pageCount?: number
   }
   chunks: Array<{
     id: string
@@ -161,47 +172,132 @@ export class EnhancedURLProcessor {
     }
 
     try {
-      // For MVP, we'll extract basic metadata and provide a fallback
+      console.log(`Processing PDF from URL: ${url}`)
+      
+      // Fetch the PDF file
       const response = await fetch(url, {
-        method: 'HEAD',
         headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' }
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to access PDF: ${response.status}`)
+        throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`)
       }
 
-      const contentLength = response.headers.get('content-length')
+      const contentType = response.headers.get('content-type') || ''
+      if (!contentType.includes('application/pdf') && !url.toLowerCase().endsWith('.pdf')) {
+        throw new Error(`URL does not appear to be a PDF (content-type: ${contentType})`)
+      }
+
+      // Get the PDF as ArrayBuffer
+      const pdfData = await response.arrayBuffer()
+      const contentLength = pdfData.byteLength
       const title = this.extractTitleFromUrl(url)
 
-      // For now, provide metadata and suggest manual upload
-      const fallbackContent = `This is a PDF document that requires processing. 
-      
-To analyze this PDF content:
-1. Download the PDF from: ${url}
-2. Upload it directly to the system for full text analysis
-3. Or provide specific excerpts/quotes from the document
+      console.log(`PDF downloaded: ${Math.round(contentLength / 1024)} KB`)
+
+      // Extract text using PDF.js
+      let extractedText = ''
+      let pageCount = 0
+      let pdfMetadata: any = {}
+
+      try {
+        const loadingTask = (pdfjsLib as any).getDocument({
+          data: new Uint8Array(pdfData),
+          useWorkerFetch: false,
+          isEvalSupported: false,
+          useSystemFonts: true,
+        })
+
+        const pdf = await loadingTask.promise
+        pageCount = pdf.numPages
+        console.log(`PDF has ${pageCount} pages`)
+
+        // Get metadata
+        try {
+          const metadata = await pdf.getMetadata()
+          pdfMetadata = {
+            title: metadata.info?.Title || title,
+            author: metadata.info?.Author,
+            subject: metadata.info?.Subject,
+            keywords: metadata.info?.Keywords,
+            creator: metadata.info?.Creator,
+            producer: metadata.info?.Producer,
+            creationDate: metadata.info?.CreationDate,
+          }
+        } catch (metaError) {
+          console.warn('Could not extract PDF metadata:', metaError)
+        }
+
+        // Extract text from each page
+        for (let i = 1; i <= pageCount; i++) {
+          try {
+            const page = await pdf.getPage(i)
+            const textContent = await page.getTextContent()
+            const pageText = textContent.items
+              .filter((item: any) => 'str' in item)
+              .map((item: any) => item.str)
+              .join(' ')
+            
+            if (pageText.trim()) {
+              extractedText += `\n\n--- Page ${i} ---\n\n${pageText}`
+            }
+          } catch (pageError) {
+            console.warn(`Error extracting text from page ${i}:`, pageError)
+          }
+        }
+
+        extractedText = extractedText.trim()
+      } catch (pdfError) {
+        console.error('PDF.js extraction failed:', pdfError)
+        // Fall back to basic info if PDF.js fails
+        extractedText = ''
+      }
+
+      // If extraction failed or yielded no text, provide fallback
+      if (!extractedText) {
+        extractedText = `PDF Document: ${pdfMetadata.title || title}
+
+This PDF could not be fully processed (it may be image-based or encrypted).
 
 PDF Details:
 - URL: ${url}
-- Estimated size: ${contentLength ? `${Math.round(parseInt(contentLength) / 1024)} KB` : 'Unknown'}
-- Title: ${title}`
+- Size: ${Math.round(contentLength / 1024)} KB
+- Pages: ${pageCount || 'Unknown'}
+${pdfMetadata.author ? `- Author: ${pdfMetadata.author}` : ''}
+${pdfMetadata.subject ? `- Subject: ${pdfMetadata.subject}` : ''}
 
-      const chunks = this.createContentChunks(fallbackContent, url, { title })
+For full content analysis of image-based PDFs:
+1. Download the PDF from the URL above
+2. Upload it directly to enable OCR processing`
+      }
+
+      // Truncate if too long
+      if (extractedText.length > this.config.maxContentLength!) {
+        extractedText = extractedText.substring(0, this.config.maxContentLength!) + '\n\n[Content truncated...]'
+      }
+
+      const chunks = this.createContentChunks(extractedText, url, {
+        title: pdfMetadata.title || title,
+        ...pdfMetadata
+      })
 
       return {
         id: url,
         url,
-        title: title || 'PDF Document',
-        content: fallbackContent,
+        title: pdfMetadata.title || title || 'PDF Document',
+        content: extractedText,
         contentType: 'pdf',
         metadata: {
-          title,
-          wordCount: fallbackContent.split(/\s+/).length
+          title: pdfMetadata.title || title,
+          authors: pdfMetadata.author ? [pdfMetadata.author] : undefined,
+          keywords: pdfMetadata.keywords ? pdfMetadata.keywords.split(/[,;]/).map((k: string) => k.trim()) : undefined,
+          wordCount: extractedText.split(/\s+/).length,
+          pageCount
         },
         chunks
       }
     } catch (error) {
+      console.error('PDF URL processing error:', error)
       throw new Error(`Failed to process PDF: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }

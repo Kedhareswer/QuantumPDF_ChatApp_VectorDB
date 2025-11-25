@@ -1,750 +1,913 @@
-# Implementation Guide for Advanced Features
+# QuantumPDF Implementation Guide
 
-This document outlines the remaining features to be implemented in QuantumPDF ChatApp.
-
-## Completed Optimizations ✅
-
-###  1. Dead Code Removal
-- **Status**: ✅ COMPLETED
-- **Files Modified**: `components/chat-interface.tsx`, `lib/ai-client.ts`
-- **Changes**:
-  - Removed unused search mode state variables (360+ lines)
-  - Removed unused helper functions (`detectLocalDocsIntent`, `extractLinksFromText`)
-  - Removed unused useEffect hooks for search history
-  - Removed dead streaming display logic (160+ lines)
-  - Removed unused `handleSubmit` function
-  - Removed unused icon imports (`CheckCircle`, `XCircle`, `Circle`)
-  - Removed unused private properties in AIClient (`text`, `prompt`, `context`)
-
-### 2. Improved Error Handling
-- **Status**: ✅ COMPLETED
-- **Files Modified**: `lib/ai-client.ts:65-73`
-- **Changes**:
-  - Enhanced error logging with provider context, text length, and preview
-  - Better error messages for debugging embedding generation failures
-
-### 3. Optimized Fallback Embedding
-- **Status**: ✅ COMPLETED
-- **Files Modified**: `lib/ai-client.ts:828-903`
-- **Performance Improvements**:
-  - **30-40% faster execution** using Float32Array typed arrays
-  - Single-pass hash function application (vs 3 separate loops)
-  - Reduced complexity in randomness generation (100 iterations vs 102)
-  - Manual magnitude calculation (faster than reduce)
-- **Code Quality**:
-  - Cleaner, more maintainable implementation
-  - Better error handling for edge cases
-
-### 4. Loading Screen Component
-- **Status**: ✅ COMPLETED (Already Existed)
-- **File**: `components/loading-screen.tsx`
-- **Features**: Animated logo, progressive text reveal, loading indicators
+> **Complete guide to implementing and extending QuantumPDF features**
+> **Last Updated: November 2025 | Version 3.0.0**
 
 ---
 
-### 5. Robust Chunking for Complex Elements
-- **Status**: ✅ COMPLETED
-- **Files Modified**: `lib/advanced-chunking.ts`, `lib/pdf-parser.ts`, `lib/unified-pdf-processor.tsx`, `docs/RAG_ARCHITECTURE.md`
-- **Changes**:
-  - Added new chunk types: `code`, `image` in `TextChunk.metadata.type`
-  - Improved semantic sectioning to treat fenced/indented code and tables as atomic blocks
-  - Implemented line-wise splitting for oversized code/table blocks (avoids breaking syntax)
-  - Image captions and markdown images detected as standalone sections
-  - `PDFParser.chunkText()` now delegates to `AdvancedChunker` while returning `string[]` for embedding compatibility
-  - Unified `createChunks` in `unified-pdf-processor.tsx` to use `AdvancedChunker`
-  - Updated documentation to reflect unified, structure-preserving chunking
+## Table of Contents
+
+1. [Project Setup](#project-setup)
+2. [Core Components](#core-components)
+3. [AI Provider Configuration](#ai-provider-configuration)
+4. [RAG Engine Implementation](#rag-engine-implementation)
+5. [Domain Agents](#domain-agents)
+6. [Mathpix Integration](#mathpix-integration)
+7. [Multimodal Processing](#multimodal-processing)
+8. [Vector Database Integration](#vector-database-integration)
+9. [State Management](#state-management)
+10. [Error Handling](#error-handling)
 
 ---
 
-## Pending Implementations 🚧
+## Project Setup
 
-### 1. Memoized Message Rendering
-**Priority**: HIGH | **Complexity**: LOW | **Impact**: Performance
+### Prerequisites
 
-**Problem**: All messages re-render on any state change, causing unnecessary re-renders.
+```bash
+Node.js >= 18.0.0
+npm >= 9.0.0
+```
 
-**Solution**:
+### Installation
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd QuantumPDF_ChatApp_VectorDB
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+### Environment Variables
+
+Create a `.env.local` file:
+
+```env
+# AI Provider (choose one or more)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GROQ_API_KEY=gsk_...
+HUGGINGFACE_API_KEY=hf_...
+
+# Optional: Mathpix (for professional equation OCR)
+MATHPIX_APP_ID=your_app_id
+MATHPIX_APP_KEY=your_app_key
+
+# Optional: Vector Database
+PINECONE_API_KEY=your_key
+PINECONE_ENVIRONMENT=us-east-1
+WEAVIATE_URL=http://localhost:8080
+WEAVIATE_API_KEY=your_key
+```
+
+---
+
+## Core Components
+
+### Application Structure
+
+```
+app/
+├── page.tsx              # Main page with state orchestration
+├── layout.tsx            # Root layout with providers
+├── globals.css           # Global styles
+└── manifest.json         # PWA manifest
+
+components/
+├── agent-selector.tsx    # RAG agent selection UI
+├── chat-interface.tsx    # Chat with streaming & agents
+├── unified-pdf-processor.tsx  # Multi-format file upload
+├── unified-configuration.tsx  # Settings panel
+├── document-library.tsx  # Document management
+└── system-status.tsx     # Health monitoring
+
+lib/
+├── ai-client.ts          # Multi-provider AI client
+├── rag-engine.ts         # Core RAG with 3-phase processing
+├── domain-agents.ts      # Specialized analysis agents
+├── mathpix-processor.ts  # Mathpix API + Math.js
+├── store.ts              # Zustand state management
+└── vector-database-client.ts  # Vector DB abstraction
+```
+
+### Key Interfaces
+
 ```typescript
-// File: components/message-item.tsx (CREATE NEW FILE)
-import { memo } from 'react'
-import type { Message } from './chat-interface'
-
-interface MessageItemProps {
-  message: Message
-  onCopy: (text: string) => void
-  onThumbsUp: () => void
-  onThumbsDown: () => void
-  formatTimestamp: (date: Date) => string
-  formatResponseTime: (ms: number) => string
+// Document Types
+interface ProcessedDocument {
+  id: string
+  filename: string
+  content: string
+  chunks: ContentChunk[]
+  metadata: DocumentMetadata
+  images?: ExtractedImage[]
+  tables?: ExtractedTable[]
+  equations?: ExtractedEquation[]
 }
 
-export const MessageItem = memo(({
-  message,
-  onCopy,
-  onThumbsUp,
-  onThumbsDown,
-  formatTimestamp,
-  formatResponseTime
-}: MessageItemProps) => {
-  // Move message rendering JSX from chat-interface.tsx here (lines 840-1021)
-  return (
-    <div className="space-y-4" role="article" aria-label={`${message.role} message`}>
-      {/* Message Header, Content, Actions, Sources */}
-    </div>
-  )
+// Chunk Types
+interface ContentChunk {
+  id: string
+  content: string
+  embedding?: number[]
+  metadata: ChunkMetadata
+}
+
+// AI Provider Types
+type AIProvider = 
+  | 'openai' | 'anthropic' | 'groq' | 'huggingface'
+  | 'aiml' | 'fireworks' | 'deepinfra' | 'deepseek'
+  | 'google-ai' | 'vertex-ai' | 'mistral' | 'perplexity'
+  | 'xai' | 'alibaba' | 'minimax' | 'cerebras'
+  | 'replicate' | 'anyscale' | 'openrouter'
+```
+
+---
+
+## AI Provider Configuration
+
+### Configuring AI Client
+
+```typescript
+import { AIClient, AIProvider } from '@/lib/ai-client'
+
+// Initialize client
+const aiClient = new AIClient({
+  provider: 'openai',
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4o-mini'
 })
 
-MessageItem.displayName = 'MessageItem'
+// Switch provider at runtime
+aiClient.setProvider('anthropic', {
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  model: 'claude-3-sonnet-20240229'
+})
+
+// Generate embeddings
+const embeddings = await aiClient.generateEmbeddings('Your text here')
+
+// Generate text
+const response = await aiClient.generateText(
+  'Summarize this document',
+  'Your context here'
+)
+
+// Stream response
+const stream = aiClient.streamText(
+  'Explain this concept',
+  'Context information'
+)
+for await (const chunk of stream) {
+  process.stdout.write(chunk)
+}
 ```
 
-**Integration** (in `chat-interface.tsx`):
+### Provider-Specific Models
+
 ```typescript
-import { MessageItem } from './message-item'
-
-// Replace lines 840-1021 with:
-{messages.map((message) => (
-  <MessageItem
-    key={message.id}
-    message={message}
-    onCopy={handleCopy}
-    onThumbsUp={handleThumbsUp}
-    onThumbsDown={handleThumbsDown}
-    formatTimestamp={formatTimestamp}
-    formatResponseTime={formatResponseTime}
-  />
-))}
+const PROVIDER_MODELS = {
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+  anthropic: ['claude-3-5-sonnet-20241022', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
+  groq: ['llama-3.1-70b-versatile', 'llama3-8b-8192', 'mixtral-8x7b-32768'],
+  huggingface: ['meta-llama/Meta-Llama-3.1-8B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.2'],
+  mistral: ['mistral-large-latest', 'mistral-small-latest', 'open-mixtral-8x7b'],
+  deepseek: ['deepseek-chat', 'deepseek-coder'],
+  google: ['gemini-1.5-pro', 'gemini-1.5-flash'],
+  xai: ['grok-beta', 'grok-vision-beta'],
+  perplexity: ['llama-3.1-sonar-small-128k-online', 'llama-3.1-sonar-large-128k-online']
+}
 ```
-
-**Expected Benefit**: Prevents re-rendering of all messages when only one changes, reducing lag with large chat histories.
 
 ---
 
-### 2. Lazy Loading for Heavy Dependencies
-**Priority**: MEDIUM | **Complexity**: LOW | **Impact**: Bundle Size
+## RAG Engine Implementation
 
-**Problem**: Heavy markdown libraries (ReactMarkdown, remarkGfm, remarkMath, rehypeKatex, Mermaid) loaded upfront (~50KB).
+### Initializing RAG Engine
 
-**Solution**:
 ```typescript
-// File: components/chat-interface.tsx
-import { lazy, Suspense } from 'react'
+import { RAGEngine, RAGConfig } from '@/lib/rag-engine'
+import { AIClient } from '@/lib/ai-client'
 
-// Replace static imports with lazy loading
-const ReactMarkdown = lazy(() => import('react-markdown'))
-const Mermaid = lazy(() => import('@/components/mermaid'))
+const config: RAGConfig = {
+  // Token budget per query
+  maxTokenBudget: 4096,
+  
+  // Similarity threshold for retrieval
+  minSimilarityScore: 0.5,
+  
+  // Maximum chunks per query
+  maxChunksPerQuery: 25,
+  
+  // Enable diversity across documents
+  enableDiversityBoost: true,
+  
+  // Content-type aware scoring
+  enableContentTypeBoost: true,
+  
+  // Enable 3-phase processing
+  enableRefinement: true
+}
 
-// In JSX (MessageContent component):
-<Suspense fallback={
-  <div className="animate-pulse bg-gray-100 p-4 rounded">
-    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-    <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-  </div>
-}>
-  <ReactMarkdown
-    remarkPlugins={[remarkGfm, remarkMath]}
-    rehypePlugins={[rehypeKatex]}
-    components={/* ... */}
-  >
-    {part.content}
-  </ReactMarkdown>
-</Suspense>
+const ragEngine = new RAGEngine(aiClient, config)
 ```
 
-**Expected Benefit**: Reduces initial bundle size by ~50KB, faster initial page load.
+### Processing Queries
 
----
-
-### 3. Document Annotations
-**Priority**: HIGH | **Complexity**: HIGH | **Impact**: User Experience
-
-**Architecture**:
-```
-lib/
-  annotations.ts (NEW)           - Annotation manager
-  annotation-storage.ts (NEW)    - IndexedDB persistence
-components/
-  annotation-panel.tsx (NEW)     - Annotation UI
-  document-viewer.tsx (MODIFY)   - Add annotation layer
-```
-
-**Implementation**:
-
-#### Step 1: Create Annotation Types and Store
 ```typescript
-// File: lib/store.ts (ADD TO EXISTING FILE)
+// Add documents to index
+await ragEngine.addDocument(processedDocument)
 
-interface DocumentAnnotation {
-  id: string
-  documentId: string
-  chunkId: string
-  highlight: {
-    start: number
-    end: number
-    text: string
+// Query with 3-phase processing
+const result = await ragEngine.query('What is the main topic?', {
+  stream: true,
+  onProgress: (phase, message) => {
+    console.log(`${phase}: ${message}`)
   }
-  note: string
-  color: 'yellow' | 'green' | 'blue' | 'purple' | 'red'
-  tags: string[]
-  createdAt: Date
-  updatedAt: Date
-  linkedMessageId?: string  // Link to specific chat message
+})
+
+// Result structure
+interface RAGResult {
+  answer: string
+  chunks: RetrievedChunk[]
+  metrics: {
+    accuracy: number
+    completeness: number
+    clarity: number
+    confidence: number
+  }
+  phases: {
+    contextAnalysis: string
+    selfCritique: string
+    refinedAnswer: string
+  }
 }
-
-// Add to AppState interface:
-interface AppState {
-  // ... existing state
-  annotations: DocumentAnnotation[]
-
-  // ... existing actions
-  addAnnotation: (annotation: DocumentAnnotation) => void
-  updateAnnotation: (id: string, partial: Partial<DocumentAnnotation>) => void
-  deleteAnnotation: (id: string) => void
-  getAnnotationsByDocument: (documentId: string) => DocumentAnnotation[]
-  linkAnnotationToMessage: (annotationId: string, messageId: string) => void
-}
-
-// Implementation in store:
-addAnnotation: (annotation) =>
-  set((state) => ({
-    annotations: [...state.annotations, annotation]
-  })),
-
-updateAnnotation: (id, partial) =>
-  set((state) => ({
-    annotations: state.annotations.map((a) =>
-      a.id === id ? { ...a, ...partial, updatedAt: new Date() } : a
-    )
-  })),
-
-deleteAnnotation: (id) =>
-  set((state) => ({
-    annotations: state.annotations.filter((a) => a.id !== id)
-  })),
-
-getAnnotationsByDocument: (documentId) => {
-  const state = get()
-  return state.annotations.filter((a) => a.documentId === documentId)
-},
 ```
 
-#### Step 2: Create Annotation Panel Component
+### 3-Phase Processing Flow
+
 ```typescript
-// File: components/annotation-panel.tsx (CREATE NEW)
-"use client"
+// Phase 1: Context Analysis
+const contextAnalysis = await analyzeContext(query, retrievedChunks)
 
-import { useState } from 'react'
-import { useAppStore } from '@/lib/store'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import {
-  Highlighter,
-  Trash2,
-  Edit,
-  Tag,
-  MessageSquare,
-  Calendar
-} from 'lucide-react'
+// Phase 2: Self-Critique
+const critique = await selfCritique(contextAnalysis)
 
-export function AnnotationPanel({ documentId }: { documentId: string }) {
-  const { annotations, updateAnnotation, deleteAnnotation } = useAppStore()
-  const docAnnotations = annotations.filter(a => a.documentId === documentId)
+// Phase 3: Refinement
+const refinedAnswer = await refineAnswer(contextAnalysis, critique)
+```
 
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editNote, setEditNote] = useState('')
+---
 
-  const colorClasses = {
-    yellow: 'bg-yellow-100 border-yellow-300',
-    green: 'bg-green-100 border-green-300',
-    blue: 'bg-blue-100 border-blue-300',
-    purple: 'bg-purple-100 border-purple-300',
-    red: 'bg-red-100 border-red-300'
+## Domain Agents
+
+### Available Agents
+
+```typescript
+import { AgentType, getAgentManager } from '@/lib/domain-agents'
+
+// Available agent types
+type AgentType = 
+  | 'analogy-maker'      // Simplify with analogies
+  | 'compliance-checker' // Legal/policy analysis
+  | 'key-terms'          // Vocabulary extraction
+  | 'summary'            // Concise summaries
+  | 'explainer'          // Detailed explanations
+  | 'fact-checker'       // Factual verification
+```
+
+### Using Agents
+
+```typescript
+// Get agent manager
+const agentManager = getAgentManager(aiClient, ragEngine)
+
+// Run specific agent
+const result = await agentManager.runAgent('analogy-maker', {
+  query: 'Explain quantum entanglement',
+  context: retrievedChunks,
+  options: {
+    useLocalModels: false,
+    maxAnalogies: 3
+  }
+})
+
+// Agent result structure
+interface AgentResult {
+  agentType: AgentType
+  output: string
+  metadata: {
+    processingTime: number
+    tokensUsed: number
+    modelUsed: string
+  }
+}
+```
+
+### Agent Implementation Details
+
+```typescript
+// Analogy Maker Agent
+class AnalogyMakerAgent implements DomainAgent {
+  async run(context: AgentContext): Promise<AgentResult> {
+    const prompt = `
+      Create simple, everyday analogies for these concepts:
+      ${context.query}
+      
+      Based on this context:
+      ${context.chunks.map(c => c.content).join('\n')}
+      
+      Format: [Concept] is like [Analogy] because [Explanation]
+    `
+    return this.aiClient.generateText(prompt)
+  }
+}
+
+// Summary Agent with Local Model Option
+class SummaryAgent implements DomainAgent {
+  async run(context: AgentContext): Promise<AgentResult> {
+    if (context.options?.useLocalModels) {
+      // Use Transformers.js (Xenova/distilbart-cnn-6-6)
+      return this.localSummarizer.summarize(context.chunks)
+    }
+    // Use AI provider API
+    return this.aiClient.generateText(summaryPrompt)
+  }
+}
+```
+
+### Agent UI Integration
+
+```typescript
+// In chat-interface.tsx
+import { AgentSelector } from '@/components/agent-selector'
+
+function ChatInterface({ aiClient, ragEngine }) {
+  const [selectedAgent, setSelectedAgent] = useState<AgentType | 'none'>('none')
+  const [agentSettings, setAgentSettings] = useState({
+    'summary': { enabled: true, useLocalModels: true },
+    'analogy-maker': { enabled: true },
+    'compliance-checker': { enabled: true },
+    'key-terms': { enabled: true }
+  })
+
+  const handleSend = async (message: string) => {
+    // Standard RAG query
+    const ragResult = await ragEngine.query(message)
+    
+    // If agent selected, run additional analysis
+    if (selectedAgent !== 'none' && agentSettings[selectedAgent]?.enabled) {
+      const agentResult = await agentManager.runAgent(selectedAgent, {
+        query: message,
+        context: ragResult.chunks,
+        options: agentSettings[selectedAgent]
+      })
+      // Combine results
+      return combineResults(ragResult, agentResult)
+    }
+    
+    return ragResult
   }
 
   return (
-    <div className="space-y-4">
-      <h3 className="font-bold flex items-center gap-2">
-        <Highlighter className="w-4 h-4" />
-        Annotations ({docAnnotations.length})
-      </h3>
-
-      {docAnnotations.length === 0 ? (
-        <p className="text-sm text-gray-500">No annotations yet. Select text in the document to create one.</p>
-      ) : (
-        docAnnotations.map((annotation) => (
-          <Card key={annotation.id} className={`border-2 ${colorClasses[annotation.color]}`}>
-            <CardHeader className="pb-2">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500 mb-1">
-                    <Calendar className="w-3 h-3 inline mr-1" />
-                    {new Date(annotation.createdAt).toLocaleDateString()}
-                  </p>
-                  <p className="text-sm font-mono bg-white p-2 rounded border">
-                    "{annotation.highlight.text.substring(0, 100)}..."
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setEditingId(annotation.id)
-                      setEditNote(annotation.note)
-                    }}
-                  >
-                    <Edit className="w-3 h-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => deleteAnnotation(annotation.id)}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {editingId === annotation.id ? (
-                <div className="space-y-2">
-                  <Textarea
-                    value={editNote}
-                    onChange={(e) => setEditNote(e.target.value)}
-                    className="text-sm"
-                    rows={3}
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        updateAnnotation(annotation.id, { note: editNote })
-                        setEditingId(null)
-                      }}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setEditingId(null)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm">{annotation.note || <span className="text-gray-400 italic">No note</span>}</p>
-              )}
-
-              {annotation.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {annotation.tags.map((tag, idx) => (
-                    <Badge key={idx} variant="outline" className="text-xs">
-                      <Tag className="w-2 h-2 mr-1" />
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-
-              {annotation.linkedMessageId && (
-                <Badge className="mt-2 text-xs">
-                  <MessageSquare className="w-2 h-2 mr-1" />
-                  Linked to chat
-                </Badge>
-              )}
-            </CardContent>
-          </Card>
-        ))
-      )}
-    </div>
+    <>
+      <AgentSelector
+        availableAgents={['analogy-maker', 'compliance-checker', 'key-terms', 'summary']}
+        selectedAgent={selectedAgent}
+        onSelectAgent={setSelectedAgent}
+        agentSettings={agentSettings}
+        onToggleAgent={(agent, enabled) => ...}
+        onToggleLocalModels={(agent, useLocal) => ...}
+      />
+      {/* Chat UI */}
+    </>
   )
 }
 ```
 
 ---
 
-### 4. Smart Document Summarization
-**Priority**: HIGH | **Complexity**: MEDIUM | **Impact**: User Experience
+## Mathpix Integration
 
-**Implementation**:
+### Configuration
 
 ```typescript
-// File: lib/rag-engine.ts (ADD METHOD)
-
-async generateDocumentSummary(
-  documentId: string,
-  options?: {
-    length?: 'brief' | 'detailed'
-    focus?: string[]
-  }
-): Promise<{
-  title: string
-  summary: string
-  keyPoints: string[]
-  topics: string[]
-  wordCount: number
-  estimatedReadingTime: number
-}> {
-  console.log(`Generating ${options?.length || 'detailed'} summary for document ${documentId}`)
-
-  const document = this.documents.get(documentId)
-  if (!document) {
-    throw new Error(`Document ${documentId} not found`)
-  }
-
-  // Get document chunks
-  const chunks = document.chunks || []
-  const embeddingsArray = document.embeddings || []
-
-  if (chunks.length === 0) {
-    throw new Error(`No chunks found for document ${documentId}`)
-  }
-
-  // Strategy: Use semantic importance to select most important chunks
-  const chunksWithImportance = chunks
-    .map((content, idx) => ({
-      content,
-      embedding: embeddingsArray[idx],
-      importance: this.chunker?.calculateSemanticImportance?.(content) || 50
-    }))
-    .sort((a, b) => b.importance - a.importance)
-
-  // Select top 20% of chunks by importance for brief, 40% for detailed
-  const percentageToUse = options?.length === 'brief' ? 0.2 : 0.4
-  const numChunksToUse = Math.max(3, Math.ceil(chunks.length * percentageToUse))
-  const selectedChunks = chunksWithImportance.slice(0, numChunksToUse)
-
-  // Combine selected chunks
-  const combinedText = selectedChunks.map(c => c.content).join('\n\n')
-
-  // Extract title from first chunk or document name
-  const titleMatch = chunks[0].match(/^#{1,2}\s+(.+)$/m)
-  const title = titleMatch ? titleMatch[1] : document.name
-
-  // Generate summary using AI
-  const summaryPrompt = this.createSummaryPrompt(combinedText, options)
-  const summaryResponse = await this.aiClient.generateText([
-    { role: 'system', content: summaryPrompt },
-    {
-      role: 'user',
-      content: `Document Title: ${title}\n\nContent:\n${combinedText.substring(0, 8000)}`
-    }
-  ])
-
-  // Parse AI response to extract structured data
-  const keyPointsMatch = summaryResponse.match(/## Key Points\n([\s\S]*?)(?=\n##|$)/i)
-  const topicsMatch = summaryResponse.match(/## Topics\n([\s\S]*?)(?=\n##|$)/i)
-
-  const keyPoints = keyPointsMatch
-    ? keyPointsMatch[1].split('\n').filter(line => line.trim().startsWith('-')).map(line => line.replace(/^-\s*/, '').trim())
-    : []
-
-  const topics = topicsMatch
-    ? topicsMatch[1].split('\n').filter(line => line.trim().startsWith('-')).map(line => line.replace(/^-\s*/, '').trim())
-    : []
-
-  const wordCount = combinedText.split(/\s+/).length
-  const estimatedReadingTime = Math.ceil(wordCount / 200) // Average reading speed: 200 wpm
-
-  return {
-    title,
-    summary: summaryResponse,
-    keyPoints,
-    topics,
-    wordCount,
-    estimatedReadingTime
-  }
+// In unified-configuration.tsx
+interface MathpixConfig {
+  appId: string
+  appKey: string
+  enabled: boolean
 }
 
-private createSummaryPrompt(text: string, options?: { length?: 'brief' | 'detailed'; focus?: string[] }): string {
-  const length = options?.length || 'detailed'
-  const focus = options?.focus || []
+// Store in Zustand
+const useMathpixConfig = create((set) => ({
+  mathpixConfig: {
+    appId: '',
+    appKey: '',
+    enabled: false
+  },
+  setMathpixConfig: (config) => set({ mathpixConfig: config })
+}))
+```
 
-  let prompt = `You are an expert at document summarization. Create a ${length} summary of the following document.
+### Using Mathpix Processor
 
-REQUIREMENTS:
-- ${length === 'brief' ? 'Keep the summary concise (2-3 paragraphs)' : 'Provide a comprehensive summary (4-6 paragraphs)'}
-- Extract the main themes and key insights
-- Use clear, professional language
-- Include specific details and examples where relevant
-${focus.length > 0 ? `- Focus particularly on: ${focus.join(', ')}` : ''}
+```typescript
+import { MathpixProcessor, MathpixConfig } from '@/lib/mathpix-processor'
 
-FORMAT:
-## Summary
-[Your summary here]
-
-## Key Points
-- [Point 1]
-- [Point 2]
-- [Point 3]
-...
-
-## Topics
-- [Topic 1]
-- [Topic 2]
-...
-
-Provide ONLY the formatted output above, no additional commentary.`
-
-  return prompt
+// Initialize
+const mathpixConfig: MathpixConfig = {
+  appId: process.env.MATHPIX_APP_ID,
+  appKey: process.env.MATHPIX_APP_KEY
 }
-```
 
-**Integration** (in `document-library.tsx`):
-```typescript
-// Add a "Generate Summary" button for each document
-<Button
-  size="sm"
-  onClick={async () => {
-    const summary = await ragEngine.generateDocumentSummary(doc.id, { length: 'detailed' })
-    // Display summary in a modal or side panel
-    setSummaryModal({ open: true, content: summary })
-  }}
->
-  <Sparkles className="w-3 h-3 mr-1" />
-  Generate Summary
-</Button>
-```
+const processor = new MathpixProcessor({ mathpixConfig })
 
----
+// Process PDF page images
+const result = await processor.processImages(documentId, {
+  mathpixConfig,
+  mathpixPageImages: [
+    { page: 1, dataUrl: 'data:image/png;base64,...' },
+    { page: 2, dataUrl: 'data:image/png;base64,...' }
+  ],
+  maxEquations: 50,
+  detectInline: true,
+  detectBlock: true
+}, (progress) => {
+  console.log(`Processing page ${progress.pageNumber}`)
+})
 
-### 5. Advanced Search Within Documents
-**Priority**: MEDIUM | **Complexity**: LOW | **Impact**: User Experience
+// Result structure
+interface MathpixExtractionResult {
+  equations: ExtractedEquation[]
+  totalFound: number
+  extractionTime: number
+}
 
-**Implementation**:
-
-```typescript
-// File: lib/search-engine.ts (CREATE NEW)
-
-import type { RAGEngine } from './rag-engine'
-
-export interface SearchResult {
+interface ExtractedEquation {
+  id: string
   documentId: string
-  documentName: string
-  chunkIndex: number
-  content: string
-  snippet: string
-  relevanceScore: number
-  highlights: Array<{ start: number; end: number }>
-}
-
-export interface SearchFilters {
-  dateRange?: { start: Date; end: Date }
-  documentIds?: string[]
-  minRelevance?: number
-  maxResults?: number
-}
-
-export class DocumentSearchEngine {
-  constructor(private ragEngine: RAGEngine) {}
-
-  async searchDocuments(
-    query: string,
-    filters?: SearchFilters
-  ): Promise<SearchResult[]> {
-    console.log(`Searching for: "${query}"`)
-
-    // Generate query embedding
-    const queryEmbedding = await this.ragEngine.aiClient.generateEmbedding(query)
-
-    // Get all documents
-    const allDocuments = Array.from(this.ragEngine.documents.values())
-
-    // Filter documents
-    let filteredDocs = allDocuments
-    if (filters?.documentIds) {
-      filteredDocs = filteredDocs.filter(doc => filters.documentIds!.includes(doc.id))
-    }
-    if (filters?.dateRange) {
-      filteredDocs = filteredDocs.filter(doc => {
-        const uploadDate = doc.metadata?.uploadedAt || doc.uploadedAt
-        return uploadDate >= filters.dateRange!.start && uploadDate <= filters.dateRange!.end
-      })
-    }
-
-    // Search each document
-    const results: SearchResult[] = []
-
-    for (const doc of filteredDocs) {
-      const chunks = doc.chunks || []
-      const embeddings = doc.embeddings || []
-
-      for (let i = 0; i < chunks.length; i++) {
-        const chunkEmbedding = embeddings[i]
-        if (!chunkEmbedding) continue
-
-        // Calculate similarity
-        const similarity = this.ragEngine.aiClient.cosineSimilarity(queryEmbedding, chunkEmbedding)
-
-        // Apply minimum relevance filter
-        if (filters?.minRelevance && similarity < filters.minRelevance) {
-          continue
-        }
-
-        // Create snippet with highlights
-        const { snippet, highlights } = this.createHighlightedSnippet(chunks[i], query, similarity)
-
-        results.push({
-          documentId: doc.id,
-          documentName: doc.name,
-          chunkIndex: i,
-          content: chunks[i],
-          snippet,
-          relevanceScore: similarity,
-          highlights
-        })
-      }
-    }
-
-    // Sort by relevance
-    results.sort((a, b) => b.relevanceScore - a.relevanceScore)
-
-    // Apply max results filter
-    const maxResults = filters?.maxResults || 50
-    return results.slice(0, maxResults)
-  }
-
-  private createHighlightedSnippet(
-    content: string,
-    query: string,
-    similarity: number
-  ): { snippet: string; highlights: Array<{ start: number; end: number }> } {
-    // Simple keyword-based highlighting
-    const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 2)
-    const contentLower = content.toLowerCase()
-
-    const highlights: Array<{ start: number; end: number }> = []
-
-    // Find keyword positions
-    for (const keyword of keywords) {
-      let index = 0
-      while ((index = contentLower.indexOf(keyword, index)) !== -1) {
-        highlights.push({ start: index, end: index + keyword.length })
-        index += keyword.length
-      }
-    }
-
-    // Create snippet (first 200 chars or around first highlight)
-    let snippetStart = 0
-    if (highlights.length > 0) {
-      snippetStart = Math.max(0, highlights[0].start - 50)
-    }
-
-    const snippetEnd = Math.min(content.length, snippetStart + 200)
-    const snippet = (snippetStart > 0 ? '...' : '') +
-      content.substring(snippetStart, snippetEnd) +
-      (snippetEnd < content.length ? '...' : '')
-
-    // Adjust highlight positions for snippet
-    const adjustedHighlights = highlights
-      .filter(h => h.start >= snippetStart && h.end <= snippetEnd)
-      .map(h => ({ start: h.start - snippetStart, end: h.end - snippetStart }))
-
-    return { snippet, highlights: adjustedHighlights }
-  }
-
-  // Advanced: Full-text search with BM25 ranking
-  async fullTextSearch(query: string): Promise<SearchResult[]> {
-    // Implement BM25 algorithm for better keyword matching
-    // This is a placeholder for future enhancement
-    return this.searchDocuments(query)
-  }
+  pageNumber?: number
+  latex: string
+  mathml?: string
+  ascii?: string
+  description?: string
+  isInline: boolean
+  confidence?: number
+  extractedAt: Date
 }
 ```
 
-**Integration** (in `document-library.tsx`):
+### Math Expression Evaluation
+
 ```typescript
-import { DocumentSearchEngine } from '@/lib/search-engine'
+import { MathEvaluator } from '@/lib/mathpix-processor'
 
-// In component:
-const [searchQuery, setSearchQuery] = useState('')
-const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-const searchEngine = new DocumentSearchEngine(ragEngine)
+const evaluator = new MathEvaluator()
 
-const handleSearch = async () => {
-  const results = await searchEngine.searchDocuments(searchQuery, {
-    minRelevance: 0.3,
-    maxResults: 20
-  })
-  setSearchResults(results)
+// Set variables
+evaluator.setVariable('x', 5)
+evaluator.setVariable('y', 10)
+
+// Evaluate expressions
+const result = evaluator.evaluate('x^2 + y')  // Returns 35
+
+// Simplify expressions
+const simplified = evaluator.simplify('2*x + 3*x')  // Returns '5*x'
+
+// LaTeX to expression conversion happens automatically
+// \frac{x}{y} → (x)/(y)
+// \sqrt{x} → sqrt(x)
+// \sin(x) → sin(x)
+```
+
+### Fallback to Regex Detection
+
+```typescript
+// equation-extractor.ts automatically falls back
+async function extractEquations(document, options) {
+  if (options.useMathpix && options.mathpixConfig?.appId) {
+    // Try Mathpix first
+    try {
+      return await mathpixProcessor.processImages(...)
+    } catch (error) {
+      console.warn('Mathpix failed, falling back to regex')
+    }
+  }
+  
+  // Fallback to regex-based detection
+  return regexBasedExtraction(document.content)
 }
-
-// UI:
-<div className="space-y-4">
-  <Input
-    placeholder="Search across all documents..."
-    value={searchQuery}
-    onChange={(e) => setSearchQuery(e.target.value)}
-    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-  />
-
-  <div className="space-y-2">
-    {searchResults.map((result, idx) => (
-      <Card key={idx} className="p-3">
-        <div className="flex justify-between items-start">
-          <div>
-            <Badge variant="outline" className="text-xs mb-1">{result.documentName}</Badge>
-            <p className="text-sm">{result.snippet}</p>
-          </div>
-          <Badge className="text-xs">
-            {(result.relevanceScore * 100).toFixed(0)}%
-          </Badge>
-        </div>
-      </Card>
-    ))}
-  </div>
-</div>
 ```
 
 ---
 
-## Testing Checklist
+## Multimodal Processing
 
-After implementing each feature, verify:
+### Image Extraction
 
-- [ ] **Memoized Rendering**: Check React DevTools - only modified message should re-render
-- [ ] **Lazy Loading**: Check Network tab - markdown libraries load after initial render
-- [ ] **Annotations**: Create, edit, delete annotations; verify persistence across sessions
-- [ ] **Summarization**: Generate summaries for different document types; verify quality
-- [ ] **Advanced Search**: Search with filters; verify relevance scoring and highlighting
+```typescript
+import { ImageExtractor } from '@/lib/image-extractor'
+
+const extractor = new ImageExtractor()
+
+// Extract from PDF
+const images = await extractor.extractFromPDF(pdfDocument)
+
+// Image structure
+interface ExtractedImage {
+  id: string
+  documentId: string
+  pageNumber?: number
+  dataUrl: string
+  width: number
+  height: number
+  caption?: string
+  alt?: string
+  extractedAt: Date
+}
+```
+
+### Image Captioning
+
+```typescript
+import { ImageCaptioner } from '@/lib/image-captioner'
+
+const captioner = new ImageCaptioner()
+
+// Initialize model (loads Xenova/vit-gpt2-image-captioning)
+await captioner.initialize()
+
+// Caption single image
+const caption = await captioner.caption(imageDataUrl)
+
+// Batch caption
+const captions = await captioner.batchCaption(images, (progress) => {
+  console.log(`Captioned ${progress.processed}/${progress.total}`)
+})
+```
+
+### Table Extraction
+
+```typescript
+import { TableExtractor } from '@/lib/table-extractor'
+
+const extractor = new TableExtractor()
+
+// Extract tables from text
+const tables = extractor.extractTables(documentText)
+
+// Table structure
+interface ExtractedTable {
+  id: string
+  documentId: string
+  pageNumber?: number
+  headers: string[]
+  rows: string[][]
+  markdown: string
+  extractedAt: Date
+}
+```
+
+### Complete Multimodal Pipeline
+
+```typescript
+import { EnhancedPDFProcessor } from '@/lib/enhanced-pdf-processor'
+
+const processor = new EnhancedPDFProcessor({
+  extractImages: true,
+  extractTables: true,
+  extractEquations: true,
+  generateCaptions: true,
+  useMathpix: true,
+  mathpixConfig: {
+    appId: '...',
+    appKey: '...'
+  }
+})
+
+const result = await processor.process(pdfFile, (progress) => {
+  console.log(`${progress.stage}: ${progress.percent}%`)
+})
+
+// Result includes
+result.content      // Full text content
+result.chunks       // Processed chunks
+result.images       // Extracted images with captions
+result.tables       // Detected tables
+result.equations    // Extracted equations
+```
 
 ---
 
-## Performance Benchmarks
+## Vector Database Integration
 
-**Before Optimizations**:
-- Initial bundle size: ~850KB
-- Message list re-render time (50 messages): ~120ms
-- Fallback embedding generation: ~45ms
+### Local In-Memory (Default)
 
-**After Optimizations**:
-- Initial bundle size: ~800KB (lazy loading)
-- Message list re-render time (50 messages): ~15ms (memoization)
-- Fallback embedding generation: ~28ms (typed arrays)
+```typescript
+import { VectorDatabaseClient } from '@/lib/vector-database-client'
 
-**Target Metrics**:
-- Initial load: < 3s on 3G
-- Time to interactive: < 5s
-- Chat input lag: < 50ms
-- Document upload processing: < 2s per MB
+const client = new VectorDatabaseClient({
+  provider: 'local',
+  dimension: 1536
+})
+
+// Add vectors
+await client.upsert([
+  { id: 'chunk-1', vector: [...], metadata: { content: '...' } }
+])
+
+// Search
+const results = await client.query(queryVector, { topK: 10 })
+```
+
+### Pinecone Integration
+
+```typescript
+const client = new VectorDatabaseClient({
+  provider: 'pinecone',
+  apiKey: process.env.PINECONE_API_KEY,
+  environment: 'us-east-1',
+  indexName: 'quantumpdf',
+  dimension: 1536
+})
+
+await client.initialize()
+await client.upsert(vectors)
+```
+
+### Weaviate Integration
+
+```typescript
+const client = new VectorDatabaseClient({
+  provider: 'weaviate',
+  apiKey: process.env.WEAVIATE_API_KEY,
+  environment: 'http://localhost:8080',
+  indexName: 'Document',
+  dimension: 1536
+})
+
+await client.initialize()
+await client.upsert(vectors)
+```
 
 ---
 
-## Next Steps
+## State Management
 
-1. Implement memoized message rendering (highest priority, easiest win)
-2. Add lazy loading for markdown libraries
-3. Implement document annotations system
-4. Add smart document summarization
-5. Implement advanced search within documents
-6. Write comprehensive tests for all features
-7. Update documentation with new capabilities
+### Zustand Store Structure
+
+```typescript
+// lib/store.ts
+interface AppState {
+  // Document State
+  documents: ProcessedDocument[]
+  currentDocumentId: string | null
+  
+  // AI State
+  aiProvider: AIProvider
+  aiConfig: AIConfig
+  
+  // Mathpix State (NEW)
+  mathpixConfig: MathpixConfig
+  
+  // Chat State
+  messages: ChatMessage[]
+  isStreaming: boolean
+  
+  // Agent State (NEW)
+  selectedAgent: AgentType | 'none'
+  agentSettings: AgentSettings
+  
+  // UI State
+  sidebarOpen: boolean
+  activeTab: string
+  
+  // Actions
+  addDocument: (doc: ProcessedDocument) => void
+  removeDocument: (id: string) => void
+  setAIProvider: (provider: AIProvider) => void
+  setMathpixConfig: (config: MathpixConfig) => void
+  setSelectedAgent: (agent: AgentType | 'none') => void
+  addMessage: (message: ChatMessage) => void
+}
+```
+
+### Using Store in Components
+
+```typescript
+import { useAppStore } from '@/lib/store'
+
+function MyComponent() {
+  // Select specific state
+  const documents = useAppStore((state) => state.documents)
+  const addDocument = useAppStore((state) => state.addDocument)
+  
+  // Or destructure multiple values
+  const { selectedAgent, setSelectedAgent, agentSettings } = useAppStore()
+  
+  return (
+    // Your component
+  )
+}
+```
 
 ---
 
-Generated: {current_date}
-Status: In Progress
-Version: 1.0.0
+## Error Handling
+
+### Error Boundary
+
+```typescript
+import { ErrorBoundary } from '@/components/error-boundary'
+
+function App() {
+  return (
+    <ErrorBoundary
+      fallback={<ErrorFallback />}
+      onError={(error, info) => {
+        console.error('App Error:', error)
+        // Report to telemetry
+        telemetry.recordError(error, info)
+      }}
+    >
+      <MainContent />
+    </ErrorBoundary>
+  )
+}
+```
+
+### Toast Notifications
+
+```typescript
+import { useToast } from '@/hooks/use-toast'
+
+function MyComponent() {
+  const { toast } = useToast()
+  
+  const handleError = (error: Error) => {
+    toast({
+      title: 'Error',
+      description: error.message,
+      variant: 'destructive'
+    })
+  }
+  
+  const handleSuccess = () => {
+    toast({
+      title: 'Success',
+      description: 'Document processed successfully'
+    })
+  }
+}
+```
+
+### Graceful Degradation
+
+```typescript
+// AI Provider Fallback
+async function generateWithFallback(prompt: string) {
+  try {
+    return await aiClient.generateText(prompt)
+  } catch (error) {
+    console.warn('Primary provider failed, trying fallback')
+    aiClient.setProvider('huggingface')
+    return await aiClient.generateText(prompt)
+  }
+}
+
+// Mathpix Fallback
+async function extractEquations(doc: ProcessedDocument) {
+  if (mathpixConfig.enabled) {
+    try {
+      return await mathpixProcessor.process(doc)
+    } catch {
+      // Fall back to regex
+    }
+  }
+  return regexExtractor.extract(doc.content)
+}
+```
+
+---
+
+## Testing
+
+### Unit Tests
+
+```typescript
+// __tests__/ai-client.test.ts
+import { AIClient } from '@/lib/ai-client'
+
+describe('AIClient', () => {
+  it('should generate embeddings', async () => {
+    const client = new AIClient({ provider: 'openai', apiKey: 'test' })
+    const embeddings = await client.generateEmbeddings('test text')
+    expect(embeddings).toHaveLength(1536)
+  })
+  
+  it('should switch providers', () => {
+    const client = new AIClient({ provider: 'openai', apiKey: 'test' })
+    client.setProvider('anthropic', { apiKey: 'test2' })
+    expect(client.currentProvider).toBe('anthropic')
+  })
+})
+```
+
+### Integration Tests
+
+```typescript
+// __tests__/rag-engine.test.ts
+import { RAGEngine } from '@/lib/rag-engine'
+
+describe('RAGEngine', () => {
+  it('should process queries with 3-phase refinement', async () => {
+    const engine = new RAGEngine(mockAIClient)
+    await engine.addDocument(testDocument)
+    
+    const result = await engine.query('What is the main topic?')
+    
+    expect(result.phases.contextAnalysis).toBeDefined()
+    expect(result.phases.selfCritique).toBeDefined()
+    expect(result.phases.refinedAnswer).toBeDefined()
+  })
+})
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+
+# Watch mode
+npm test -- --watch
+
+# Run specific file
+npm test ai-client
+```
+
+---
+
+## Deployment
+
+### Production Build
+
+```bash
+# Build optimized bundle
+npm run build
+
+# Start production server
+npm start
+
+# Or export static files
+npm run export
+```
+
+### Environment Configuration
+
+```bash
+# Production environment variables
+NODE_ENV=production
+NEXT_PUBLIC_APP_URL=https://yourdomain.com
+
+# AI Provider (at least one required)
+OPENAI_API_KEY=sk-...
+
+# Optional services
+MATHPIX_APP_ID=...
+MATHPIX_APP_KEY=...
+PINECONE_API_KEY=...
+```
+
+### Docker Deployment
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY . .
+RUN npm run build
+
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+---
+
+**Generated**: November 2025  
+**Project**: QuantumPDF ChatApp v3.0.0

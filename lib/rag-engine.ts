@@ -61,6 +61,8 @@ interface QualityGate {
 import { AIClient } from "./ai-client"
 import { PDFParser } from "./pdf-parser"
 import type { TextChunk } from "./advanced-chunking"
+import { DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
+import { getTelemetry } from "./telemetry"
 
 interface Document {
   id: string
@@ -123,6 +125,16 @@ interface RAGFilterOptions {
   minSimilarity?: number
 }
 
+// Engine status for consistent error handling
+export interface RAGEngineStatus {
+  initialized: boolean
+  degraded: boolean
+  degradedReasons: string[]
+  connectionHealthy: boolean
+  embeddingAvailable: boolean
+  textGenerationAvailable: boolean
+}
+
 export class RAGEngine {
   private documents: Document[] = []
   private aiClient: AIClient | null = null
@@ -131,19 +143,42 @@ export class RAGEngine {
   private currentConfig: AIConfig | null = null
   private tokenBudget = 4000 // Default token budget
   private showThinking = false // Option to show/hide thinking process
+  
+  // Consistent status tracking
+  private engineStatus: RAGEngineStatus = {
+    initialized: false,
+    degraded: false,
+    degradedReasons: [],
+    connectionHealthy: false,
+    embeddingAvailable: false,
+    textGenerationAvailable: false
+  }
 
   constructor() {
     this.pdfParser = new PDFParser()
   }
+  
+  // Get current engine status for consistent error reporting
+  getEngineStatus(): RAGEngineStatus {
+    return { ...this.engineStatus }
+  }
 
   async initialize(config?: AIConfig): Promise<void> {
+    // Reset status at start of initialization
+    this.engineStatus = {
+      initialized: false,
+      degraded: false,
+      degradedReasons: [],
+      connectionHealthy: false,
+      embeddingAvailable: false,
+      textGenerationAvailable: false
+    }
+    
     try {
       if (config) {
-              // RAGEngine: Initializing with new config
-
-      // Create AI client with the provided configuration
-      this.aiClient = new AIClient(config)
-      this.currentConfig = config
+        // RAGEngine: Initializing with new config
+        this.aiClient = new AIClient(config)
+        this.currentConfig = config
       }
       
       if (!this.aiClient) {
@@ -156,10 +191,13 @@ export class RAGEngine {
       console.log("RAGEngine: Testing AI provider connection...")
       const connectionTest = await this.aiClient.testConnection()
       if (!connectionTest) {
-        console.warn("RAGEngine: AI provider connection test failed, but continuing initialization")
-        // Don't throw here - allow initialization to continue with potential fallback
+        console.warn("RAGEngine: AI provider connection test failed, entering degraded mode")
+        this.engineStatus.degraded = true
+        this.engineStatus.degradedReasons.push("Connection test failed - provider may be unavailable")
+        this.engineStatus.connectionHealthy = false
       } else {
         console.log("RAGEngine: AI provider connection test successful")
+        this.engineStatus.connectionHealthy = true
       }
 
       // Test embedding generation with error handling
@@ -170,37 +208,50 @@ export class RAGEngine {
           throw new Error("Invalid embedding response during initialization")
         }
         console.log(`RAGEngine: Embedding test successful, dimension: ${testEmbedding.length}`)
+        this.engineStatus.embeddingAvailable = true
       } catch (embeddingError) {
         const errorMessage = embeddingError instanceof Error ? embeddingError.message : "Unknown embedding error"
-        console.error(`RAGEngine: Embedding generation failed during initialization: ${errorMessage}`)
+        console.warn(`RAGEngine: Embedding generation failed: ${errorMessage}`)
         
-        // For Cohere and other providers that might have embedding issues, 
-        // we can still continue if text generation works
-        if (errorMessage.includes("embedding")) {
-          console.warn("RAGEngine: Continuing initialization despite embedding issues - will use fallback embeddings")
-        } else {
-          throw embeddingError // Re-throw non-embedding specific errors
-        }
+        // Mark as degraded but continue - will use fallback embeddings
+        this.engineStatus.degraded = true
+        this.engineStatus.degradedReasons.push(`Embedding unavailable: ${errorMessage}`)
+        this.engineStatus.embeddingAvailable = false
+        console.warn("RAGEngine: Will use fallback hash-based embeddings")
       }
 
-      // Test text generation as a final check
+      // Test text generation - this is critical
       console.log("RAGEngine: Testing text generation...")
       try {
         const testResponse = await this.aiClient.generateText([
-          { role: "user", content: "Hello, this is a connectivity test." }
+          { role: "user", content: "Hi" }
         ])
         if (!testResponse || typeof testResponse !== 'string') {
           throw new Error("Invalid text generation response during initialization")
         }
         console.log("RAGEngine: Text generation test successful")
+        this.engineStatus.textGenerationAvailable = true
       } catch (textError) {
         const errorMessage = textError instanceof Error ? textError.message : "Unknown text generation error"
-        console.error(`RAGEngine: Text generation failed during initialization: ${errorMessage}`)
-        throw textError // Text generation is essential, so fail initialization
+        console.error(`RAGEngine: Text generation failed: ${errorMessage}`)
+        this.engineStatus.textGenerationAvailable = false
+        this.engineStatus.degradedReasons.push(`Text generation failed: ${errorMessage}`)
+        
+        // Text generation is essential - fail initialization
+        throw new Error(`Text generation is required but failed: ${errorMessage}`)
       }
 
-      console.log("RAGEngine: Initialization completed successfully")
+      // Determine final status
       this.isInitialized = true
+      this.engineStatus.initialized = true
+      
+      if (this.engineStatus.degraded) {
+        console.warn("RAGEngine: Initialized in DEGRADED mode:")
+        this.engineStatus.degradedReasons.forEach(reason => console.warn(`  - ${reason}`))
+      } else {
+        console.log("RAGEngine: Initialization completed successfully (FULL mode)")
+      }
+      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown initialization error"
       console.error(`RAGEngine: Initialization failed: ${errorMessage}`)
@@ -215,6 +266,7 @@ export class RAGEngine {
       }
       
       this.isInitialized = false
+      this.engineStatus.initialized = false
       throw new Error(`RAG Engine initialization failed: ${errorMessage}`)
     }
   }
@@ -284,7 +336,7 @@ export class RAGEngine {
     console.warn("RAGEngine: Generating fallback embedding")
     
     // Simple hash-based embedding for fallback
-    const dimension = 1024
+    const dimension = DEFAULT_EMBEDDING_DIMENSION
     const embedding = new Array(dimension).fill(0)
     
     for (let i = 0; i < text.length; i++) {
@@ -467,6 +519,14 @@ export class RAGEngine {
         console.error("❌ Document verification: NOT found in RAG engine documents array")
       }
       
+      // Track in telemetry
+      try {
+        const telemetry = getTelemetry()
+        telemetry.trackDocumentAdded(document.id, document.name, document.chunks.length)
+      } catch (telemetryError) {
+        console.warn("Failed to track document in telemetry:", telemetryError)
+      }
+      
       console.log("=== RAG Engine: Document addition complete ===")
       
     } catch (error) {
@@ -483,7 +543,12 @@ export class RAGEngine {
     }
   }
 
-  private findRelevantChunks(questionEmbedding: number[], topK: number, filters?: RAGFilterOptions) {
+  private findRelevantChunks(
+    questionEmbedding: number[], 
+    topK: number, 
+    filters?: RAGFilterOptions,
+    question?: string
+  ) {
     const allChunks: Array<{
       content: string;
       source: string;
@@ -497,6 +562,15 @@ export class RAGEngine {
       level?: number;
       chunkType?: string;
     }> = [];
+
+    // Analyze question for content-type-aware boosting
+    const contentTypeBoosts = question 
+      ? this.analyzeQuestionForContentTypes(question)
+      : { tableBoost: 1.0, imageBoost: 1.0, equationBoost: 1.0, dataBoost: 1.0 }
+    
+    if (question) {
+      console.log("Content type boosts for query:", contentTypeBoosts)
+    }
 
     try {
       console.log("Enhanced findRelevantChunks: Starting multi-document search")
@@ -629,8 +703,8 @@ export class RAGEngine {
                   const chunkContent = typeof chunk === 'string' ? chunk : chunk.content
                   const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
 
-                  // Get semantic importance
-                  const semanticImportance = this.extractSemanticImportance(chunk, doc.metadata)
+                  // Get semantic importance with question-aware content type boosting
+                  const semanticImportance = this.extractSemanticImportance(chunk, doc.metadata, contentTypeBoosts)
 
                   // Build enhanced source string with metadata
                   let sourceString = `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`
@@ -878,9 +952,9 @@ export class RAGEngine {
       const chunkLimit = this.getOptimalChunkLimit(questionType)
       console.log(`Question type: ${questionType}, chunk limit: ${chunkLimit}`)
       
-      // Find relevant chunks
+      // Find relevant chunks with question-aware boosting
       console.log("Finding relevant chunks...")
-      let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit, filters);
+      let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit, filters, question);
       console.log(`Found ${relevantChunks.length} relevant chunks`)
       
       // Debug: Log chunk similarities
@@ -1132,6 +1206,56 @@ Applied improvements based on critical review to ensure accuracy and clarity.
     return 'general'
   }
 
+  /**
+   * Analyze question to determine if it requires specific content types
+   * Returns multipliers for different content types based on question context
+   */
+  private analyzeQuestionForContentTypes(question: string): {
+    tableBoost: number
+    imageBoost: number
+    equationBoost: number
+    dataBoost: number
+  } {
+    const q = question.toLowerCase()
+    
+    let tableBoost = 1.0
+    let imageBoost = 1.0
+    let equationBoost = 1.0
+    let dataBoost = 1.0
+
+    // Table-related queries
+    if (/\b(table|column|row|cell|spreadsheet|grid|matrix|compare|comparison|versus|vs)\b/.test(q)) {
+      tableBoost = 1.5
+      dataBoost = 1.3
+    }
+
+    // Data/numerical queries
+    if (/\b(number|data|statistic|percentage|percent|%|amount|count|total|sum|average|mean|median|value|figure|metric|kpi|rate)\b/.test(q)) {
+      dataBoost = 1.5
+      tableBoost = 1.3
+    }
+
+    // Image/visual queries  
+    if (/\b(image|picture|photo|diagram|chart|graph|visual|illustration|figure|screenshot|show|display|look)\b/.test(q)) {
+      imageBoost = 1.5
+    }
+
+    // Equation/formula queries
+    if (/\b(equation|formula|calculate|calculation|math|mathematical|derivative|integral|function|solve|compute|algorithm)\b/.test(q)) {
+      equationBoost = 1.5
+      dataBoost = 1.2
+    }
+
+    // Chart/graph specific
+    if (/\b(trend|growth|decline|increase|decrease|change|over time|timeline|progression|bar|line|pie|scatter)\b/.test(q)) {
+      imageBoost = 1.4
+      tableBoost = 1.3
+      dataBoost = 1.3
+    }
+
+    return { tableBoost, imageBoost, equationBoost, dataBoost }
+  }
+
   private getOptimalChunkLimit(questionType: string): number {
     const limits = {
       'summary': 8,
@@ -1362,6 +1486,16 @@ IMPORTANT:
 
       const removedCount = initialLength - this.documents.length
       console.log(`Removed ${removedCount} document(s) with ID: ${documentId}`)
+      
+      // Track in telemetry
+      if (removedCount > 0) {
+        try {
+          const telemetry = getTelemetry()
+          telemetry.trackDocumentRemoved(documentId)
+        } catch (telemetryError) {
+          console.warn("Failed to track document removal in telemetry:", telemetryError)
+        }
+      }
     } catch (error) {
       console.error("Error removing document:", error)
     }
@@ -1369,6 +1503,16 @@ IMPORTANT:
 
   clearDocuments() {
     try {
+      // Track each document removal in telemetry before clearing
+      try {
+        const telemetry = getTelemetry()
+        for (const doc of this.documents) {
+          telemetry.trackDocumentRemoved(doc.id)
+        }
+      } catch (telemetryError) {
+        console.warn("Failed to track document clearing in telemetry:", telemetryError)
+      }
+      
       this.documents = []
       console.log("Cleared all documents from RAG engine")
     } catch (error) {
@@ -1547,16 +1691,23 @@ IMPORTANT:
     }
   }
 
-  private extractSemanticImportance(chunk: string | any, docMetadata?: any): number {
+  private extractSemanticImportance(
+    chunk: string | any, 
+    docMetadata?: any,
+    contentTypeBoosts?: { tableBoost: number; imageBoost: number; equationBoost: number; dataBoost: number }
+  ): number {
     let importance = 1.0
 
     // Check if chunk is a TextChunk object with metadata
     const chunkMetadata = typeof chunk === 'object' && chunk.metadata ? chunk.metadata : null
     const chunkContent = typeof chunk === 'string' ? chunk : (chunk.content || '')
 
+    // Apply content-type-aware boosts from question analysis
+    const boosts = contentTypeBoosts ?? { tableBoost: 1.0, imageBoost: 1.0, equationBoost: 1.0, dataBoost: 1.0 }
+
     // METADATA-SPECIFIC BOOSTS (higher priority)
     if (chunkMetadata) {
-      // Boost for block type
+      // Boost for block type - now contextually aware
       if (chunkMetadata.type === 'heading') {
         importance += 0.4
         // Additional boost based on heading level (if available)
@@ -1564,9 +1715,13 @@ IMPORTANT:
           importance += Math.max(0.3 - (chunkMetadata.level * 0.05), 0.1) // h1=0.3, h2=0.25, h3=0.2, etc.
         }
       } else if (chunkMetadata.type === 'table') {
-        importance += 0.35 // Tables often contain critical structured data
+        importance += 0.35 * boosts.tableBoost // Tables often contain critical structured data
       } else if (chunkMetadata.type === 'list') {
         importance += 0.15
+      } else if (chunkMetadata.type === 'image') {
+        importance += 0.25 * boosts.imageBoost // Images/figures
+      } else if (chunkMetadata.type === 'code') {
+        importance += 0.2 // Code blocks
       }
 
       // Boost for high confidence (OCR confidence)
@@ -1601,12 +1756,27 @@ IMPORTANT:
       importance += 0.1
     }
 
-    // Boost for content with data/numbers
-    if (/\d{4}|\d+%|\$\d+|table|figure|chart/i.test(chunkContent)) {
-      importance += 0.15
+    // Boost for content with data/numbers - now contextually aware
+    if (/\d{4}|\d+%|\$\d+/i.test(chunkContent)) {
+      importance += 0.15 * boosts.dataBoost
+    }
+    
+    // Table-like content detection (even without explicit type metadata)
+    if (/\|.*\|.*\|/.test(chunkContent) || /\t.*\t/.test(chunkContent)) {
+      importance += 0.2 * boosts.tableBoost
+    }
+    
+    // Chart/figure reference detection
+    if (/\b(table|figure|chart|graph|diagram)\s*\d+/i.test(chunkContent)) {
+      importance += 0.15 * boosts.imageBoost
     }
 
-    return Math.min(2.5, importance)
+    // Equation/formula detection
+    if (/\$\$.*\$\$|\\\[.*\\\]|[∫∑∏∂√∞≈≠≤≥±×÷]|\\frac|\\sqrt/.test(chunkContent)) {
+      importance += 0.25 * boosts.equationBoost
+    }
+
+    return Math.min(3.0, importance) // Increased max from 2.5 to 3.0 for boosted content
   }
 
   private applyEnhancedDiversityAlgorithm(

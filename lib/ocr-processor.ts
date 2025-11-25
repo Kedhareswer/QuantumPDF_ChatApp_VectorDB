@@ -9,6 +9,20 @@ export interface OCRResult {
 export class BrowserOCRProcessor {
   private tesseract: any = null
   private isInitialized = false
+  private language: string
+
+  constructor(language = "eng") {
+    this.language = language
+  }
+
+  setLanguage(language: string) {
+    if (language && language !== this.language) {
+      this.language = language
+      // Reinitialize worker with new language on next use
+      this.isInitialized = false
+      this.tesseract = null
+    }
+  }
 
   private async initializeTesseract() {
     if (this.isInitialized && this.tesseract) {
@@ -23,7 +37,7 @@ export class BrowserOCRProcessor {
         throw new Error("Tesseract.js is not available")
       }
       
-      const worker = await tesseractModule.createWorker('eng', 1, {
+      const worker = await tesseractModule.createWorker(this.language, 1, {
         logger: (m: any) => {
           if (m.status === 'recognizing text') {
             console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`)
@@ -51,7 +65,7 @@ export class BrowserOCRProcessor {
       return {
         text: data.text || "No text detected in the image.",
         confidence: data.confidence || 0,
-        language: "eng",
+        language: this.language,
       }
     } catch (error) {
       console.error("OCR processing failed:", error)

@@ -43,6 +43,8 @@ import { ThinkingBubble } from "@/components/thinking-bubble"
 import { useToast } from "@/hooks/use-toast"
 import { useAppStore } from "@/lib/store"
 import { QuickActions } from "@/components/quick-actions"
+import { AgentSelector } from "@/components/agent-selector"
+import type { AgentOutput } from "@/lib/domain-agents"
 
 interface Message {
   id: string
@@ -88,6 +90,8 @@ interface ChatInterfaceProps {
   isProcessing: boolean
   disabled: boolean
   ragEngine?: any // Add ragEngine prop for diagnostics
+  documentContext?: string // Full document context for agents
+  aiClient?: any // AI client for agent processing
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -330,7 +334,9 @@ export function ChatInterface({
   onNewSession, 
   isProcessing, 
   disabled, 
-  ragEngine 
+  ragEngine,
+  documentContext,
+  aiClient,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("")
   const [isExpanded, setIsExpanded] = useState(false)
@@ -342,10 +348,54 @@ export function ChatInterface({
   })
   // Search mode: smart detection (no explicit controls)
   const [useContext, setUseContext] = useState(true)
+  // Agent results for context
+  const [lastAgentResult, setLastAgentResult] = useState<AgentOutput | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+
+  // Handler for agent results
+  const handleAgentResult = (result: AgentOutput) => {
+    setLastAgentResult(result)
+    
+    // Add agent result as a message
+    if (onAddMessage) {
+      const agentMessage: Message = {
+        id: `agent-${Date.now()}`,
+        role: "assistant",
+        content: `## 🤖 ${result.agentType.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Analysis\n\n${result.result}`,
+        timestamp: new Date(),
+        sources: ['Agent Analysis'],
+        metadata: {
+          responseTime: result.processingTime,
+          relevanceScore: result.confidence,
+        },
+      }
+      onAddMessage(agentMessage)
+    }
+
+    toast({
+      title: "Agent Analysis Complete",
+      description: `${result.agentType} completed in ${result.processingTime}ms with ${Math.round(result.confidence * 100)}% confidence`,
+    })
+  }
+
+  // Get document context from RAG engine if not provided
+  const getDocumentContext = (): string => {
+    if (documentContext) return documentContext
+    
+    if (ragEngine) {
+      try {
+        const docs = ragEngine.getDocuments?.() || []
+        return docs.map((d: any) => d.chunks?.join('\n') || '').join('\n\n').slice(0, 10000)
+      } catch {
+        return ''
+      }
+    }
+    
+    return ''
+  }
 
   const { aiConfig, vectorDBConfig, setActiveTab, modelStatus } = useAppStore()
 
@@ -509,6 +559,16 @@ ${diagnostics.documents.length === 0
         <div className="flex items-center justify-between">
           <h2 className="text-sm sm:text-base md:text-lg font-semibold">Chat</h2>
           <div className="flex items-center space-x-1 sm:space-x-2">
+            {/* Agent Selector */}
+            <AgentSelector
+              disabled={disabled || isProcessing}
+              context={getDocumentContext()}
+              question={messages.filter(m => m.role === 'user').slice(-1)[0]?.content || ''}
+              chunks={[]}
+              onAgentResult={handleAgentResult}
+              aiClient={aiClient}
+            />
+            
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -562,21 +622,26 @@ ${diagnostics.documents.length === 0
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="thinking-mode"
-                    checked={enhancedOptions.showThinking}
-                    onCheckedChange={(checked) => 
-                      setEnhancedOptions(prev => ({ ...prev, showThinking: checked }))
-                    }
-                  />
-                  <Label htmlFor="thinking-mode" className="text-sm">
+                <div className="flex items-center justify-between space-x-3 p-2 rounded-md border border-purple-200 bg-purple-50/50">
+                  <Label htmlFor="thinking-mode" className="text-sm font-medium cursor-pointer">
                     Show Thinking Process
                   </Label>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-xs font-medium ${enhancedOptions.showThinking ? 'text-green-600' : 'text-gray-500'}`}>
+                      {enhancedOptions.showThinking ? 'ON' : 'OFF'}
+                    </span>
+                    <Switch
+                      id="thinking-mode"
+                      checked={enhancedOptions.showThinking}
+                      onCheckedChange={(checked) => 
+                        setEnhancedOptions(prev => ({ ...prev, showThinking: checked }))
+                      }
+                    />
+                  </div>
                 </div>
                 
-                <div className="flex items-center space-x-2">
-                  <Label htmlFor="complexity-level" className="text-sm whitespace-nowrap">
+                <div className="flex items-center space-x-2 p-2 rounded-md border border-purple-200 bg-purple-50/50">
+                  <Label htmlFor="complexity-level" className="text-sm font-medium whitespace-nowrap">
                     Analysis Level:
                   </Label>
                   <Select
@@ -600,15 +665,20 @@ ${diagnostics.documents.length === 0
                   </Select>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="context-toggle"
-                    checked={useContext}
-                    onCheckedChange={(checked) => setUseContext(checked)}
-                  />
-                  <Label htmlFor="context-toggle" className="text-sm">
+                <div className="flex items-center justify-between space-x-3 p-2 rounded-md border border-purple-200 bg-purple-50/50">
+                  <Label htmlFor="context-toggle" className="text-sm font-medium cursor-pointer">
                     Use Document Context
                   </Label>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-xs font-medium ${useContext ? 'text-green-600' : 'text-gray-500'}`}>
+                      {useContext ? 'ON' : 'OFF'}
+                    </span>
+                    <Switch
+                      id="context-toggle"
+                      checked={useContext}
+                      onCheckedChange={(checked) => setUseContext(checked)}
+                    />
+                  </div>
                 </div>
               </div>
               

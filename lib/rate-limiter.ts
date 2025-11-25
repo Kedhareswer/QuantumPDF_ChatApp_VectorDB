@@ -20,7 +20,7 @@ export abstract class BaseRateLimiter {
     this.config = config
   }
 
-  abstract async acquire(): Promise<void>
+  abstract acquire(): Promise<void>
   abstract getStats(): any
   abstract reset(): void
 }
@@ -78,7 +78,9 @@ export class FixedWindowRateLimiter extends BaseRateLimiter {
 export class TokenBucketRateLimiter extends BaseRateLimiter {
   private tokens: number
   private lastRefillTime: number
-  private queue: Array<() => void> = []
+  private queue: Array<{ resolve: () => void; reject: (error: Error) => void; timestamp: number }> = []
+  private isProcessingQueue: boolean = false
+  private maxQueueWaitMs: number = 30000 // 30 second timeout for queued requests
 
   constructor(config: RateLimiterConfig) {
     super(config)
@@ -87,21 +89,39 @@ export class TokenBucketRateLimiter extends BaseRateLimiter {
   }
 
   async acquire(): Promise<void> {
-    await this.refillTokens()
+    this.refillTokens()
 
     if (this.tokens >= 1) {
       this.tokens -= 1
       return Promise.resolve()
     }
 
-    // Wait for token to become available
-    return new Promise<void>((resolve) => {
-      this.queue.push(resolve)
-      this.processQueue()
+    // Wait for token to become available with timeout
+    return new Promise<void>((resolve, reject) => {
+      const queueEntry = {
+        resolve,
+        reject,
+        timestamp: Date.now()
+      }
+      this.queue.push(queueEntry)
+      
+      // Start processing if not already running
+      if (!this.isProcessingQueue) {
+        this.processQueue()
+      }
+      
+      // Set timeout for this request
+      setTimeout(() => {
+        const index = this.queue.indexOf(queueEntry)
+        if (index !== -1) {
+          this.queue.splice(index, 1)
+          reject(new Error(`Rate limiter timeout after ${this.maxQueueWaitMs}ms`))
+        }
+      }, this.maxQueueWaitMs)
     })
   }
 
-  private async refillTokens(): Promise<void> {
+  private refillTokens(): void {
     const now = Date.now()
     const timePassed = now - this.lastRefillTime
 
@@ -116,19 +136,58 @@ export class TokenBucketRateLimiter extends BaseRateLimiter {
   }
 
   private async processQueue(): Promise<void> {
-    while (this.queue.length > 0) {
-      await this.refillTokens()
+    // Prevent concurrent queue processing (mutex-like behavior)
+    if (this.isProcessingQueue) {
+      return
+    }
+    
+    this.isProcessingQueue = true
+    
+    try {
+      let iterations = 0
+      const maxIterations = 1000 // Prevent infinite loops
+      
+      while (this.queue.length > 0 && iterations < maxIterations) {
+        iterations++
+        this.refillTokens()
+        
+        // Clean up expired entries first
+        const now = Date.now()
+        this.queue = this.queue.filter(entry => {
+          if (now - entry.timestamp > this.maxQueueWaitMs) {
+            // Entry already timed out, skip it
+            return false
+          }
+          return true
+        })
 
-      if (this.tokens >= 1) {
-        this.tokens -= 1
-        const resolve = this.queue.shift()
-        resolve?.()
-      } else {
-        // Wait for next refill
-        const refillTime =
-          this.config.intervalMs / this.config.tokensPerInterval
-        await this.delay(refillTime)
+        if (this.tokens >= 1 && this.queue.length > 0) {
+          this.tokens -= 1
+          const entry = this.queue.shift()
+          entry?.resolve()
+        } else if (this.queue.length > 0) {
+          // Wait for next refill with a reasonable delay
+          const refillTime = Math.max(
+            10, // Minimum 10ms
+            Math.min(
+              this.config.intervalMs / this.config.tokensPerInterval,
+              1000 // Maximum 1 second wait
+            )
+          )
+          await this.delay(refillTime)
+        }
       }
+      
+      if (iterations >= maxIterations) {
+        console.warn('Rate limiter queue processing hit max iterations - clearing stale entries')
+        // Reject all remaining entries
+        while (this.queue.length > 0) {
+          const entry = this.queue.shift()
+          entry?.reject(new Error('Rate limiter queue overflow'))
+        }
+      }
+    } finally {
+      this.isProcessingQueue = false
     }
   }
 
@@ -138,13 +197,19 @@ export class TokenBucketRateLimiter extends BaseRateLimiter {
       maxTokens: this.config.maxBurst,
       queueLength: this.queue.length,
       lastRefillTime: new Date(this.lastRefillTime),
+      isProcessing: this.isProcessingQueue,
     }
   }
 
   reset(): void {
+    // Reject all pending requests
+    while (this.queue.length > 0) {
+      const entry = this.queue.shift()
+      entry?.reject(new Error('Rate limiter reset'))
+    }
     this.tokens = this.config.maxBurst
     this.lastRefillTime = Date.now()
-    this.queue = []
+    this.isProcessingQueue = false
   }
 
   private delay(ms: number): Promise<void> {

@@ -44,40 +44,46 @@ export class AdvancedChunker {
       return []
     }
 
-    const chunks: TextChunk[] = []
-    
+    let chunks: TextChunk[] = []
+
+    // Primary path: semantic, document-aware chunking
     if (this.options.semanticSplitting && this.options.documentAware) {
-      return this.semanticChunking(text, documentId, documentName)
-    }
-    
-    const paragraphs = this.splitIntoParagraphs(text)
-    let currentChunk = ""
-    let chunkStartChar = 0
-    let chunkIndex = 0
+      chunks = this.semanticChunking(text, documentId, documentName)
+    } else {
+      const paragraphs = this.splitIntoParagraphs(text)
+      let currentChunk = ""
+      let chunkStartChar = 0
+      let chunkIndex = 0
 
-    for (const paragraph of paragraphs) {
-      const adaptiveMaxSize = this.getAdaptiveChunkSize(paragraph, currentChunk)
-      
-      if (currentChunk.length + paragraph.length > adaptiveMaxSize && currentChunk.length > 0) {
-        // Create chunk from current content
-        chunks.push(this.createChunk(currentChunk, chunkIndex, chunkStartChar, documentId, documentName))
+      for (const paragraph of paragraphs) {
+        const adaptiveMaxSize = this.getAdaptiveChunkSize(paragraph, currentChunk)
 
-        // Start new chunk with overlap
-        const overlapText = this.getOverlapText(currentChunk)
-        currentChunk = overlapText + paragraph
-        chunkStartChar = chunkStartChar + currentChunk.length - overlapText.length - paragraph.length
-        chunkIndex++
-      } else {
-        if (currentChunk.length === 0) {
-          chunkStartChar = text.indexOf(paragraph)
+        if (currentChunk.length + paragraph.length > adaptiveMaxSize && currentChunk.length > 0) {
+          // Create chunk from current content
+          chunks.push(this.createChunk(currentChunk, chunkIndex, chunkStartChar, documentId, documentName))
+
+          // Start new chunk with overlap
+          const overlapText = this.getOverlapText(currentChunk)
+          currentChunk = overlapText + paragraph
+          chunkStartChar = chunkStartChar + currentChunk.length - overlapText.length - paragraph.length
+          chunkIndex++
+        } else {
+          if (currentChunk.length === 0) {
+            chunkStartChar = text.indexOf(paragraph)
+          }
+          currentChunk += (currentChunk.length > 0 ? "\n\n" : "") + paragraph
         }
-        currentChunk += (currentChunk.length > 0 ? "\n\n" : "") + paragraph
+      }
+
+      // Add final chunk
+      if (currentChunk.trim().length > 0) {
+        chunks.push(this.createChunk(currentChunk, chunkIndex, chunkStartChar, documentId, documentName))
       }
     }
 
-    // Add final chunk
-    if (currentChunk.trim().length > 0) {
-      chunks.push(this.createChunk(currentChunk, chunkIndex, chunkStartChar, documentId, documentName))
+    // Safety net: ensure at least one chunk for any non-empty text
+    if (chunks.length === 0 && text.trim().length > 0) {
+      return [this.createChunk(text.trim(), 0, 0, documentId, documentName)]
     }
 
     return chunks

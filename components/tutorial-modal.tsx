@@ -37,6 +37,13 @@ const TUTORIAL_STEPS = [
 export function TutorialModal({ isOpen, onClose }: TutorialModalProps) {
   const [currentStep, setCurrentStep] = useState(0)
 
+  // Reset to first step when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentStep(0)
+    }
+  }, [isOpen])
+
   const handleNext = () => {
     if (currentStep < TUTORIAL_STEPS.length - 1) {
       setCurrentStep(currentStep + 1)
@@ -102,11 +109,13 @@ export function TutorialModal({ isOpen, onClose }: TutorialModalProps) {
             {/* GIF display */}
             <div className="relative w-full aspect-video bg-gray-100 rounded-lg border-2 border-black overflow-hidden">
               <Image
+                key={currentStepData.gif}
                 src={currentStepData.gif}
                 alt={currentStepData.title}
                 fill
                 className="object-contain"
                 unoptimized
+                priority
               />
             </div>
 

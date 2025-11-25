@@ -1,378 +1,622 @@
-# Progressive Web App (PWA) Guide
+# QuantumPDF PWA Guide
 
-## Overview
-
-QuantumPDF ChatApp is now a fully-featured **Progressive Web App (PWA)**, allowing users to install it on their mobile devices and use it like a native app with offline capabilities.
-
-## What is a PWA?
-
-A Progressive Web App is a web application that uses modern web capabilities to provide a user experience similar to native apps. Key benefits include:
-
-- **Installable**: Add to home screen on mobile devices
-- **Offline Support**: Works without internet connection
-- **Fast Loading**: Cached resources load instantly
-- **Native Feel**: Full-screen experience without browser UI
-- **Auto-Updates**: Always get the latest version
-- **Responsive**: Works on any device size
-
-## Features
-
-### 🚀 Installation
-
-Users can install QuantumPDF ChatApp on their devices:
-
-- **Android**: Chrome will prompt to "Add to Home Screen"
-- **iOS**: Safari > Share > "Add to Home Screen"
-- **Desktop**: Chrome/Edge will show an install button in the address bar
-
-### 📡 Offline Functionality
-
-The app continues to work offline with the following capabilities:
-
-- View previously loaded documents
-- Browse chat history
-- Access cached PDF files
-- Review previous analysis results
-
-When offline, users see a friendly offline page with available features.
-
-### 🔄 Automatic Updates
-
-The service worker checks for updates hourly and prompts users when a new version is available.
-
-### 💾 Intelligent Caching
-
-Three caching strategies are employed:
-
-1. **Cache-First**: Static assets (JS, CSS, fonts) for instant loading
-2. **Network-First**: API calls for fresh data
-3. **Stale-While-Revalidate**: HTML pages for best balance
-
-## Implementation Details
-
-### Files Structure
-
-```
-public/
-├── sw.js                    # Service worker for offline support
-├── offline.html             # Offline fallback page
-├── browserconfig.xml        # Microsoft PWA configuration
-├── manifest.json            # PWA manifest (auto-generated)
-├── icon-*.png              # PWA icons (multiple sizes)
-└── favicon-*.png           # Favicon icons
-
-app/
-├── manifest.ts             # Manifest configuration
-└── layout.tsx              # PWA meta tags
-
-components/
-├── service-worker-registration.tsx  # SW registration logic
-├── pwa-install-prompt.tsx          # Install prompt UI
-└── client-layout.tsx               # Main layout with PWA components
-```
-
-### Manifest Configuration
-
-The PWA manifest (`app/manifest.ts`) includes:
-
-- App name and short name
-- Description
-- Theme colors
-- Display mode (standalone)
-- Icons in multiple sizes (72, 96, 128, 144, 152, 192, 384, 512)
-- Shortcuts for quick actions
-- Categories and orientation
-
-### Service Worker
-
-The service worker (`public/sw.js`) provides:
-
-- **Offline Support**: Caches essential resources
-- **Background Sync**: Syncs data when connection restored
-- **Push Notifications**: (Optional) Notify users of updates
-- **Cache Management**: Automatic cleanup of old caches
-
-### Installation Prompt
-
-A custom install prompt (`components/pwa-install-prompt.tsx`) appears when:
-
-- The app meets PWA criteria
-- User hasn't dismissed it recently (7 days)
-- App is not already installed
-
-## Icons
-
-### Required Sizes
-
-PWA icons are available in the following sizes:
-
-| Size | Purpose |
-|------|---------|
-| 72x72 | Small tile |
-| 96x96 | Shortcuts |
-| 128x128 | Standard |
-| 144x144 | MS Tile |
-| 152x152 | iOS |
-| 192x192 | Standard PWA |
-| 384x384 | Large |
-| 512x512 | Splash screen |
-
-### Maskable Icons
-
-Maskable icons (192x192 and 512x512) ensure the icon looks good on all Android devices with different shapes.
-
-### Generating Icons
-
-To create your own icons:
-
-```bash
-# 1. Place your logo.png (minimum 512x512) in the public folder
-# 2. Install sharp for image processing
-npm install --save-dev sharp
-
-# 3. Generate all icon sizes
-node scripts/generate-pwa-icons.js
-```
-
-Or use the simple SVG generator:
-
-```bash
-node scripts/create-pwa-icons.js
-```
-
-Then convert the generated SVGs to PNGs using an online tool like [Convertio](https://convertio.co/svg-png/).
-
-## Testing PWA Features
-
-### Development
-
-PWA features (especially service workers) are disabled in development mode. To test:
-
-```bash
-# 1. Build the production version
-npm run build
-
-# 2. Start production server
-npm start
-
-# 3. Open in browser
-# Chrome: http://localhost:3000
-```
-
-### Production
-
-Deploy to a hosting service with HTTPS:
-
-- Vercel (recommended)
-- Netlify
-- AWS Amplify
-- Google Cloud Platform
-
-**Note**: PWAs require HTTPS to work (except on localhost).
-
-### Testing Checklist
-
-- [ ] App installs on mobile
-- [ ] Offline page displays when disconnected
-- [ ] Install prompt appears
-- [ ] App works in standalone mode
-- [ ] Service worker registers successfully
-- [ ] Updates are detected and applied
-- [ ] Icons display correctly
-
-## Browser Support
-
-| Feature | Chrome | Firefox | Safari | Edge |
-|---------|--------|---------|--------|------|
-| Install | ✅ | ✅ | ✅* | ✅ |
-| Service Worker | ✅ | ✅ | ✅ | ✅ |
-| Offline | ✅ | ✅ | ✅ | ✅ |
-| Push Notifications | ✅ | ✅ | ⚠️ | ✅ |
-
-*Safari has limited install support on iOS
-
-## Configuration
-
-### Customize Manifest
-
-Edit `app/manifest.ts` to customize:
-
-- App name and description
-- Theme colors
-- App categories
-- Shortcuts
-- Screenshots
-
-### Customize Service Worker
-
-Edit `public/sw.js` to:
-
-- Change cache version
-- Add/remove cached resources
-- Modify caching strategies
-- Add custom sync logic
-
-### Customize Install Prompt
-
-Edit `components/pwa-install-prompt.tsx` to:
-
-- Change prompt design
-- Modify timing/frequency
-- Add custom messages
-
-## Advanced Features
-
-### Background Sync
-
-The service worker supports background sync for offline actions:
-
-```typescript
-// Trigger a sync when online
-if ('sync' in registration) {
-  registration.sync.register('sync-documents')
-}
-```
-
-### Push Notifications (Optional)
-
-Enable push notifications by:
-
-1. Setting up a push service (Firebase, OneSignal)
-2. Requesting permission from users
-3. Handling push events in service worker
-
-### Shortcuts
-
-App shortcuts appear in the install menu:
-
-- **Upload PDF**: Quick access to document upload
-- **New Chat**: Start a new conversation
-
-Edit shortcuts in `app/manifest.ts`.
-
-## Performance
-
-### Metrics
-
-- **First Load**: ~2-3s (uncached)
-- **Subsequent Loads**: <500ms (cached)
-- **Offline Load**: <200ms (fully cached)
-
-### Optimization
-
-- Assets are cached on first visit
-- Critical resources are precached
-- Non-critical resources load on demand
-- Cache is automatically cleaned
-
-## Troubleshooting
-
-### Service Worker Not Registering
-
-1. Check browser console for errors
-2. Ensure HTTPS is enabled (or using localhost)
-3. Verify `sw.js` is in the `public` folder
-4. Clear browser cache and retry
-
-### Install Prompt Not Showing
-
-1. Check PWA criteria in Chrome DevTools (Application > Manifest)
-2. Ensure all required icons are present
-3. Verify manifest.json is valid
-4. Check if prompt was recently dismissed
-
-### Offline Page Not Displaying
-
-1. Verify `offline.html` is in `public` folder
-2. Check service worker cache configuration
-3. Test with Chrome DevTools offline mode
-
-### Icons Not Displaying
-
-1. Ensure all icon files exist in `public` folder
-2. Check file names match manifest.ts
-3. Verify icon sizes are correct
-4. Clear cache and reload
-
-## Best Practices
-
-### Do's
-
-- ✅ Test on real devices
-- ✅ Provide meaningful offline experience
-- ✅ Keep service worker cache small
-- ✅ Update cache version when deploying
-- ✅ Handle errors gracefully
-
-### Don'ts
-
-- ❌ Cache sensitive user data
-- ❌ Make offline experience identical to online
-- ❌ Cache large media files unnecessarily
-- ❌ Ignore service worker errors
-- ❌ Cache API responses indefinitely
-
-## Debugging
-
-### Chrome DevTools
-
-1. **Application Tab**
-   - View manifest
-   - Inspect service worker
-   - Check cache storage
-   - Simulate offline mode
-
-2. **Lighthouse**
-   - Run PWA audit
-   - Check performance
-   - View recommendations
-
-3. **Network Tab**
-   - Monitor cache hits
-   - Check service worker responses
-
-### Console Commands
-
-```javascript
-// Check if service worker is registered
-navigator.serviceWorker.getRegistrations()
-
-// Unregister service worker
-navigator.serviceWorker.getRegistrations().then(registrations => {
-  registrations.forEach(r => r.unregister())
-})
-
-// Clear all caches
-caches.keys().then(keys => keys.forEach(key => caches.delete(key)))
-```
-
-## Resources
-
-- [MDN PWA Guide](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps)
-- [Google PWA Checklist](https://web.dev/pwa-checklist/)
-- [Service Worker API](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API)
-- [Web App Manifest](https://developer.mozilla.org/en-US/docs/Web/Manifest)
-
-## Support
-
-For PWA-related issues:
-
-1. Check the [Troubleshooting](#troubleshooting) section
-2. Review browser console errors
-3. Test in Chrome DevTools
-4. File an issue on GitHub
-
-## Future Enhancements
-
-Planned PWA features:
-
-- [ ] Share Target API (share PDFs to app)
-- [ ] File Handling API (open PDFs with app)
-- [ ] Periodic Background Sync
-- [ ] Advanced caching strategies
-- [ ] Web Push notifications
-- [ ] Badge API for unread counts
+> **Complete guide to Progressive Web App implementation and capabilities**
+> **Last Updated: November 2025 | Version 3.0.0**
 
 ---
 
-**Last Updated**: 2025-10-11
+## Table of Contents
+
+1. [Overview](#overview)
+2. [PWA Features](#pwa-features)
+3. [Installation](#installation)
+4. [Offline Capabilities](#offline-capabilities)
+5. [Service Worker](#service-worker)
+6. [Caching Strategies](#caching-strategies)
+7. [App Manifest](#app-manifest)
+8. [Testing](#testing)
+
+---
+
+## Overview
+
+QuantumPDF is a fully-functional Progressive Web App that can be installed on desktop and mobile devices, providing a native-like experience with offline capabilities.
+
+### PWA Score
+
+| Criterion | Status | Details |
+|-----------|--------|---------|
+| Installable | ✅ | Full manifest with icons |
+| Offline Support | ⚠️ Partial | Core UI cached, API requires network |
+| Fast Loading | ✅ | Optimized bundle, lazy loading |
+| HTTPS | ✅ | Required for deployment |
+| Responsive | ✅ | Mobile-first design |
+| App-like Feel | ✅ | Standalone display mode |
+
+---
+
+## PWA Features
+
+### Core Features
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| App Installation | ✅ | Install on desktop/mobile |
+| Home Screen | ✅ | Launch from home screen |
+| Standalone Mode | ✅ | Full-screen app experience |
+| Splash Screen | ✅ | Custom loading screen |
+| Offline Shell | ✅ | UI available offline |
+| Service Worker | ✅ | Background caching |
+| Push Notifications | 🔄 Planned | Future enhancement |
+| Background Sync | 🔄 Planned | Future enhancement |
+
+### Platform Support
+
+| Platform | Install | Offline | Performance |
+|----------|---------|---------|-------------|
+| Chrome (Desktop) | ✅ | ✅ | Excellent |
+| Chrome (Android) | ✅ | ✅ | Excellent |
+| Edge | ✅ | ✅ | Excellent |
+| Safari (iOS) | ✅ | ⚠️ Limited | Good |
+| Safari (macOS) | ⚠️ Limited | ⚠️ Limited | Good |
+| Firefox | ⚠️ Limited | ✅ | Good |
+
+---
+
+## Installation
+
+### Desktop (Chrome/Edge)
+
+1. Visit the app URL
+2. Look for the install icon in the address bar
+3. Click "Install" when prompted
+4. App appears in applications/start menu
+
+### Mobile (Android)
+
+1. Visit the app URL in Chrome
+2. Tap the "Add to Home Screen" banner
+3. Or tap menu (⋮) → "Install App"
+4. App icon appears on home screen
+
+### Mobile (iOS)
+
+1. Visit the app URL in Safari
+2. Tap Share button (□↑)
+3. Tap "Add to Home Screen"
+4. Name the app and tap "Add"
+
+### Programmatic Install Prompt
+
+```typescript
+// components/pwa-install-prompt.tsx
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Download } from 'lucide-react'
+
+export function PWAInstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [showPrompt, setShowPrompt] = useState(false)
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault()
+      setDeferredPrompt(e)
+      setShowPrompt(true)
+    }
+
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return
+    
+    deferredPrompt.prompt()
+    const { outcome } = await deferredPrompt.userChoice
+    
+    if (outcome === 'accepted') {
+      console.log('PWA installed')
+    }
+    
+    setDeferredPrompt(null)
+    setShowPrompt(false)
+  }
+
+  if (!showPrompt) return null
+
+  return (
+    <Button onClick={handleInstall} variant="outline" size="sm">
+      <Download className="w-4 h-4 mr-2" />
+      Install App
+    </Button>
+  )
+}
+```
+
+---
+
+## Offline Capabilities
+
+### What Works Offline
+
+| Feature | Offline | Notes |
+|---------|---------|-------|
+| App Shell (UI) | ✅ | Fully cached |
+| Static Assets | ✅ | CSS, JS, images |
+| Previously Loaded Docs | ✅ | Cached in IndexedDB |
+| New Document Upload | ❌ | Requires AI API |
+| Chat/Query | ❌ | Requires AI API |
+| Vector Search | ⚠️ | Local only if using in-memory |
+
+### Offline Detection
+
+```typescript
+// hooks/use-online-status.ts
+import { useState, useEffect } from 'react'
+
+export function useOnlineStatus() {
+  const [isOnline, setIsOnline] = useState(true)
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine)
+    
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  return isOnline
+}
+
+// Usage
+function App() {
+  const isOnline = useOnlineStatus()
+  
+  return (
+    <div>
+      {!isOnline && (
+        <Banner variant="warning">
+          You're offline. Some features may be limited.
+        </Banner>
+      )}
+    </div>
+  )
+}
+```
+
+---
+
+## Service Worker
+
+### Registration
+
+```typescript
+// components/service-worker-registration.tsx
+'use client'
+
+import { useEffect } from 'react'
+
+export function ServiceWorkerRegistration() {
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((registration) => {
+          console.log('SW registered:', registration.scope)
+          
+          // Check for updates
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed') {
+                  // New content available
+                  showUpdateNotification()
+                }
+              })
+            }
+          })
+        })
+        .catch((error) => {
+          console.error('SW registration failed:', error)
+        })
+    }
+  }, [])
+
+  return null
+}
+```
+
+### Service Worker Implementation
+
+```javascript
+// public/sw.js
+const CACHE_NAME = 'quantumpdf-v3.0.0'
+const STATIC_ASSETS = [
+  '/',
+  '/manifest.json',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png'
+]
+
+// Install event - cache static assets
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(STATIC_ASSETS))
+      .then(() => self.skipWaiting())
+  )
+})
+
+// Activate event - clean old caches
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((cacheNames) => {
+        return Promise.all(
+          cacheNames
+            .filter((name) => name !== CACHE_NAME)
+            .map((name) => caches.delete(name))
+        )
+      })
+      .then(() => self.clients.claim())
+  )
+})
+
+// Fetch event - network first, cache fallback
+self.addEventListener('fetch', (event) => {
+  const { request } = event
+  const url = new URL(request.url)
+
+  // Skip non-GET requests
+  if (request.method !== 'GET') return
+
+  // Skip API requests (need fresh data)
+  if (url.pathname.startsWith('/api/')) return
+
+  // Network first for HTML
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .catch(() => caches.match('/'))
+    )
+    return
+  }
+
+  // Cache first for static assets
+  if (url.pathname.match(/\.(js|css|png|jpg|svg|woff2?)$/)) {
+    event.respondWith(
+      caches.match(request)
+        .then((cached) => cached || fetch(request))
+    )
+    return
+  }
+
+  // Network first, cache fallback for others
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        // Clone and cache successful responses
+        if (response.ok) {
+          const clone = response.clone()
+          caches.open(CACHE_NAME)
+            .then((cache) => cache.put(request, clone))
+        }
+        return response
+      })
+      .catch(() => caches.match(request))
+  )
+})
+```
+
+---
+
+## Caching Strategies
+
+### Strategy Overview
+
+| Resource Type | Strategy | Reason |
+|---------------|----------|--------|
+| App Shell | Cache First | Fast loading, rarely changes |
+| Static Assets | Cache First | Images, fonts, CSS |
+| HTML Pages | Network First | Fresh content preferred |
+| API Responses | Network Only | Requires fresh data |
+| Documents | IndexedDB | Large files, structured storage |
+
+### next-pwa Configuration
+
+```javascript
+// next.config.js
+const withPWA = require('next-pwa')({
+  dest: 'public',
+  disable: process.env.NODE_ENV === 'development',
+  register: true,
+  skipWaiting: true,
+  runtimeCaching: [
+    {
+      urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
+      handler: 'CacheFirst',
+      options: {
+        cacheName: 'google-fonts',
+        expiration: {
+          maxEntries: 20,
+          maxAgeSeconds: 365 * 24 * 60 * 60 // 1 year
+        }
+      }
+    },
+    {
+      urlPattern: /\.(?:js|css)$/i,
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'static-resources',
+        expiration: {
+          maxEntries: 100,
+          maxAgeSeconds: 7 * 24 * 60 * 60 // 1 week
+        }
+      }
+    },
+    {
+      urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/i,
+      handler: 'CacheFirst',
+      options: {
+        cacheName: 'images',
+        expiration: {
+          maxEntries: 50,
+          maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
+        }
+      }
+    }
+  ]
+})
+
+module.exports = withPWA({
+  // Next.js config
+})
+```
+
+---
+
+## App Manifest
+
+### manifest.json
+
+```json
+{
+  "name": "QuantumPDF - AI Document Analysis",
+  "short_name": "QuantumPDF",
+  "description": "AI-powered document analysis with RAG, multimodal extraction, and specialized agents",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "orientation": "any",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/screenshots/mobile.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Chat",
+      "short_name": "Chat",
+      "url": "/?action=chat",
+      "icons": [{ "src": "/icons/chat-icon.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Upload Document",
+      "short_name": "Upload",
+      "url": "/?action=upload",
+      "icons": [{ "src": "/icons/upload-icon.png", "sizes": "96x96" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}
+```
+
+### Metadata in Layout
+
+```typescript
+// app/layout.tsx
+import type { Metadata, Viewport } from 'next'
+
+export const metadata: Metadata = {
+  title: 'QuantumPDF - AI Document Analysis',
+  description: 'AI-powered document analysis with RAG, multimodal extraction, and specialized agents',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'QuantumPDF'
+  },
+  formatDetection: {
+    telephone: false
+  }
+}
+
+export const viewport: Viewport = {
+  themeColor: '#6366f1',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true
+}
+```
+
+---
+
+## Testing
+
+### Lighthouse PWA Audit
+
+```bash
+# Install Lighthouse CLI
+npm install -g lighthouse
+
+# Run PWA audit
+lighthouse http://localhost:3000 --only-categories=pwa --view
+
+# Generate JSON report
+lighthouse http://localhost:3000 --output=json --output-path=./pwa-report.json
+```
+
+### Manual Testing Checklist
+
+| Test | Steps | Expected Result |
+|------|-------|-----------------|
+| Installation | Click install button | App installs successfully |
+| Offline Load | Disable network, reload | App shell loads |
+| Update Detection | Deploy new version | Update notification shown |
+| Home Screen | Add to home screen | App icon appears |
+| Standalone Mode | Launch from icon | No browser UI |
+| Theme Color | Launch app | Status bar matches theme |
+
+### Automated Testing
+
+```typescript
+// __tests__/pwa.test.ts
+describe('PWA', () => {
+  it('should have valid manifest', async () => {
+    const response = await fetch('/manifest.json')
+    const manifest = await response.json()
+    
+    expect(manifest.name).toBeDefined()
+    expect(manifest.short_name).toBeDefined()
+    expect(manifest.icons).toHaveLength(8)
+    expect(manifest.display).toBe('standalone')
+  })
+  
+  it('should register service worker', async () => {
+    const registration = await navigator.serviceWorker.ready
+    expect(registration.active).toBeTruthy()
+  })
+  
+  it('should cache static assets', async () => {
+    const cache = await caches.open('quantumpdf-v3.0.0')
+    const keys = await cache.keys()
+    
+    expect(keys.length).toBeGreaterThan(0)
+  })
+})
+```
+
+### Browser DevTools
+
+1. **Chrome DevTools**
+   - Application → Manifest (verify manifest)
+   - Application → Service Workers (verify registration)
+   - Application → Cache Storage (verify caching)
+   - Lighthouse → Generate Report → PWA
+
+2. **Edge DevTools**
+   - Same as Chrome (Chromium-based)
+
+3. **Firefox DevTools**
+   - Storage → Cache Storage
+   - Application → Manifest
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Install button not showing | HTTPS required | Deploy to HTTPS |
+| Offline not working | SW not registered | Check console for errors |
+| Old version cached | SW not updated | Clear cache, hard refresh |
+| iOS PWA issues | Safari limitations | Use meta tags |
+
+### Debug Commands
+
+```javascript
+// Check service worker status
+navigator.serviceWorker.getRegistrations()
+  .then(regs => console.log(regs))
+
+// Clear all caches
+caches.keys().then(keys => 
+  keys.forEach(key => caches.delete(key))
+)
+
+// Force update service worker
+navigator.serviceWorker.ready
+  .then(reg => reg.update())
+```
+
+---
+
+**Generated**: November 2025  
+**Project**: QuantumPDF ChatApp v3.0.0

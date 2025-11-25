@@ -73,7 +73,7 @@ interface AIConfig {
 }
 
 interface VectorDBConfig {
-  provider: "pinecone" | "weaviate" | "chroma" | "local"
+  provider: "pinecone" | "weaviate" | "local"
   apiKey?: string
   environment?: string
   indexName?: string
@@ -148,7 +148,7 @@ export const useAppStore = create<AppState>()(
       aiConfig: {
         provider: "openai",
         apiKey: "",
-        model: "gpt-4o-mini",
+        model: "gpt-5-mini",
         baseUrl: "https://api.openai.com/v1",
         temperature: 0.7,
         maxTokens: 1000,
@@ -207,7 +207,7 @@ export const useAppStore = create<AppState>()(
           config = {
             ...config,
             provider: "openai",
-            model: "gpt-4o-mini",
+            model: "gpt-5-mini",
             baseUrl: "https://api.openai.com/v1"
           };
         }
@@ -267,7 +267,7 @@ export const useAppStore = create<AppState>()(
               persistedState.aiConfig = {
                 ...persistedState.aiConfig,
                 provider: "openai",
-                model: "gpt-4o-mini",
+                model: "gpt-5-mini",
                 baseUrl: "https://api.openai.com/v1"
               };
             }

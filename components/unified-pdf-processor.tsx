@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, FileText, Upload, X, CheckCircle, AlertTriangle, RefreshCw, Info, Loader2 } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { AlertCircle, FileText, Upload, X, CheckCircle, AlertTriangle, RefreshCw, Info, Loader2, Image as ImageIcon } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { EnhancedPDFProcessor, type ProcessingProgress } from "@/lib/enhanced-pdf-processor"
+import { SpreadsheetProcessor } from "@/lib/spreadsheet-processor"
+import { DOCXProcessor } from "@/lib/docx-processor"
 import { PDFProcessorSkeleton, DocumentCardSkeleton } from "@/components/skeleton-loaders"
 import { PDFClientWrapper } from "@/components/pdf-client-wrapper"
 
@@ -28,9 +31,12 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const [retryCount, setRetryCount] = useState(0)
   const [isInitializing, setIsInitializing] = useState(false)
   const [pdfProcessorReady, setPdfProcessorReady] = useState(false)
+  const [useOCRFallback, setUseOCRFallback] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pdfProcessor = useRef<EnhancedPDFProcessor | null>(null)
+  const spreadsheetProcessor = useRef<SpreadsheetProcessor>(new SpreadsheetProcessor())
+  const docxProcessor = useRef<DOCXProcessor>(new DOCXProcessor())
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -50,25 +56,38 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   }
 
   const validateAndSetFile = (selectedFile: File) => {
-    // Validate PDF file
-    if (selectedFile.type !== "application/pdf") {
-      setError("Please select a PDF file")
+    // Detect file type
+    const isPDF = selectedFile.type === "application/pdf" || selectedFile.name.toLowerCase().endsWith('.pdf')
+    const isSpreadsheet = 
+      selectedFile.type === "text/csv" ||
+      selectedFile.type === "text/tab-separated-values" ||
+      selectedFile.type === "application/vnd.ms-excel" ||
+      selectedFile.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      selectedFile.name.toLowerCase().match(/\.(csv|tsv|xls|xlsx|ods)$/)
+    const isDOCX =
+      selectedFile.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      selectedFile.type === "application/msword" ||
+      selectedFile.name.toLowerCase().match(/\.(docx|doc)$/)
+
+    if (!isPDF && !isSpreadsheet && !isDOCX) {
+      setError("Please select a supported document file")
       setFile(null)
       addError({
         type: "error",
         title: "Invalid File Type",
-        message: "Only PDF files are supported",
+        message: "Only PDF, CSV, Excel (XLS/XLSX), and Word (DOCX/DOC) files are supported",
       })
       return
     }
 
-    if (selectedFile.size > 100 * 1024 * 1024) {
-      setError("File size exceeds 100MB limit")
+    const maxSize = isPDF ? 100 * 1024 * 1024 : 50 * 1024 * 1024
+    if (selectedFile.size > maxSize) {
+      setError(`File size exceeds ${isPDF ? '100MB' : '50MB'} limit`)
       setFile(null)
       addError({
         type: "error",
         title: "File Too Large",
-        message: "Please select a file smaller than 100MB",
+        message: `Please select a file smaller than ${isPDF ? '100MB' : '50MB'}`,
       })
       return
     }
@@ -110,8 +129,13 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const handleProcessFile = async () => {
     if (!file) return
 
-    // PDF processing
-    if (!pdfProcessor.current) return
+    // Detect file type
+    const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')
+    const isDOCX = 
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      file.type === "application/msword" ||
+      file.name.toLowerCase().match(/\.(docx|doc)$/)
+    const isSpreadsheet = !isPDF && !isDOCX
 
     try {
       setIsProcessing(true)
@@ -119,25 +143,54 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
       setProgress(null)
       setProcessingStats(null)
 
-      // Check if the processor is ready
-      if (!pdfProcessorReady) {
-        throw new Error("PDF processor is not ready yet. Please wait.")
-      }
+      let result: any
 
-      const result = await pdfProcessor.current.processFile(file, (progressUpdate) => {
-        setProgress(progressUpdate)
-        if (progressUpdate.method) {
-          setProcessingMethod(progressUpdate.method)
+      if (isDOCX) {
+        // Process DOCX
+        result = await docxProcessor.current.processFile(
+          file,
+          (progressUpdate) => {
+            setProgress(progressUpdate as any)
+          }
+        )
+      } else if (isSpreadsheet) {
+        // Process spreadsheet
+        result = await spreadsheetProcessor.current.processFile(
+          file,
+          (progressUpdate) => {
+            setProgress(progressUpdate as any)
+          }
+        )
+      } else {
+        // Process PDF
+        if (!pdfProcessor.current) {
+          throw new Error("PDF processor not initialized")
         }
-      })
+
+        // Check if the processor is ready
+        if (!pdfProcessorReady) {
+          throw new Error("PDF processor is not ready yet. Please wait.")
+        }
+
+        result = await pdfProcessor.current.processFile(
+          file,
+          (progressUpdate) => {
+            setProgress(progressUpdate)
+            if (progressUpdate.method) {
+              setProcessingMethod(progressUpdate.method)
+            }
+          },
+          { enableOCR: useOCRFallback },
+        )
+      }
 
       // Validate processing result
       if (!result.text || result.text.trim().length === 0) {
-        throw new Error("No text content could be extracted from the PDF")
+        throw new Error("No text content could be extracted from the document")
       }
 
       if (!result.chunks || result.chunks.length === 0) {
-        throw new Error("No text chunks could be created from the PDF")
+        throw new Error("No text chunks could be created from the document")
       }
 
       // Create enhanced document object
@@ -159,16 +212,36 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         },
       }
 
+      // Count inline images and page previews separately
+      const pagePreviewCount = result.metadata.multimodal?.images?.filter((img: any) => img.type === 'page-preview').length ?? 0
+      const inlineImageCount = result.metadata.multimodal?.images?.filter((img: any) => img.type === 'inline-image').length ?? 0
+      const tableCount = result.metadata.multimodal?.summary.tableCount ?? 0
+      const equationCount = result.metadata.multimodal?.summary.equationCount ?? 0
+
       setProcessingStats({
-        pages: result.metadata.pages,
-        successfulPages: result.metadata.successfulPages || 0,
+        pages: result.metadata.pages || result.metadata.rows || result.metadata.paragraphCount || 0,
+        successfulPages: result.metadata.successfulPages || result.metadata.rows || 0,
         failedPages: result.metadata.failedPages || 0,
         processingTime: result.metadata.processingTime,
         extractionQuality: result.metadata.extractionQuality,
         chunks: result.chunks.length,
         method: result.metadata.processingMethod,
-        confidence: result.metadata.confidence,
+        confidence: result.metadata.confidence || 100,
+        ocrUsed: result.metadata.ocrUsed ?? false,
+        ocrConfidence: result.metadata.ocrConfidence ?? null,
         warnings: result.metadata.warnings || [],
+        sheets: result.metadata.sheets,
+        rows: result.metadata.rows,
+        columns: result.metadata.columns,
+        format: result.metadata.format,
+        wordCount: result.metadata.wordCount,
+        paragraphCount: result.metadata.paragraphCount,
+        multimodal: result.metadata.multimodal,
+        imagePreviewCount: pagePreviewCount,
+        inlineImageCount: inlineImageCount,
+        tableCount: tableCount,
+        equationCount: equationCount,
+        previewImages: result.metadata.multimodal?.images?.slice(0, 3) ?? [],
       })
 
       onDocumentProcessed(document)
@@ -187,9 +260,9 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
       // Clear file after successful processing
       handleRemoveFile()
     } catch (error) {
-      console.error("Error processing PDF:", error)
+      console.error("Error processing document:", error)
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-      setError(`Failed to process PDF: ${errorMessage}`)
+      setError(`Failed to process document: ${errorMessage}`)
 
       addError({
         type: "error",
@@ -213,10 +286,16 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const handleAbortProcessing = () => {
     if (pdfProcessor.current) {
       pdfProcessor.current.abort();
-      setIsProcessing(false);
-      setProgress(null);
-      setError("Processing was cancelled by user");
     }
+    if (spreadsheetProcessor.current) {
+      spreadsheetProcessor.current.abort();
+    }
+    if (docxProcessor.current) {
+      docxProcessor.current.abort();
+    }
+    setIsProcessing(false);
+    setProgress(null);
+    setError("Processing was cancelled by user");
   }
 
   const getProgressColor = useCallback(() => {
@@ -259,7 +338,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         <CardHeader className="p-3 sm:p-6">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
             <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
-            <span className="text-sm sm:text-base md:text-lg">PDF Document Processor</span>
+            <span className="text-sm sm:text-base md:text-lg">Document Processor</span>
           </CardTitle>
         </CardHeader>
 
@@ -279,7 +358,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".pdf"
+            accept=".pdf,.csv,.tsv,.xls,.xlsx,.ods,.docx,.doc"
             className="hidden"
             disabled={isProcessing}
           />
@@ -309,12 +388,34 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
               <div className="flex flex-col items-center space-y-2 sm:space-y-3">
                 <Upload className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-gray-400" />
                 <div className="text-center px-2">
-                  <p className="text-xs sm:text-sm font-medium">Click or drag & drop to upload PDF</p>
-                  <p className="text-[10px] sm:text-xs text-gray-500 mt-1">PDF files up to 100MB • Enhanced processing</p>
+                  <p className="text-xs sm:text-sm font-medium">Click or drag & drop to upload</p>
+                  <p className="text-[10px] sm:text-xs text-gray-500 mt-1">PDF (100MB), Word/Excel/CSV (50MB) • Enhanced processing</p>
                 </div>
               </div>
             )}
           </div>
+
+          {file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) && (
+            <div className="mt-4 flex items-center justify-between rounded-md border border-gray-200 bg-gray-50/50 px-3 py-2">
+              <div className="text-left">
+                <p className="text-xs sm:text-sm font-medium">Enable OCR fallback</p>
+                <p className="text-[11px] sm:text-xs text-gray-500">
+                  Use Optical Character Recognition when no selectable text is found (slower but unlocks scanned PDFs).
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className={`text-xs font-medium ${useOCRFallback ? 'text-green-600' : 'text-gray-500'}`}>
+                  {useOCRFallback ? 'ON' : 'OFF'}
+                </span>
+                <Switch
+                  checked={useOCRFallback}
+                  onCheckedChange={setUseOCRFallback}
+                  disabled={isProcessing}
+                  aria-label="Enable OCR fallback"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Error Display */}
           {error && (
@@ -358,6 +459,11 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                       Page {progress.currentPage}/{progress.totalPages}
                     </Badge>
                   )}
+                  {processingStats?.ocrUsed && (
+                    <Badge variant="outline" className="text-xs border-indigo-600 text-indigo-600">
+                      OCR
+                    </Badge>
+                  )}
                 </div>
 
                 <Button
@@ -398,6 +504,40 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                   <span>Chunks:</span>
                   <span className="font-medium">{processingStats.chunks}</span>
                 </div>
+                {processingStats.imagePreviewCount > 0 && (
+                  <div className="flex justify-between">
+                    <span>Page Previews:</span>
+                    <span className="font-medium text-blue-600">{processingStats.imagePreviewCount}</span>
+                  </div>
+                )}
+                {processingStats.inlineImageCount > 0 && (
+                  <div className="flex justify-between">
+                    <span>Inline Images:</span>
+                    <span className="font-medium text-purple-600">{processingStats.inlineImageCount}</span>
+                  </div>
+                )}
+                {processingStats.tableCount > 0 && (
+                  <div className="flex justify-between">
+                    <span>Tables:</span>
+                    <span className="font-medium text-green-600">{processingStats.tableCount}</span>
+                  </div>
+                )}
+                {processingStats.equationCount > 0 && (
+                  <div className="flex justify-between">
+                    <span>Equations:</span>
+                    <span className="font-medium text-amber-600">{processingStats.equationCount}</span>
+                  </div>
+                )}
+                {processingStats.ocrUsed && (
+                  <div className="flex justify-between col-span-2">
+                    <span>OCR Confidence:</span>
+                    <span className="font-medium">
+                      {typeof processingStats.ocrConfidence === "number"
+                        ? `${processingStats.ocrConfidence.toFixed(1)}%`
+                        : "N/A"}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Quality:</span>
                   <Badge
@@ -441,6 +581,30 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                   </div>
                 </div>
               )}
+
+              {processingStats.previewImages && processingStats.previewImages.length > 0 && (
+                <div className="border-t border-gray-300 pt-3 mt-3">
+                  <h5 className="text-xs font-medium text-blue-700 mb-2 flex items-center">
+                    <ImageIcon className="w-3 h-3 mr-1" />
+                    Page Previews ({processingStats.previewImages.length})
+                  </h5>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {processingStats.previewImages.map((preview: any) => (
+                      <div key={preview.id} className="border rounded bg-white shadow-sm overflow-hidden">
+                        <img
+                          src={preview.dataUrl}
+                          alt={preview.altText || `Preview for page ${preview.pageNumber}`}
+                          className="w-full h-24 object-cover"
+                          loading="lazy"
+                        />
+                        <div className="text-[10px] sm:text-xs p-1 text-center text-gray-600">
+                          Page {preview.pageNumber ?? "?"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -454,10 +618,10 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
             {isProcessing ? (
               <div className="flex items-center space-x-2">
                 <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" />
-                <span className="text-[10px] sm:text-xs md:text-sm">Processing PDF...</span>
+                <span className="text-[10px] sm:text-xs md:text-sm">Processing document...</span>
               </div>
             ) : (
-              <span className="text-[10px] sm:text-xs md:text-sm">Process PDF with Enhanced Engine</span>
+              <span className="text-[10px] sm:text-xs md:text-sm">Process Document</span>
             )}
           </Button>
         </CardFooter>
@@ -465,26 +629,26 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
 
       {/* Enhanced Processing Tips */}
       <div className="text-[10px] sm:text-xs text-gray-500 space-y-1 sm:space-y-2 bg-gray-50 p-2 sm:p-3 md:p-4 rounded-md mt-3">
-        <h4 className="font-medium text-gray-700 mb-1 sm:mb-2 text-xs sm:text-sm">Enhanced PDF Processing Features:</h4>
+        <h4 className="font-medium text-gray-700 mb-1 sm:mb-2 text-xs sm:text-sm">Supported Document Formats:</h4>
         <p className="flex items-center">
           <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-          <span>Advanced text extraction with structure preservation</span>
+          <span><strong>PDF:</strong> Advanced text extraction with OCR fallback for scanned documents</span>
         </p>
         <p className="flex items-center">
           <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-          <span>Intelligent chunking with semantic splitting</span>
+          <span><strong>Word (DOCX/DOC):</strong> Full text extraction with structure preservation</span>
         </p>
         <p className="flex items-center">
           <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-          <span>Quality assessment and confidence scoring</span>
+          <span><strong>Spreadsheets (XLSX/XLS/CSV/TSV):</strong> Table data extraction with multi-sheet support</span>
         </p>
         <p className="flex items-center">
           <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />
-          <span>Real-time progress tracking with detailed feedback</span>
+          <span>Intelligent chunking with semantic splitting for all formats</span>
         </p>
         <p className="flex items-center">
-          <AlertTriangle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-yellow-500 flex-shrink-0" />
-          <span>Comprehensive error handling and recovery</span>
+          <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />
+          <span>Quality assessment and confidence scoring</span>
         </p>
         </div>
   </div>

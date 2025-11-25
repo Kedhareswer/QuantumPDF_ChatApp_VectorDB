@@ -269,14 +269,6 @@ function getEnvVectorDBConfig(): VectorDBConfig | null {
       dimension: Number(process.env.VECTOR_DIMENSION || 1536),
     }
   }
-  if (provider === "chroma") {
-    return {
-      provider: "chroma",
-      url: process.env.CHROMA_URL || "http://localhost:8000",
-      collection: process.env.CHROMA_COLLECTION || "documents",
-      dimension: Number(process.env.VECTOR_DIMENSION || 1536),
-    }
-  }
   if (provider === "local") {
     return { provider: "local", dimension: Number(process.env.VECTOR_DIMENSION || 1536) }
   }

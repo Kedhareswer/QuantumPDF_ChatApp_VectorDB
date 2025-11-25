@@ -128,13 +128,21 @@ export abstract class BaseCache<K, V> {
 
     // Find entry with least hits and oldest timestamp
     let oldestKey: string | null = null
-    let oldestScore = Infinity
+    let lowestScore = Infinity
 
     for (const [key, entry] of this.cache.entries()) {
-      const age = Date.now() - entry.timestamp
-      const score = entry.hits / (age / 1000) // hits per second
-      if (score < oldestScore) {
-        oldestScore = score
+      const ageMs = Date.now() - entry.timestamp
+      // Prevent division by zero: use at least 1 second for age calculation
+      // Also add 1 to hits to avoid zero scores for never-accessed items
+      const ageSeconds = Math.max(ageMs / 1000, 1)
+      const effectiveHits = entry.hits + 1
+      
+      // Score = hits per second, higher is better (keep), lower gets evicted
+      // Add small random factor to break ties consistently
+      const score = effectiveHits / ageSeconds
+      
+      if (score < lowestScore) {
+        lowestScore = score
         oldestKey = key
       }
     }

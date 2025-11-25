@@ -20,6 +20,7 @@ declare module "pdfjs-dist" {
       canvasContext: CanvasRenderingContext2D;
       viewport: PDFPageViewport;
     }): PDFRenderTask;
+    getOperatorList(): Promise<PDFOperatorList>;
   }
 
   export interface PDFRenderTask {
@@ -51,43 +52,14 @@ declare module "pdfjs-dist" {
     promise: Promise<PDFDocumentProxy>;
     destroy(): void;
   }
+
+  export interface PDFOperatorList {
+    fnArray: any[];
+    argsArray: any[];
+  }
 }
 
 declare module "pdfjs-dist/build/pdf.worker.entry" {
   const workerEntry: any;
   export default workerEntry;
-}
-
-// Add any other missing module declarations here
-declare module "chromadb" {
-  export class ChromaClient {
-    constructor(params?: { path?: string; apiUrl?: string });
-    heartbeat(): Promise<number>;
-    createCollection(params: { name: string; metadata?: Record<string, any> }): Promise<Collection>;
-    getCollection(params: { name: string }): Promise<Collection>;
-    listCollections(): Promise<Array<{ name: string; metadata: Record<string, any> }>>;
-  }
-
-  export interface Collection {
-    name: string;
-    count(): Promise<number>;
-    add(params: {
-      ids: string[];
-      embeddings?: number[][];
-      metadatas?: Record<string, any>[];
-      documents?: string[];
-    }): Promise<{ success: boolean }>;
-    query(params: {
-      queryEmbeddings?: number[][];
-      queryTexts?: string[];
-      nResults?: number;
-      where?: Record<string, any>;
-    }): Promise<{
-      ids: string[][];
-      distances: number[][];
-      metadatas: Record<string, any>[][];
-      documents: string[][];
-    }>;
-    delete(params: { ids?: string[]; where?: Record<string, any> }): Promise<{ success: boolean }>;
-  }
 }
