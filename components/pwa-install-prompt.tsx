@@ -11,6 +11,7 @@ export function PWAInstallPrompt() {
     // Check if app is already installed
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true)
+      setShowInstallPrompt(false) // Explicitly hide the prompt
       return
     }
 

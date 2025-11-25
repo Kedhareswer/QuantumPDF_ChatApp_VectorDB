@@ -9,6 +9,8 @@
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
 
 ---
+NOTE: THE BELOW INFOGRAPHIC IS FOR v1.3 --> We are currently v3.0
+![flow.png](public/flow.png)
 
 ## 🌟 Features
 
