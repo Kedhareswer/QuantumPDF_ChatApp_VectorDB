@@ -7,61 +7,27 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Fix: Move serverComponentsExternalPackages to root level as serverExternalPackages
-  serverExternalPackages: ['onnxruntime-node', '@huggingface/transformers'],
-  // Combine all experimental features into one property
+  // External packages that should not be bundled
+  serverExternalPackages: ['onnxruntime-node', '@huggingface/transformers', 'sharp'],
   experimental: {
-    // Fix: Remove serverComponentsExternalPackages from experimental
-    // Fix: Remove serverActions boolean - it's enabled by default in Next.js 15
+    // Enable experimental features if needed
   },
   // Configure page extensions
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
-  // Configure webpack (requires running Next with the webpack bundler)
-  webpack: (config, { isServer, dev }) => {
-    // Fixes npm packages that depend on `node:` protocol
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      // Disable Node.js specific modules in the browser
-      ...(!isServer && {
+  // Simplified webpack config - only essential polyfills
+  webpack: (config, { isServer }) => {
+    // Only add Node.js polyfills for client-side
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
         fs: false,
         net: false,
         tls: false,
         dns: false,
         child_process: false,
         worker_threads: false,
-      }),
-    };
-
-    // Exclude problematic modules from client-side bundle
-    if (!isServer) {
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        // Replace server-only modules with empty mocks
-        'onnxruntime-node': './src/utils/empty-module.js',
-        '@huggingface/transformers': './src/utils/empty-module.js',
-        // Don't alias PDF.js, but ensure it's properly loaded
-        // 'pdfjs-dist': 'pdfjs-dist/legacy/build/pdf',
       };
-
-      // Add more externals if needed
-      config.externals = [...(config.externals || []), {
-        'onnxruntime-node': 'commonjs onnxruntime-node',
-        '@huggingface/transformers': 'commonjs @huggingface/transformers',
-      }];
     }
-
-    // Configure PDF.js worker
-    config.module.rules.push({
-      test: /\.worker\.(js|ts|tsx)$/,
-      use: [
-        {
-          loader: 'worker-loader',
-          options: {
-            publicPath: '/_next/',
-          },
-        },
-      ],
-    });
 
     return config;
   },
