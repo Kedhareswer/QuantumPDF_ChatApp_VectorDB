@@ -9,6 +9,8 @@ const nextConfig = {
   },
   // External packages that should not be bundled
   serverExternalPackages: ['onnxruntime-node', '@huggingface/transformers', 'sharp'],
+  // Turbopack config (Next.js 16 default)
+  turbopack: {},
   experimental: {
     // Enable experimental features if needed
   },

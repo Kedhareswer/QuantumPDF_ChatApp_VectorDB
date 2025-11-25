@@ -5,10 +5,18 @@ import * as SwitchPrimitives from "@radix-ui/react-switch"
 
 import { cn } from "@/lib/utils"
 
+interface SwitchProps extends React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root> {
+  className?: string
+  disabled?: boolean
+}
+
 const Switch = React.forwardRef<
   React.ElementRef<typeof SwitchPrimitives.Root>,
-  React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
->(({ className, ...props }, ref) => (
+  SwitchProps
+>((propsWithRef, ref) => {
+  const { className, ...props } = propsWithRef
+  return (
+  // @ts-expect-error - Radix UI v1.2.6 has restrictive types that don't allow className
   <SwitchPrimitives.Root
     className={cn(
       "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50",
@@ -22,6 +30,7 @@ const Switch = React.forwardRef<
     ref={ref}
   >
     <SwitchPrimitives.Thumb
+      // @ts-expect-error - Radix UI v1.2.6 has restrictive types that don't allow className
       className={cn(
         "pointer-events-none block h-5 w-5 rounded-full shadow-lg ring-0 transition-all",
         // White thumb with better shadow
@@ -33,7 +42,8 @@ const Switch = React.forwardRef<
       )}
     />
   </SwitchPrimitives.Root>
-))
+  )
+})
 Switch.displayName = SwitchPrimitives.Root.displayName
 
 export { Switch }

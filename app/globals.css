@@ -1,50 +1,49 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 0%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
-    --primary: 0 0% 0%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 0%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 0%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 0%;
-    --input: 0 0% 0%;
-    --ring: 0 0% 0%;
-    --radius: 0rem;
+@theme {
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(0 0% 0%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(0 0% 0%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(0 0% 0%);
+  --color-primary: hsl(0 0% 0%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(0 0% 96%);
+  --color-secondary-foreground: hsl(0 0% 0%);
+  --color-muted: hsl(0 0% 96%);
+  --color-muted-foreground: hsl(0 0% 45%);
+  --color-accent: hsl(0 0% 96%);
+  --color-accent-foreground: hsl(0 0% 0%);
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  --color-border: hsl(0 0% 0%);
+  --color-input: hsl(0 0% 0%);
+  --color-ring: hsl(0 0% 0%);
+  --radius: 0rem;
+}
 
-    /* Enhanced spacing variables */
-    --spacing-xs: 0.25rem;
-    --spacing-sm: 0.5rem;
-    --spacing-md: 1rem;
-    --spacing-lg: 1.5rem;
-    --spacing-xl: 2rem;
-    --spacing-2xl: 3rem;
+:root {
+  /* Enhanced spacing variables */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-2xl: 3rem;
 
-    /* Focus ring for accessibility */
-    --focus-ring: 0 0 0 2px rgba(0, 0, 0, 0.8);
-    --focus-ring-offset: 2px;
-  }
+  /* Focus ring for accessibility */
+  --focus-ring: 0 0 0 2px rgba(0, 0, 0, 0.8);
+  --focus-ring-offset: 2px;
 }
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: var(--color-border);
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
     font-feature-settings: "rlig" 1, "calt" 1;
     line-height: 1.6;
     letter-spacing: 0.01em;
@@ -52,7 +51,7 @@
 
   /* Enhanced focus styles for accessibility */
   *:focus-visible {
-    outline: 2px solid black;
+    outline: 2px solid var(--color-foreground);
     outline-offset: 2px;
     border-radius: 2px;
   }
@@ -99,22 +98,27 @@
 
 /* Improved typography hierarchy */
 .text-hierarchy-1 {
-  @apply text-2xl font-bold tracking-tight;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
   line-height: 1.2;
 }
 
 .text-hierarchy-2 {
-  @apply text-xl font-bold;
+  font-size: 1.25rem;
+  font-weight: 700;
   line-height: 1.3;
 }
 
 .text-hierarchy-3 {
-  @apply text-lg font-semibold;
+  font-size: 1.125rem;
+  font-weight: 600;
   line-height: 1.4;
 }
 
 .text-hierarchy-4 {
-  @apply text-base font-medium;
+  font-size: 1rem;
+  font-weight: 500;
   line-height: 1.5;
 }
 
@@ -133,9 +137,15 @@
 
 /* Improved button focus and hover states */
 .btn-enhanced {
-  @apply transition-all duration-200 ease-in-out;
-  @apply focus:ring-2 focus:ring-black focus:ring-offset-2;
-  @apply active:scale-95;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-enhanced:focus {
+  box-shadow: 0 0 0 2px var(--color-background), 0 0 0 4px var(--color-foreground);
+}
+
+.btn-enhanced:active {
+  transform: scale(0.95);
 }
 
 .btn-enhanced:hover {
@@ -145,8 +155,10 @@
 
 /* Enhanced card styling with better spacing */
 .card-enhanced {
-  @apply border-2 border-black shadow-none bg-white;
-  @apply transition-all duration-200 ease-in-out;
+  border: 2px solid var(--color-foreground);
+  box-shadow: none;
+  background-color: var(--color-background);
+  transition: all 0.2s ease-in-out;
 }
 
 .card-enhanced:hover {
@@ -156,18 +168,24 @@
 
 /* Message bubble improvements */
 .message-bubble {
-  @apply p-6 border-2 transition-all duration-200;
+  padding: 1.5rem;
+  border: 2px solid;
+  transition: all 0.2s;
   word-wrap: break-word;
   hyphens: auto;
 }
 
 .message-bubble-user {
-  @apply border-black bg-black text-white;
+  border-color: var(--color-foreground);
+  background-color: var(--color-foreground);
+  color: var(--color-background);
   margin-left: 10%;
 }
 
 .message-bubble-assistant {
-  @apply border-gray-300 bg-white text-black;
+  border-color: #d1d5db;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
   margin-right: 10%;
 }
 
@@ -224,14 +242,17 @@
 .form-enhanced input,
 .form-enhanced textarea,
 .form-enhanced select {
-  @apply border-2 border-black focus:ring-0 focus:border-black;
-  @apply transition-all duration-200;
-  @apply bg-white text-black;
+  border: 2px solid var(--color-foreground);
+  transition: all 0.2s;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
 }
 
 .form-enhanced input:focus,
 .form-enhanced textarea:focus,
 .form-enhanced select:focus {
+  outline: none;
+  border-color: var(--color-foreground);
   box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -249,22 +270,26 @@
 
   /* Mobile typography adjustments */
   .text-hierarchy-1 {
-    @apply text-lg font-bold;
+    font-size: 1.125rem;
+    font-weight: 700;
     line-height: 1.3;
   }
 
   .text-hierarchy-2 {
-    @apply text-base font-bold;
+    font-size: 1rem;
+    font-weight: 700;
     line-height: 1.4;
   }
 
   .text-hierarchy-3 {
-    @apply text-sm font-semibold;
+    font-size: 0.875rem;
+    font-weight: 600;
     line-height: 1.4;
   }
 
   .text-hierarchy-4 {
-    @apply text-xs font-medium;
+    font-size: 0.75rem;
+    font-weight: 500;
     line-height: 1.5;
   }
 
@@ -277,30 +302,30 @@
 
   /* Message bubble improvements for mobile */
   .message-bubble {
-    @apply p-3 sm:p-4;
+    padding: 0.75rem;
     word-break: break-word;
   }
 
   /* Reduce padding on cards for mobile */
   .card-enhanced {
-    @apply p-2 sm:p-4;
+    padding: 0.5rem;
   }
 }
 
 /* High contrast mode support */
 @media (prefers-contrast: high) {
   :root {
-    --border: 0 0% 0%;
-    --foreground: 0 0% 0%;
-    --background: 0 0% 100%;
+    --color-border: hsl(0 0% 0%);
+    --color-foreground: hsl(0 0% 0%);
+    --color-background: hsl(0 0% 100%);
   }
 
   .card-enhanced {
-    @apply border-4;
+    border-width: 4px;
   }
 
   .message-bubble {
-    @apply border-4;
+    border-width: 4px;
   }
 }
 

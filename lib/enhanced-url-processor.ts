@@ -4,15 +4,24 @@
  */
 
 import { AIClient } from './ai-client'
-import * as pdfjsLib from 'pdfjs-dist'
 
-// Configure PDF.js worker
-if (typeof window !== 'undefined') {
-  const workerOptions = (pdfjsLib as any).GlobalWorkerOptions
-  const pdfjsVersion = (pdfjsLib as any).version || '3.11.174'
-  if (workerOptions) {
-    workerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsVersion}/pdf.worker.min.js`
+// PDF.js will be dynamically imported only in browser context to avoid server-side DOMMatrix issues
+let pdfjsLib: any = null
+
+async function getPdfjs() {
+  if (typeof window === 'undefined') {
+    // Server-side: PDF processing not available
+    return null
   }
+  if (!pdfjsLib) {
+    pdfjsLib = await import('pdfjs-dist')
+    const workerOptions = pdfjsLib.GlobalWorkerOptions
+    const pdfjsVersion = pdfjsLib.version || '3.11.174'
+    if (workerOptions) {
+      workerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsVersion}/pdf.worker.min.js`
+    }
+  }
+  return pdfjsLib
 }
 
 export interface ProcessedContent {
@@ -201,7 +210,24 @@ export class EnhancedURLProcessor {
       let pdfMetadata: any = {}
 
       try {
-        const loadingTask = (pdfjsLib as any).getDocument({
+        const pdfjs = await getPdfjs()
+        if (!pdfjs) {
+          // Server-side fallback: return basic info without text extraction
+          return {
+            id: this.generateId(url),
+            url,
+            title,
+            content: `PDF document from ${url}. Text extraction requires browser environment.`,
+            contentType: 'pdf',
+            metadata: {
+              wordCount: 0,
+              pageCount: 0,
+            },
+            chunks: [],
+          }
+        }
+        
+        const loadingTask = pdfjs.getDocument({
           data: new Uint8Array(pdfData),
           useWorkerFetch: false,
           isEvalSupported: false,
@@ -512,6 +538,10 @@ For full content analysis of image-based PDFs:
     if (/^169\.254\./.test(h)) return true
     if (h.endsWith('.local') || h.endsWith('.internal')) return true
     return false
+  }
+
+  private generateId(url: string): string {
+    return `url_${Date.now()}_${url.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50)}`
   }
 }
 

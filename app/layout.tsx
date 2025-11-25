@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from "next/font/google"
 import "./globals.css"
 import 'katex/dist/katex.min.css'
@@ -7,6 +7,17 @@ import { ClientLayout } from "@/components/client-layout"
 import { StructuredData, OrganizationSchema, FAQSchema } from "@/components/seo/structured-data"
 
 const inter = Inter({ subsets: ["latin"] })
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  colorScheme: 'light',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#000000' }
+  ],
+}
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://quantumpdf-chatapp.vercel.app'),
@@ -36,16 +47,6 @@ export const metadata: Metadata = {
   generator: 'Next.js',
   applicationName: 'QuantumPDF ChatApp',
   referrer: 'origin-when-cross-origin',
-  colorScheme: 'light',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#000000' }
-  ],
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-  },
   robots: {
     index: true,
     follow: true,
