@@ -90,7 +90,7 @@ export function StructuredData() {
     '@type': 'WebApplication',
     name: 'QuantumPDF ChatApp',
     alternateName: 'QuantumPDF',
-    description: 'AI-powered PDF analysis and document intelligence platform that transforms PDFs into interactive knowledge bases with conversational AI capabilities. Features enhanced UI with clickable citations, source cards, document filtering, chunk visualization, query history, and conversation export.',
+    description: 'Chat with your documents using AI. Ask questions and get instant answers with page citations. Upload PDFs, Word docs, Excel files. Free tool with GPT-4, Claude, Mistral, and 19+ AI models. Export conversations, filter documents, view source chunks.',
     url: 'https://quantumpdf-chatapp.vercel.app',
     applicationCategory: 'BusinessApplication',
     applicationSubCategory: 'Document Management',
@@ -159,7 +159,7 @@ export function StructuredData() {
         reviewBody: 'Excellent tool for document analysis with cutting-edge AI integration and enhanced UI features including clickable citations and source cards.'
       }
     ],
-    keywords: 'PDF AI chat, document analysis, AI PDF reader, intelligent document processing, RAG chatbot, PDF conversation, document intelligence, AI document assistant, clickable citations, source cards, document filtering, chunk visualization, query history, conversation export, PDF citation navigation',
+    keywords: 'chat with PDF, PDF chatbot, AI document analysis, document Q&A, PDF to text AI, analyze PDF with AI, document intelligence, AI document assistant, PDF summarizer, chat with documents, PDF question answer, AI PDF reader, document analysis tool, PDF AI chat, conversational AI documents',
     inLanguage: 'English',
     copyrightHolder: {
       '@type': 'Person',
@@ -252,7 +252,7 @@ export function FAQSchema() {
         name: 'What is QuantumPDF ChatApp?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'QuantumPDF ChatApp is an AI-powered document intelligence platform that allows you to upload PDF documents and have natural language conversations with them using advanced language models like GPT-4, Claude, and Mistral. Version 3.0 features enhanced UI with clickable citations, source cards, document filtering, chunk visualization, query history, and conversation export.'
+          text: 'QuantumPDF ChatApp lets you chat with your documents using AI. Upload PDFs, Word docs, or Excel files, then ask questions and get instant answers with page citations. It supports GPT-4, Claude, Mistral, and 19+ AI models. Free to use with your own API keys.'
         }
       },
       {
@@ -273,10 +273,10 @@ export function FAQSchema() {
       },
       {
         '@type': 'Question',
-        name: 'How does the AI understand my PDF?',
+        name: 'How does the AI understand my documents?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Our system uses advanced 3-phase RAG (Retrieval Augmented Generation) with hybrid search, reciprocal rank fusion, and re-ranking. The AI breaks down your PDF into searchable chunks, creates semantic embeddings, and uses vector search with anti-hallucination measures to provide accurate, cited responses. You can visualize retrieved chunks and see similarity scores for transparency.'
+          text: 'The AI uses advanced RAG (Retrieval Augmented Generation) to understand your documents. It breaks them into searchable chunks, creates semantic embeddings, and uses vector search to find relevant content. When you ask a question, it retrieves the most relevant sections and generates accurate answers with page citations.'
         }
       },
       {

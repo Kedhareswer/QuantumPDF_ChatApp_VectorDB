@@ -498,27 +498,30 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
       </div>
 
       <Tabs defaultValue="ai" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg">
+        <TabsList className="grid w-full grid-cols-3 gap-2 p-1 bg-white border-2 border-black rounded-lg">
           <TabsTrigger 
             value="ai"
-            className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
-                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
+            className="data-[state=active]:bg-black data-[state=active]:text-white data-[state=active]:font-medium 
+                       bg-white text-black border border-black hover:bg-black hover:text-white 
+                       transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
           >
             <Zap className="w-4 h-4 mr-1" />
             <span className="text-sm truncate">AI Provider</span>
           </TabsTrigger>
           <TabsTrigger 
             value="vectordb"
-            className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
-                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
+            className="data-[state=active]:bg-black data-[state=active]:text-white data-[state=active]:font-medium 
+                       bg-white text-black border border-black hover:bg-black hover:text-white 
+                       transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
           >
             <Database className="w-4 h-4 mr-1" />
             <span className="text-sm truncate">Vector DB</span>
           </TabsTrigger>
           <TabsTrigger 
             value="advanced"
-            className="data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:font-medium 
-                       hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
+            className="data-[state=active]:bg-black data-[state=active]:text-white data-[state=active]:font-medium 
+                       bg-white text-black border border-black hover:bg-black hover:text-white 
+                       transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
           >
             <Settings className="w-4 h-4 mr-1" />
             <span className="text-sm truncate">Advanced</span>

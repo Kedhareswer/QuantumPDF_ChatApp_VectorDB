@@ -43,7 +43,6 @@ import { ThinkingBubble } from "@/components/thinking-bubble"
 import { useToast } from "@/hooks/use-toast"
 import { useAppStore } from "@/lib/store"
 import { QuickActions } from "@/components/quick-actions"
-import { SourceCards } from "@/components/source-card"
 import { CitationBadge, parseCitations } from "@/components/citation-badge"
 import { DocumentFilter } from "@/components/document-filter"
 import { ChunkVisualization } from "@/components/chunk-visualization"
@@ -98,7 +97,8 @@ interface ChatInterfaceProps {
   onSendMessage: (content: string, options?: {
     showThinking?: boolean,
     complexityLevel?: 'simple' | 'normal' | 'complex',
-    useContext?: boolean
+    useContext?: boolean,
+    documentIds?: string[]
   }) => void
   onAddMessage?: (message: Message) => void
   onClearChat: () => void
@@ -106,6 +106,8 @@ interface ChatInterfaceProps {
   isProcessing: boolean
   disabled: boolean
   ragEngine?: any // Add ragEngine prop for diagnostics
+  documentContext?: any
+  aiClient?: any
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -248,16 +250,16 @@ function MessageContent({ content }: { content: string }) {
                 rehypePlugins={[rehypeKatex as any]}
                 components={{
                   // Custom styling for markdown elements
-                  h1: ({ children }) => <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 mt-4 sm:mt-6 first:mt-0 break-words">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-base sm:text-lg md:text-xl font-bold mb-2 sm:mb-3 mt-3 sm:mt-5 first:mt-0 break-words">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-sm sm:text-base md:text-lg font-bold mb-2 mt-3 sm:mt-4 first:mt-0 break-words">{children}</h3>,
-                  h4: ({ children }) => <h4 className="text-xs sm:text-sm md:text-base font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h4>,
-                  h5: ({ children }) => <h5 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h5>,
-                  h6: ({ children }) => <h6 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h6>,
-                  p: ({ children }) => <p className="mb-3 sm:mb-4 last:mb-0 leading-relaxed text-xs sm:text-sm md:text-base break-words">{children}</p>,
+                  h1: ({ children }) => <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 mt-4 sm:mt-6 first:mt-0 wrap-break-word">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-base sm:text-lg md:text-xl font-bold mb-2 sm:mb-3 mt-3 sm:mt-5 first:mt-0 wrap-break-word">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm sm:text-base md:text-lg font-bold mb-2 mt-3 sm:mt-4 first:mt-0 wrap-break-word">{children}</h3>,
+                  h4: ({ children }) => <h4 className="text-xs sm:text-sm md:text-base font-bold mb-2 mt-2 sm:mt-3 first:mt-0 wrap-break-word">{children}</h4>,
+                  h5: ({ children }) => <h5 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 wrap-break-word">{children}</h5>,
+                  h6: ({ children }) => <h6 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 wrap-break-word">{children}</h6>,
+                  p: ({ children }) => <p className="mb-3 sm:mb-4 last:mb-0 leading-relaxed text-xs sm:text-sm md:text-base wrap-break-word">{children}</p>,
                   ul: ({ children }) => <ul className="list-disc list-inside mb-3 sm:mb-4 space-y-1 text-xs sm:text-sm">{children}</ul>,
                   ol: ({ children }) => <ol className="list-decimal list-inside mb-3 sm:mb-4 space-y-1 text-xs sm:text-sm">{children}</ol>,
-                  li: ({ children }) => <li className="leading-relaxed break-words">{children}</li>,
+                  li: ({ children }) => <li className="leading-relaxed wrap-break-word">{children}</li>,
                   blockquote: ({ children }) => (
                     <blockquote className="border-l-4 border-gray-300 pl-3 sm:pl-4 my-3 sm:my-4 italic text-gray-700 bg-gray-50 py-2 text-xs sm:text-sm">
                       {children}
@@ -275,7 +277,7 @@ function MessageContent({ content }: { content: string }) {
                     }
 
                     return inline ? (
-                      <code className="bg-gray-100 px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono text-gray-800 break-words" {...rest}>
+                      <code className="bg-gray-100 px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono text-gray-800 wrap-break-word" {...rest}>
                         {children}
                       </code>
                     ) : (
@@ -309,7 +311,7 @@ function MessageContent({ content }: { content: string }) {
                     </th>
                   ),
                   td: ({ children }) => (
-                    <td className="border border-gray-300 px-2 sm:px-3 md:px-4 py-1 sm:py-2 text-gray-700 text-[10px] sm:text-xs break-words">
+                    <td className="border border-gray-300 px-2 sm:px-3 md:px-4 py-1 sm:py-2 text-gray-700 text-[10px] sm:text-xs wrap-break-word">
                       {children}
                     </td>
                   ),
@@ -318,7 +320,7 @@ function MessageContent({ content }: { content: string }) {
                   a: ({ href, children }) => (
                     <a
                       href={href}
-                      className="text-blue-600 hover:text-blue-800 underline text-xs sm:text-sm break-words"
+                      className="text-blue-600 hover:text-blue-800 underline text-xs sm:text-sm wrap-break-word"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -899,17 +901,6 @@ ${diagnostics.documents.length === 0
                       </div>
                     </div>
 
-                    {/* Source Cards */}
-                    {(message.sources && message.sources.length > 0) || (message.metadata?.retrievedChunks && message.metadata.retrievedChunks.length > 0) ? (
-                      <div className="mt-6">
-                        <SourceCards
-                          sources={message.sources || []}
-                          chunks={message.metadata?.retrievedChunks}
-                          onViewPage={handleViewPage}
-                        />
-                      </div>
-                    ) : null}
-
                     {/* Chunk Visualization */}
                     {message.metadata?.retrievedChunks && message.metadata.retrievedChunks.length > 0 && (
                       <ChunkVisualization
@@ -964,7 +955,7 @@ ${diagnostics.documents.length === 0
                   onKeyDown={handleKeyDown}
                   placeholder={disabled ? 'Configure AI provider and upload documents to start chatting...' : 'Ask a question about your documents... (Shift+Enter for new line)'}
                   disabled={disabled || isProcessing}
-                  className="min-h-[2.5rem] h-[2.5rem] sm:min-h-[3rem] sm:h-[3rem] max-h-[7.5rem] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-xs sm:text-sm md:text-base leading-relaxed w-full p-2 sm:p-3"
+                  className="min-h-10 h-10 sm:min-h-12 sm:h-12 max-h-30 resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-xs sm:text-sm md:text-base leading-relaxed w-full p-2 sm:p-3"
                   rows={1}
                 />
               </div>
