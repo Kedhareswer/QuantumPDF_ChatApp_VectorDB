@@ -498,23 +498,36 @@ export function SystemStatus({
     system: true,
     alerts: true
   })
+  const hasInitializedRef = useRef(false)
 
   // Initialization effect (removed duplicate intervals - handled in main useEffect)
   useEffect(() => {
+    if (hasInitializedRef.current) return
+    hasInitializedRef.current = true
+
+    let isMounted = true
     const initializeMetrics = async () => {
       setIsInitializing(true)
-      
+
       // Reduced initialization delay
       await new Promise(resolve => setTimeout(resolve, 1000))
-      
+
+      if (!isMounted) return
+
       // Start monitoring
       updateMetrics()
       checkAPIHealth()
-      
-      setIsInitializing(false)
+
+      if (isMounted) {
+        setIsInitializing(false)
+      }
     }
 
     initializeMetrics()
+
+    return () => {
+      isMounted = false
+    }
     // Note: Intervals are set up in the main useEffect above to avoid duplicates
   }, [updateMetrics, checkAPIHealth])
 
