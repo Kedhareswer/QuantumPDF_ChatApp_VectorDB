@@ -433,50 +433,51 @@ export class AIClient {
 
   // --- generateText and testConnection methods remain largely the same ---
   // They use this.config.provider and this.config.apiKey as before
-  async generateText(messages: ChatMessage[]): Promise<string> {
+  async generateText(messages: ChatMessage[], options?: { temperature?: number }): Promise<string> {
+    const temperature = options?.temperature ?? 0.1 // Default to low temperature for factual responses
     try {
       if (!Array.isArray(messages) || messages.length === 0) {
         throw new Error("Invalid messages array")
       }
       switch (this.config.provider) {
         case "huggingface":
-          return await this.generateHuggingFaceText(messages)
+          return await this.generateHuggingFaceText(messages, temperature)
         case "openai":
-          return await this.generateOpenAIText(messages)
+          return await this.generateOpenAIText(messages, temperature)
         case "anthropic":
-          return await this.generateAnthropicText(messages)
+          return await this.generateAnthropicText(messages, temperature)
         case "aiml":
-          return await this.generateAIMLText(messages)
+          return await this.generateAIMLText(messages, temperature)
         case "groq":
-          return await this.generateGroqText(messages)
+          return await this.generateGroqText(messages, temperature)
         case "openrouter":
-          return await this.generateOpenRouterText(messages)
+          return await this.generateOpenRouterText(messages, temperature)
         case "deepinfra":
-          return await this.generateDeepInfraText(messages)
+          return await this.generateDeepInfraText(messages, temperature)
         case "deepseek":
-          return await this.generateDeepSeekText(messages)
+          return await this.generateDeepSeekText(messages, temperature)
         case "googleai":
-          return await this.generateGoogleAIText(messages)
+          return await this.generateGoogleAIText(messages, temperature)
         case "vertex":
-          return await this.generateVertexText(messages)
+          return await this.generateVertexText(messages, temperature)
         case "mistral":
-          return await this.generateMistralText(messages)
+          return await this.generateMistralText(messages, temperature)
         case "perplexity":
-          return await this.generatePerplexityText(messages)
+          return await this.generatePerplexityText(messages, temperature)
         case "xai":
-          return await this.generateXAIText(messages)
+          return await this.generateXAIText(messages, temperature)
         case "alibaba":
-          return await this.generateAlibabaText(messages)
+          return await this.generateAlibabaText(messages, temperature)
         case "minimax":
-          return await this.generateMiniMaxText(messages)
+          return await this.generateMiniMaxText(messages, temperature)
         case "fireworks":
-          return await this.generateFireworksText(messages)
+          return await this.generateFireworksText(messages, temperature)
         case "cerebras":
-          return await this.generateCerebrasText(messages)
+          return await this.generateCerebrasText(messages, temperature)
         case "replicate":
-          return await this.generateReplicateText(messages)
+          return await this.generateReplicateText(messages, temperature)
         case "anyscale":
-          return await this.generateAnyscaleText(messages)
+          return await this.generateAnyscaleText(messages, temperature)
         default:
           throw new Error(`Text generation not supported for provider: ${this.config.provider}`)
       }
@@ -927,7 +928,7 @@ export class AIClient {
 
   // --- Provider specific text generation / connection test stubs ---
   // (These remain as they were, ensure generateHuggingFaceText, generateOpenAIText, etc. are present)
-  private async generateHuggingFaceText(messages: ChatMessage[]): Promise<string> {
+  private async generateHuggingFaceText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const prompt = this.formatMessagesForHuggingFace(messages)
     const context = messages.find((m) => m.role === "system")?.content || ""
     const requestBody: { prompt: string; context: string; model: string; apiKey?: string } = {
@@ -1027,12 +1028,12 @@ export class AIClient {
     }
   }
 
-  private async generateOpenAIText(messages: ChatMessage[]): Promise<string> {
+  private async generateOpenAIText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`OpenAI API error: ${response.statusText}`)
     const result = await response.json()
@@ -1054,7 +1055,7 @@ export class AIClient {
           model: this.config.model, 
           messages: messages, 
           max_tokens: 2048, 
-          temperature: 0.7,
+          temperature: 0.1, // Low temperature for factual responses
           stream: true
         }),
       })
@@ -1114,7 +1115,7 @@ export class AIClient {
   }
 
   // Fixed AIML text generation
-  private async generateAIMLText(messages: ChatMessage[]): Promise<string> {
+  private async generateAIMLText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.aimlapi.com/v1"
 
     // Ensure we're using a text generation model
@@ -1137,7 +1138,7 @@ export class AIClient {
       body: JSON.stringify({
         model: textModel,
         messages: messages,
-        temperature: 0.1,
+        temperature,
         top_p: 0.1,
         frequency_penalty: 1,
         max_tokens: 551,
@@ -1160,7 +1161,7 @@ export class AIClient {
     }
   }
 
-  private async generateAnthropicText(messages: ChatMessage[]): Promise<string> {
+  private async generateAnthropicText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.anthropic.com"
     const response = await fetch(`${baseUrl}/v1/messages`, {
       method: "POST",
@@ -1172,6 +1173,7 @@ export class AIClient {
       body: JSON.stringify({
         model: this.config.model,
         max_tokens: 500,
+        temperature,
         messages: messages.filter((m) => m.role !== "system"),
         system: messages.find((m) => m.role === "system")?.content,
       }),
@@ -1190,7 +1192,7 @@ export class AIClient {
     }
   }
 
-  private async generateGroqText(messages: ChatMessage[]): Promise<string> {
+  private async generateGroqText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     try {
       const baseUrl = this.config.baseUrl || "https://api.groq.com/openai/v1"
       const apiKey = this.config.apiKey.trim()
@@ -1212,7 +1214,7 @@ export class AIClient {
           model: this.config.model, 
           messages: messages,
           max_tokens: 2048, // Increased from 500 to allow for longer responses
-          temperature: 0.7,
+          temperature,
           top_p: 1,
           stream: false
         }),
@@ -1338,7 +1340,7 @@ export class AIClient {
   }
 
   // New provider implementations
-  private async generateFireworksText(messages: ChatMessage[]): Promise<string> {
+  private async generateFireworksText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     try {
       // Fireworks follows an OpenAI-compatible endpoint but sometimes requires /v1 instead of /inference/v1
       const defaultBase = "https://api.fireworks.ai/inference/v1"
@@ -1361,7 +1363,7 @@ export class AIClient {
           model: this.config.model,
           messages: messages,
           max_tokens: 2048,
-          temperature: 0.7,
+          temperature,
           top_p: 1,
           stream: false
         })
@@ -1405,12 +1407,12 @@ export class AIClient {
     }
   }
 
-  private async generateCerebrasText(messages: ChatMessage[]): Promise<string> {
+  private async generateCerebrasText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.cerebras.ai/v1"
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`Cerebras API error: ${response.statusText}`)
     const result = await response.json()
@@ -1426,7 +1428,7 @@ export class AIClient {
     }
   }
 
-  private async generateGoogleAIText(messages: ChatMessage[]): Promise<string> {
+  private async generateGoogleAIText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://generativelanguage.googleapis.com/v1beta"
 
     // Convert messages to Google AI format
@@ -1454,7 +1456,7 @@ export class AIClient {
     }
   }
 
-  private async generateReplicateText(messages: ChatMessage[]): Promise<string> {
+  private async generateReplicateText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.replicate.com/v1"
     const apiKey = this.config.apiKey?.trim()
     if (!apiKey) {
@@ -1471,7 +1473,7 @@ export class AIClient {
         model: this.config.model,
         messages,
         max_tokens: 1024,
-        temperature: 0.7,
+        temperature,
       }),
     })
 
@@ -1498,12 +1500,12 @@ export class AIClient {
     }
   }
 
-  private async generateAnyscaleText(messages: ChatMessage[]): Promise<string> {
+  private async generateAnyscaleText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.endpoints.anyscale.com/v1"
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`Anyscale API error: ${response.statusText}`)
     const result = await response.json()
@@ -1520,7 +1522,7 @@ export class AIClient {
   }
 
   // Proper implementations for providers that were using placeholders
-  private async generateOpenRouterText(messages: ChatMessage[]): Promise<string> {
+  private async generateOpenRouterText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://openrouter.ai/api/v1"
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
@@ -1534,7 +1536,7 @@ export class AIClient {
         model: this.config.model, 
         messages: messages, 
         max_tokens: 500, 
-        temperature: 0.7 
+        temperature
       }),
     })
     if (!response.ok) throw new Error(`OpenRouter API error: ${response.statusText}`)
@@ -1551,12 +1553,12 @@ export class AIClient {
     }
   }
 
-  private async generateDeepInfraText(messages: ChatMessage[]): Promise<string> {
+  private async generateDeepInfraText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.deepinfra.com/v1/openai"
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`DeepInfra API error: ${response.statusText}`)
     const result = await response.json()
@@ -1572,12 +1574,12 @@ export class AIClient {
     }
   }
 
-  private async generateDeepSeekText(messages: ChatMessage[]): Promise<string> {
+  private async generateDeepSeekText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.deepseek.com/v1"
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`DeepSeek API error: ${response.statusText}`)
     const result = await response.json()
@@ -1631,7 +1633,7 @@ export class AIClient {
     return 'us-central1'
   }
 
-  private async generateVertexText(messages: ChatMessage[]): Promise<string> {
+  private async generateVertexText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const projectId = this.extractVertexProjectId()
     const region = this.extractVertexRegion()
     const model = this.config.model.includes(':') ? this.config.model.split(':')[1] : this.config.model
@@ -1652,7 +1654,7 @@ export class AIClient {
         })),
         generationConfig: {
           maxOutputTokens: 500,
-          temperature: 0.7
+          temperature
         }
       }),
     })
@@ -1685,12 +1687,12 @@ export class AIClient {
     }
   }
 
-  private async generateMistralText(messages: ChatMessage[]): Promise<string> {
+  private async generateMistralText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.mistral.ai/v1"
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`Mistral API error: ${response.statusText}`)
     const result = await response.json()
@@ -1706,12 +1708,12 @@ export class AIClient {
     }
   }
 
-  private async generatePerplexityText(messages: ChatMessage[]): Promise<string> {
+  private async generatePerplexityText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.perplexity.ai"
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`Perplexity API error: ${response.statusText}`)
     const result = await response.json()
@@ -1727,12 +1729,12 @@ export class AIClient {
     }
   }
 
-  private async generateXAIText(messages: ChatMessage[]): Promise<string> {
+  private async generateXAIText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.x.ai/v1"
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature: 0.7 }),
+      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`xAI API error: ${response.statusText}`)
     const result = await response.json()
@@ -1748,7 +1750,7 @@ export class AIClient {
     }
   }
 
-  private async generateAlibabaText(messages: ChatMessage[]): Promise<string> {
+  private async generateAlibabaText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://dashscope.aliyuncs.com/api/v1"
     const response = await fetch(`${baseUrl}/services/aigc/text-generation/generation`, {
       method: "POST",
@@ -1764,7 +1766,7 @@ export class AIClient {
         },
         parameters: {
           max_tokens: 500,
-          temperature: 0.7
+          temperature
         }
       }),
     })
@@ -1782,7 +1784,7 @@ export class AIClient {
     }
   }
 
-  private async generateMiniMaxText(messages: ChatMessage[]): Promise<string> {
+  private async generateMiniMaxText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.minimax.chat/v1"
     const response = await fetch(`${baseUrl}/text/chatcompletion_v2`, {
       method: "POST",
@@ -1794,7 +1796,7 @@ export class AIClient {
         model: this.config.model,
         messages: messages,
         max_tokens: 500,
-        temperature: 0.7
+        temperature
       }),
     })
     if (!response.ok) throw new Error(`MiniMax API error: ${response.statusText}`)

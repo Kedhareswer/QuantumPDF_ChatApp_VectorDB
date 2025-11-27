@@ -1,7 +1,9 @@
 // QuantumPDF ChatApp Service Worker
-// Version: 1.0.0
+// Version: Update this when making significant changes to cache strategy
+// Format: v{major}.{minor}.{patch} (matches package.json version format)
+// To force cache refresh, increment the version number
 
-const CACHE_VERSION = 'v1.0.0';
+const CACHE_VERSION = 'v0.1.0';
 const CACHE_NAME = `quantumpdf-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;

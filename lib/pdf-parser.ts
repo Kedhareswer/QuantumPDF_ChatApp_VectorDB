@@ -1,61 +1,6 @@
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import { AdvancedChunker } from './advanced-chunking'
-
-export interface PDFParseResult {
-  text: string
-  metadata: {
-    title?: string
-    author?: string
-    pages: number
-    size: number
-  }
-}
-
-export class BrowserPDFParser {
-  async parseFile(file: File): Promise<PDFParseResult> {
-    try {
-      // Use FileReader API for browser compatibility
-      const arrayBuffer = await this.readFileAsArrayBuffer(file)
-
-      // Simple text extraction fallback
-      const text = await this.extractTextFromBuffer(arrayBuffer)
-
-      return {
-        text,
-        metadata: {
-          title: file.name,
-          pages: 1,
-          size: file.size,
-        },
-      }
-    } catch (error) {
-      console.error("PDF parsing failed:", error)
-      throw new Error("Failed to parse PDF file")
-    }
-  }
-
-  private readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as ArrayBuffer)
-      reader.onerror = () => reject(new Error("Failed to read file"))
-      reader.readAsArrayBuffer(file)
-    })
-  }
-
-  private async extractTextFromBuffer(buffer: ArrayBuffer): Promise<string> {
-    // Simple text extraction - in a real implementation,
-    // this would use a PDF parsing library
-    const uint8Array = new Uint8Array(buffer)
-    const decoder = new TextDecoder("utf-8", { fatal: false })
-
-    try {
-      return decoder.decode(uint8Array)
-    } catch {
-      return "Unable to extract text from PDF"
-    }
-  }
-}
+import { BrowserOCRProcessor } from './ocr-processor'
 
 export interface PDFContent {
   text: string
@@ -68,15 +13,54 @@ export interface PDFContent {
     creationDate?: Date
     modificationDate?: Date
     pages: number
+    ocrUsed?: boolean
+    ocrPages?: number
+    textPages?: number
+    ocrConfidence?: number
   }
 }
 
 export class PDFParser {
   private pdfjsLib: any = null
   private isInitialized = false
+  private ocrProcessor: BrowserOCRProcessor | null = null
+  private ocrAvailable: boolean = false
 
   constructor() {
     // Don't initialize immediately - do it when needed
+    // Try to initialize OCR processor (non-blocking)
+    this.initializeOCR().catch(() => {
+      console.log("OCR not available - will use text extraction only")
+    })
+  }
+
+  /**
+   * Initialize OCR processor (non-blocking, fails gracefully)
+   */
+  private async initializeOCR(): Promise<void> {
+    try {
+      // Check if we're in browser environment
+      if (typeof window === 'undefined') {
+        return
+      }
+
+      this.ocrProcessor = new BrowserOCRProcessor('eng', true) // Enable dual OCR
+      this.ocrAvailable = true
+      console.log("Dual OCR processor initialized (Tesseract + PaddleOCR)")
+      
+      // Log which engines are available
+      setTimeout(async () => {
+        if (this.ocrProcessor) {
+          const tesseractAvailable = this.ocrProcessor.isTesseractAvailable()
+          const paddleOCRAvailable = this.ocrProcessor.isPaddleOCRAvailable()
+          console.log(`OCR Engines: Tesseract=${tesseractAvailable}, PaddleOCR=${paddleOCRAvailable}`)
+        }
+      }, 1000)
+    } catch (error) {
+      console.warn("OCR initialization failed (will use text extraction only):", error)
+      this.ocrAvailable = false
+      this.ocrProcessor = null
+    }
   }
 
   private async initializePDFJS() {
@@ -156,6 +140,10 @@ export class PDFParser {
 
       let fullText = ""
       let successfulPages = 0
+      let textPages = 0
+      let ocrPages = 0
+      let totalOcrConfidence = 0
+      let ocrUsed = false
 
       // Extract text from all pages with individual error handling
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
@@ -174,22 +162,111 @@ export class PDFParser {
             .filter((text: string) => text.trim().length > 0)
             .join(' ')
 
+          // If page has text, use it
           if (pageText.trim()) {
             fullText += `\n\n--- Page ${pageNum} ---\n${pageText}`
             successfulPages++
+            textPages++
+          } else {
+            // No text found - try OCR if available
+            console.log(`Page ${pageNum} has no extractable text - attempting OCR...`)
+            
+            if (this.ocrAvailable && this.ocrProcessor) {
+              try {
+                // Render page to canvas for OCR
+                const viewport = page.getViewport({ scale: 2.0 }) // Higher scale for better OCR
+                const canvas = document.createElement('canvas')
+                const context = canvas.getContext('2d')
+                
+                if (context) {
+                  canvas.width = viewport.width
+                  canvas.height = viewport.height
+                  
+                  await page.render({
+                    canvasContext: context,
+                    viewport: viewport
+                  }).promise
+                  
+                  // Process with dual OCR (Tesseract + PaddleOCR)
+                  console.log(`Running dual OCR on page ${pageNum}...`)
+                  const ocrResult = await this.ocrProcessor.processImage(canvas)
+                  
+                  if (ocrResult.text && ocrResult.text.trim() && !ocrResult.text.includes("OCR processing failed")) {
+                    fullText += `\n\n--- Page ${pageNum} (OCR) ---\n${ocrResult.text}`
+                    successfulPages++
+                    ocrPages++
+                    totalOcrConfidence += ocrResult.confidence
+                    ocrUsed = true
+                    console.log(`✅ OCR extracted text from page ${pageNum} (confidence: ${ocrResult.confidence.toFixed(1)}%)`)
+                  } else {
+                    console.warn(`OCR found no text on page ${pageNum}`)
+                    fullText += `\n\n--- Page ${pageNum} (No Text/OCR) ---\n[This page appears to be image-based with no readable text]`
+                  }
+                } else {
+                  throw new Error("Could not create canvas context")
+                }
+              } catch (ocrError) {
+                console.warn(`OCR failed for page ${pageNum}:`, ocrError)
+                fullText += `\n\n--- Page ${pageNum} (OCR Failed) ---\n[Page content could not be extracted via OCR]`
+              }
+            } else {
+              // OCR not available
+              console.warn(`Page ${pageNum} has no text and OCR is not available`)
+              fullText += `\n\n--- Page ${pageNum} (Image-based, OCR not available) ---\n[This page appears to be image-based. Install tesseract.js for OCR support.]`
+            }
           }
         } catch (pageError) {
           console.warn(`Error processing page ${pageNum}:`, pageError)
-          // Add a placeholder for failed pages
-          fullText += `\n\n--- Page ${pageNum} (Processing Error) ---\n[Page content could not be extracted]`
+          // Try OCR as fallback if text extraction failed
+          if (this.ocrAvailable && this.ocrProcessor) {
+            try {
+              const page = await pdf.getPage(pageNum)
+              const viewport = page.getViewport({ scale: 2.0 })
+              const canvas = document.createElement('canvas')
+              const context = canvas.getContext('2d')
+              
+              if (context) {
+                canvas.width = viewport.width
+                canvas.height = viewport.height
+                await page.render({ canvasContext: context, viewport: viewport }).promise
+                
+                const ocrResult = await this.ocrProcessor.processImage(canvas)
+                if (ocrResult.text && ocrResult.text.trim()) {
+                  const engineLabel = ocrResult.engine === 'hybrid' 
+                    ? `Dual OCR Fallback (${ocrResult.engine})`
+                    : `OCR Fallback (${ocrResult.engine || 'tesseract'})`
+                  
+                  fullText += `\n\n--- Page ${pageNum} (${engineLabel}) ---\n${ocrResult.text}`
+                  successfulPages++
+                  ocrPages++
+                  totalOcrConfidence += ocrResult.confidence
+                  ocrUsed = true
+                } else {
+                  fullText += `\n\n--- Page ${pageNum} (Processing Error) ---\n[Page content could not be extracted]`
+                }
+              }
+            } catch (ocrFallbackError) {
+              console.warn(`OCR fallback also failed for page ${pageNum}:`, ocrFallbackError)
+              fullText += `\n\n--- Page ${pageNum} (Processing Error) ---\n[Page content could not be extracted]`
+            }
+          } else {
+            fullText += `\n\n--- Page ${pageNum} (Processing Error) ---\n[Page content could not be extracted]`
+          }
         }
       }
 
       console.log(`Text extraction complete. Successful pages: ${successfulPages}/${pdf.numPages}`)
+      if (ocrUsed) {
+        console.log(`OCR was used on ${ocrPages} page(s) (${textPages} pages had extractable text)`)
+        const avgOcrConfidence = ocrPages > 0 ? totalOcrConfidence / ocrPages : 0
+        console.log(`Average OCR confidence: ${avgOcrConfidence.toFixed(1)}%`)
+      }
 
       if (!fullText.trim() || successfulPages === 0) {
         throw new Error("No readable text content found in PDF. This might be an image-based PDF.")
       }
+
+      const avgOcrConfidence = ocrPages > 0 ? totalOcrConfidence / ocrPages : undefined
 
       return {
         text: fullText.trim(),
@@ -202,6 +279,10 @@ export class PDFParser {
           creationDate: metadata.info?.CreationDate ? new Date(metadata.info.CreationDate) : undefined,
           modificationDate: metadata.info?.ModDate ? new Date(metadata.info.ModDate) : undefined,
           pages: pdf.numPages,
+          ocrUsed,
+          ocrPages,
+          textPages,
+          ocrConfidence: avgOcrConfidence,
         },
       }
     } catch (error) {
@@ -222,7 +303,8 @@ export class PDFParser {
         } else if (errorMessage.includes("password") || errorMessage.includes("encrypted")) {
           throw new Error("Password-protected PDFs are not supported. Please use an unprotected PDF.")
         } else if (errorMessage.includes("no readable text") || errorMessage.includes("image-based")) {
-          throw new Error("This appears to be an image-based PDF. Please use a text-based PDF or convert it first.")
+          // Updated message - OCR is now attempted automatically
+          throw new Error("This PDF could not be processed. The document may be:\n• Fully image-based with poor image quality\n• Corrupted or encrypted\n• Using unsupported formats\n\nIf OCR was attempted, it may have failed due to image quality. Try using a higher quality scan or a text-based PDF.")
         } else if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
           throw new Error("Network error while processing PDF. Please check your internet connection.")
         }
@@ -252,5 +334,14 @@ export class PDFParser {
     const advanced = chunker.chunkText(text)
     // Return plain strings for embedding pipeline compatibility
     return advanced.map(c => c.content).filter(c => c.trim().length > 0)
+  }
+
+  /**
+   * Cleanup OCR resources
+   */
+  async cleanup(): Promise<void> {
+    if (this.ocrProcessor) {
+      await this.ocrProcessor.cleanup()
+    }
   }
 }

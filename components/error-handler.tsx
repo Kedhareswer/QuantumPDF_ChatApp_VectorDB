@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { X, AlertTriangle, Info, CheckCircle, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -31,7 +31,7 @@ export function useErrorHandler() {
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true)
 
   // Monitor network status
-  useState(() => {
+  useEffect(() => {
     if (typeof window !== "undefined") {
       const handleOnline = () => setIsOnline(true)
       const handleOffline = () => setIsOnline(false)
@@ -44,7 +44,7 @@ export function useErrorHandler() {
         window.removeEventListener("offline", handleOffline)
       }
     }
-  })
+  }, [])
 
   const addError = useCallback((error: Omit<ErrorInfo, "id" | "timestamp">) => {
     const newError: ErrorInfo = {

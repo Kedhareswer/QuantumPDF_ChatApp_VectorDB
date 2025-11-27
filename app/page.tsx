@@ -199,10 +199,19 @@ export default function QuantumPDFChatbot() {
         })
         return // early since streaming handled
       } else {
+      // Get recent conversation history (last 10 messages for context)
+      const recentHistory = messages
+        .slice(-10)
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }))
+
       const response = await ragEngine.query(content, {
         showThinking,
         complexityLevel: detectedComplexity,
-        tokenBudget: 4000
+        tokenBudget: 4000,
+        conversationHistory: recentHistory
       })
         responseAnswer = response.answer
         responseSources = response.sources

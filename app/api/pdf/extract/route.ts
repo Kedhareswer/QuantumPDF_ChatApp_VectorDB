@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
   try {
     const formData = await request.formData()
     const file = formData.get("pdf") as File
@@ -93,7 +94,7 @@ The server-side processor examined the PDF binary structure and extracted availa
 ### File Analysis
 - **File Type**: ${file.type}
 - **File Size**: ${file.size} bytes
-- **Processing Time**: ${Date.now() - Date.now()} ms
+- **Processing Time**: ${Date.now() - startTime} ms
 - **Status**: Processed successfully (limited text extraction)
 
 This server-side processing provides a foundation for more advanced PDF text extraction capabilities.`
@@ -116,11 +117,13 @@ This server-side processing provides a foundation for more advanced PDF text ext
       failedPages: extractedText.length > 200 ? 0 : 1,
     }
 
+    const processingTime = Date.now() - startTime
+
     return NextResponse.json({
       success: true,
       text: extractedText,
       metadata,
-      processingTime: 0,
+      processingTime,
     })
   } catch (error) {
     console.error("Server PDF processing error:", error)

@@ -42,6 +42,8 @@ interface EnhancedQueryResponse {
     responseTokens: number
     totalTokens: number
   }
+  groundednessScore?: number // Score 0-1 indicating how well response is grounded in retrieved chunks
+  hallucinationDetected?: boolean // Flag indicating if hallucinations were detected
 }
 
 interface ProcessingPhase {
@@ -543,11 +545,24 @@ export class RAGEngine {
     }
   }
 
+  /**
+   * Find relevant chunks using multiple retrieval strategies and RRF
+   * @param questionEmbedding - Query embedding vector
+   * @param topK - Number of chunks to retrieve
+   * @param filters - Optional filters for document/chunk selection
+   * @param question - Original question text for exact match and re-ranking
+   * @param useRRF - Whether to use Reciprocal Rank Fusion (default: true)
+   * @param useReranking - Whether to use re-ranking (default: true)
+   */
   private findRelevantChunks(
     questionEmbedding: number[], 
     topK: number, 
     filters?: RAGFilterOptions,
-    question?: string
+    question?: string,
+    useRRF: boolean = true,
+    useReranking: boolean = true,
+    alternativeEmbeddings: number[][] = [],
+    minSimilarityThreshold: number = 0.03
   ) {
     const allChunks: Array<{
       content: string;
@@ -636,6 +651,7 @@ export class RAGEngine {
           let docSimilaritySum = 0
           let validChunks = 0
           let docBestSimilarity = 0
+          let docBestHybridSimilarity = 0
 
           // Validate document structure
           if (!doc || !doc.chunks || !doc.embeddings) {
@@ -687,22 +703,33 @@ export class RAGEngine {
               }
 
               // Calculate cosine similarity
-              const similarity = this.aiClient!.cosineSimilarity(questionEmbedding, chunkEmbedding);
+              const semanticSimilarity = this.aiClient!.cosineSimilarity(questionEmbedding, chunkEmbedding);
 
-              if (typeof similarity === "number" && !isNaN(similarity)) {
-                docSimilaritySum += similarity
+              if (typeof semanticSimilarity === "number" && !isNaN(semanticSimilarity)) {
+                // Extract chunk content and metadata first
+                // Support both string chunks and TextChunk objects
+                const chunkContent = typeof chunk === 'string' ? chunk : chunk.content
+                const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
+
+                // Calculate exact match boost for identifiers (Article numbers, Section numbers, etc.)
+                const exactMatchBoost = question ? this.calculateExactMatchBoost(question, chunkContent || '') : 0
+
+                // Hybrid scoring: Combine semantic similarity with exact match boost
+                // If exact match is found, significantly boost the score
+                const hybridSimilarity = exactMatchBoost > 0.5
+                  ? Math.min(1.0, semanticSimilarity * 0.4 + exactMatchBoost * 0.6) // Strong boost for exact matches
+                  : semanticSimilarity * 0.8 + exactMatchBoost * 0.2 // Normal hybrid scoring
+
+                // Update document metrics
+                docSimilaritySum += hybridSimilarity // Use hybrid for metrics
                 validChunks++
-                docBestSimilarity = Math.max(docBestSimilarity, similarity)
+                docBestSimilarity = Math.max(docBestSimilarity, semanticSimilarity)
+                docBestHybridSimilarity = Math.max(docBestHybridSimilarity, hybridSimilarity)
 
                 // Apply adaptive similarity threshold based on document performance
-                const adaptiveMinSim = this.calculateAdaptiveThreshold(similarity, filters?.minSimilarity ?? 0.03)
+                const adaptiveMinSim = this.calculateAdaptiveThreshold(hybridSimilarity, filters?.minSimilarity ?? minSimilarityThreshold)
 
-                if (similarity >= adaptiveMinSim) {
-                  // Extract chunk content and metadata
-                  // Support both string chunks and TextChunk objects
-                  const chunkContent = typeof chunk === 'string' ? chunk : chunk.content
-                  const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
-
+                if (hybridSimilarity >= adaptiveMinSim) {
                   // Get semantic importance with question-aware content type boosting
                   const semanticImportance = this.extractSemanticImportance(chunk, doc.metadata, contentTypeBoosts)
 
@@ -719,7 +746,7 @@ export class RAGEngine {
                   allChunks.push({
                     content: chunkContent || "",
                     source: sourceString,
-                    similarity,
+                    similarity: hybridSimilarity, // Use hybrid score instead of pure semantic
                     documentId: doc.id,
                     documentName: doc.name,
                     semanticImportance,
@@ -730,16 +757,17 @@ export class RAGEngine {
                     ...(chunkMetadata?.type && { chunkType: chunkMetadata.type }),
                   });
 
-                  // Log high-similarity chunks
-                  if (similarity > 0.2) {
-                    console.log(`Strong similarity chunk found: ${similarity.toFixed(3)} from ${sourceString} (importance: ${semanticImportance.toFixed(2)})`)
+                  // Log high-similarity chunks with exact match info
+                  if (hybridSimilarity > 0.2) {
+                    const matchInfo = exactMatchBoost > 0.5 ? ` [EXACT MATCH: ${exactMatchBoost.toFixed(2)}]` : ''
+                    console.log(`Strong similarity chunk found: ${hybridSimilarity.toFixed(3)} (semantic: ${semanticSimilarity.toFixed(3)}${matchInfo}) from ${sourceString} (importance: ${semanticImportance.toFixed(2)})`)
                   }
-                } else if (similarity > 0.01) {
+                } else if (hybridSimilarity > 0.01) {
                   // Even low-similarity chunks are tracked for diversity purposes
-                  console.log(`Low similarity chunk: ${similarity.toFixed(3)} from ${doc.name} (below threshold but tracked)`)
+                  console.log(`Low similarity chunk: ${hybridSimilarity.toFixed(3)} from ${doc.name} (below threshold but tracked)`)
                 }
               } else {
-                console.warn(`Invalid similarity calculated for chunk ${chunkIndex} in document ${docIndex}:`, similarity);
+                console.warn(`Invalid similarity calculated for chunk ${chunkIndex} in document ${docIndex}:`, semanticSimilarity);
               }
             } catch (chunkError) {
               console.error(`Error processing chunk ${chunkIndex} in document ${docIndex}:`, chunkError);
@@ -751,9 +779,9 @@ export class RAGEngine {
             documentMetrics.set(doc.id, {
               avgSimilarity: docSimilaritySum / validChunks,
               chunkCount: validChunks,
-              bestSimilarity: docBestSimilarity
+              bestSimilarity: docBestHybridSimilarity // Use hybrid similarity for best match
             })
-            console.log(`Document ${doc.name} metrics - Avg: ${(docSimilaritySum / validChunks).toFixed(3)}, Best: ${docBestSimilarity.toFixed(3)}, Chunks: ${validChunks}`)
+            console.log(`Document ${doc.name} metrics - Avg: ${(docSimilaritySum / validChunks).toFixed(3)}, Best: ${docBestHybridSimilarity.toFixed(3)}, Chunks: ${validChunks}`)
           }
         } catch (docError) {
           console.error(`Error processing document ${docIndex}:`, docError);
@@ -767,12 +795,527 @@ export class RAGEngine {
         return [];
       }
 
-      // Enhanced Multi-Document Diversity Algorithm
-      return this.applyEnhancedDiversityAlgorithm(allChunks, documentMetrics, topK, filters?.minSimilarity ?? 0.03)
+      // Step 1: Generate multiple retrieval strategies
+      let finalChunks: typeof allChunks = []
+      
+      if (useRRF && question) {
+        // If alternative embeddings are provided, use multi-query RRF
+        if (alternativeEmbeddings.length > 0) {
+          console.log(`Using Multi-Query Reciprocal Rank Fusion with ${alternativeEmbeddings.length + 1} query variations`)
+          finalChunks = this.applyMultiQueryRRF(allChunks, questionEmbedding, alternativeEmbeddings, question, topK, filters)
+        } else {
+          console.log("Using Reciprocal Rank Fusion (RRF) with multiple retrieval strategies")
+          finalChunks = this.applyReciprocalRankFusion(allChunks, questionEmbedding, question, topK, filters)
+        }
+      } else {
+        // Fallback to single strategy with diversity algorithm
+        console.log("Using single retrieval strategy with diversity algorithm")
+        finalChunks = this.applyEnhancedDiversityAlgorithm(allChunks, documentMetrics, topK, filters?.minSimilarity ?? minSimilarityThreshold)
+      }
+
+      // Step 2: Re-ranking (if enabled)
+      if (useReranking && question && finalChunks.length > 0) {
+        console.log("Applying re-ranking to improve result quality")
+        finalChunks = this.rerankChunks(finalChunks, question, topK)
+      }
+
+      return finalChunks
     } catch (error) {
       console.error("Error finding relevant chunks:", error);
       return [];
     }
+  }
+
+  /**
+   * Calculate exact match boost for identifiers in query vs chunk content
+   * Detects article numbers, section numbers, clause numbers, etc.
+   * Returns a score between 0 and 1, where 1.0 = perfect exact match
+   */
+  private calculateExactMatchBoost(query: string, chunkContent: string): number {
+    if (!query || !chunkContent) return 0
+
+    // Extract identifiers from query (Article numbers, Section numbers, etc.)
+    const identifiers = this.extractIdentifiers(query)
+    if (identifiers.length === 0) return 0
+
+    let totalBoost = 0
+    let matchedIdentifiers = 0
+
+    for (const identifier of identifiers) {
+      // Check for exact match (case-insensitive, but preserve structure)
+      const exactMatch = new RegExp(`\\b${this.escapeRegex(identifier)}\\b`, 'i')
+      if (exactMatch.test(chunkContent)) {
+        matchedIdentifiers++
+        // Perfect match gets full boost
+        totalBoost += 1.0
+      } else {
+        // Check for partial match (e.g., "Article 24" matches "Article 24-B")
+        const partialMatch = new RegExp(`\\b${this.escapeRegex(identifier.split(/[-_]/)[0])}\\b`, 'i')
+        if (partialMatch.test(chunkContent)) {
+          // Partial match gets reduced boost
+          totalBoost += 0.3
+        }
+      }
+    }
+
+    // Normalize: average boost across all identifiers, but reward perfect matches
+    if (matchedIdentifiers === identifiers.length) {
+      // All identifiers matched perfectly - maximum boost
+      return Math.min(1.0, totalBoost / identifiers.length + 0.2)
+    } else if (matchedIdentifiers > 0) {
+      // Some identifiers matched
+      return Math.min(1.0, totalBoost / identifiers.length)
+    } else {
+      // No matches
+      return 0
+    }
+  }
+
+  /**
+   * Extract identifiers from text (Article numbers, Section numbers, etc.)
+   * Examples: "Article 24-B", "Section 3.2", "Clause 5(a)", "Rule 12.3.4"
+   */
+  private extractIdentifiers(text: string): string[] {
+    const identifiers: string[] = []
+    
+    // Pattern 1: Article numbers (Article 24-B, Article 24A, Article 24, etc.)
+    const articlePattern = /\bArticle\s+(\d+[-_]?[A-Z]?|\d+[A-Z])\b/gi
+    let match
+    while ((match = articlePattern.exec(text)) !== null) {
+      identifiers.push(`Article ${match[1]}`)
+    }
+
+    // Pattern 2: Section numbers (Section 3.2, Section 3-2, Section 3.2.1, etc.)
+    const sectionPattern = /\bSection\s+(\d+(?:[.-]\d+)+)\b/gi
+    while ((match = sectionPattern.exec(text)) !== null) {
+      identifiers.push(`Section ${match[1]}`)
+    }
+
+    // Pattern 3: Clause numbers (Clause 5(a), Clause 5(b), Clause 5, etc.)
+    const clausePattern = /\bClause\s+(\d+(?:\([a-z]\))?)\b/gi
+    while ((match = clausePattern.exec(text)) !== null) {
+      identifiers.push(`Clause ${match[1]}`)
+    }
+
+    // Pattern 4: Rule numbers (Rule 12.3.4, Rule 12-3, etc.)
+    const rulePattern = /\bRule\s+(\d+(?:[.-]\d+)+)\b/gi
+    while ((match = rulePattern.exec(text)) !== null) {
+      identifiers.push(`Rule ${match[1]}`)
+    }
+
+    // Pattern 5: Paragraph numbers (§ 5, § 5.2, etc.)
+    const paragraphPattern = /§\s*(\d+(?:[.-]\d+)*)/gi
+    while ((match = paragraphPattern.exec(text)) !== null) {
+      identifiers.push(`§ ${match[1]}`)
+    }
+
+    // Pattern 6: Subsection numbers (Subsection 3.2, Subsection 3-2, etc.)
+    const subsectionPattern = /\bSubsection\s+(\d+(?:[.-]\d+)+)\b/gi
+    while ((match = subsectionPattern.exec(text)) !== null) {
+      identifiers.push(`Subsection ${match[1]}`)
+    }
+
+    // Pattern 7: Chapter numbers (Chapter 2, Chapter 2.1, etc.)
+    const chapterPattern = /\bChapter\s+(\d+(?:[.-]\d+)*)\b/gi
+    while ((match = chapterPattern.exec(text)) !== null) {
+      identifiers.push(`Chapter ${match[1]}`)
+    }
+
+    // Pattern 8: Standalone numbered references (24-B, 3.2, 5(a), etc.)
+    // Only if they appear in a context that suggests they're identifiers
+    const standalonePattern = /\b(\d+[-_][A-Z]|\d+[A-Z]|\d+(?:[.-]\d+)+)\b/g
+    const standaloneMatches = text.match(standalonePattern)
+    if (standaloneMatches && identifiers.length === 0) {
+      // Only use standalone if no other identifiers found
+      identifiers.push(...standaloneMatches.slice(0, 3)) // Limit to first 3
+    }
+
+    // Remove duplicates and return
+    return Array.from(new Set(identifiers))
+  }
+
+  /**
+   * Escape special regex characters in a string
+   */
+  private escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+
+  /**
+   * Reciprocal Rank Fusion (RRF) - Combines multiple retrieval strategies
+   * Formula: RRF(d) = Σ(1 / (k + rank_i(d))) for each retrieval strategy i
+   * where k is a constant (typically 60) and rank_i is the rank in strategy i
+   */
+  private applyReciprocalRankFusion(
+    allChunks: Array<{
+      content: string;
+      source: string;
+      similarity: number;
+      documentId: string;
+      documentName: string;
+      semanticImportance: number;
+      page?: number;
+      bbox?: any;
+      level?: number;
+      chunkType?: string;
+    }>,
+    questionEmbedding: number[],
+    question: string,
+    topK: number,
+    filters?: RAGFilterOptions
+  ): typeof allChunks {
+    console.log("=== Reciprocal Rank Fusion (RRF) ===")
+    const k = 60 // RRF constant (standard value)
+
+    // Strategy 1: Semantic similarity ranking
+    const semanticRanked = [...allChunks]
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, topK * 2) // Get more candidates for RRF
+
+    // Strategy 2: Exact match boost ranking (already calculated in similarity, but we'll re-rank)
+    const exactMatchRanked = [...allChunks]
+      .map(chunk => ({
+        ...chunk,
+        exactMatchScore: this.calculateExactMatchBoost(question, chunk.content)
+      }))
+      .sort((a, b) => {
+        // Combine similarity with exact match
+        const scoreA = a.similarity * 0.7 + a.exactMatchScore * 0.3
+        const scoreB = b.similarity * 0.7 + b.exactMatchScore * 0.3
+        return scoreB - scoreA
+      })
+      .slice(0, topK * 2)
+
+    // Strategy 3: Keyword-based ranking (BM25-like)
+    const keywordRanked = [...allChunks]
+      .map(chunk => ({
+        ...chunk,
+        keywordScore: this.calculateKeywordRelevance(question, chunk.content)
+      }))
+      .sort((a, b) => b.keywordScore - a.keywordScore)
+      .slice(0, topK * 2)
+
+    // Strategy 4: Semantic importance ranking
+    const importanceRanked = [...allChunks]
+      .sort((a, b) => b.semanticImportance - a.semanticImportance)
+      .slice(0, topK * 2)
+
+    // Create a map of chunk IDs to RRF scores
+    const chunkMap = new Map<string, {
+      chunk: typeof allChunks[0];
+      rrfScore: number;
+      ranks: { semantic: number; exactMatch: number; keyword: number; importance: number };
+    }>()
+
+    // Calculate RRF scores for each chunk
+    const addToRRF = (rankedList: typeof allChunks, strategyName: 'semantic' | 'exactMatch' | 'keyword' | 'importance') => {
+      rankedList.forEach((chunk, index) => {
+        const chunkId = `${chunk.documentId}_${chunk.source}_${chunk.content.substring(0, 50)}`
+        const rank = index + 1
+        const rrfContribution = 1 / (k + rank)
+
+        if (!chunkMap.has(chunkId)) {
+          chunkMap.set(chunkId, {
+            chunk,
+            rrfScore: 0,
+            ranks: { semantic: Infinity, exactMatch: Infinity, keyword: Infinity, importance: Infinity }
+          })
+        }
+
+        const entry = chunkMap.get(chunkId)!
+        entry.rrfScore += rrfContribution
+        entry.ranks[strategyName] = rank
+      })
+    }
+
+    addToRRF(semanticRanked, 'semantic')
+    addToRRF(exactMatchRanked, 'exactMatch')
+    addToRRF(keywordRanked, 'keyword')
+    addToRRF(importanceRanked, 'importance')
+
+    // Sort by RRF score and return top K
+    const rrfResults = Array.from(chunkMap.values())
+      .sort((a, b) => b.rrfScore - a.rrfScore)
+      .slice(0, topK)
+      .map(entry => ({
+        ...entry.chunk,
+        rrfScore: entry.rrfScore,
+        rrfRanks: entry.ranks
+      }))
+
+    console.log(`RRF: Combined ${chunkMap.size} unique chunks from 4 strategies, returning top ${rrfResults.length}`)
+    if (rrfResults.length > 0) {
+      console.log(`Best RRF score: ${rrfResults[0].rrfScore.toFixed(4)}`)
+      console.log(`Best chunk ranks - Semantic: ${rrfResults[0].rrfRanks?.semantic}, Exact: ${rrfResults[0].rrfRanks?.exactMatch}, Keyword: ${rrfResults[0].rrfRanks?.keyword}`)
+    }
+
+    return rrfResults
+  }
+
+  /**
+   * Multi-Query Reciprocal Rank Fusion
+   * Uses multiple query embeddings (original + alternatives) to improve retrieval for vague questions
+   */
+  private applyMultiQueryRRF(
+    allChunks: Array<{
+      content: string;
+      source: string;
+      similarity: number;
+      documentId: string;
+      documentName: string;
+      semanticImportance: number;
+      page?: number;
+      bbox?: any;
+      level?: number;
+      chunkType?: string;
+    }>,
+    questionEmbedding: number[],
+    alternativeEmbeddings: number[][],
+    question: string,
+    topK: number,
+    filters?: RAGFilterOptions
+  ): typeof allChunks {
+    console.log("=== Multi-Query Reciprocal Rank Fusion ===")
+    const k = 60 // RRF constant
+    
+    // Combine all embeddings (original + alternatives)
+    const allEmbeddings = [questionEmbedding, ...alternativeEmbeddings]
+    const allRankings: Map<string, number>[] = []
+    
+    // For each query embedding, calculate similarity and rank chunks
+    for (let i = 0; i < allEmbeddings.length; i++) {
+      const embedding = allEmbeddings[i]
+      const ranking = new Map<string, number>()
+      
+      // Calculate similarity for each chunk with this embedding
+      const chunkScores: Array<{ chunk: typeof allChunks[0]; similarity: number; index: number }> = []
+      
+      for (const chunk of allChunks) {
+        const doc = this.documents.find(d => d.id === chunk.documentId)
+        if (!doc || !doc.embeddings || !doc.chunks) continue
+        
+        // Find the chunk index
+        const chunkIndex = doc.chunks.findIndex((c, idx) => {
+          const cContent = typeof c === 'string' ? c : c.content
+          return cContent === chunk.content
+        })
+        
+        if (chunkIndex === -1 || !doc.embeddings[chunkIndex]) continue
+        
+        const chunkEmbedding = doc.embeddings[chunkIndex]
+        const similarity = this.aiClient!.cosineSimilarity(embedding, chunkEmbedding)
+        
+        if (typeof similarity === 'number' && !isNaN(similarity)) {
+          chunkScores.push({ chunk, similarity, index: chunkIndex })
+        }
+      }
+      
+      // Rank by similarity
+      chunkScores.sort((a, b) => b.similarity - a.similarity)
+      
+      // Store ranks (1-based)
+      chunkScores.forEach((item, rank) => {
+        const chunkKey = `${item.chunk.documentId}-${item.index}`
+        ranking.set(chunkKey, rank + 1)
+      })
+      
+      allRankings.push(ranking)
+    }
+    
+    // Apply RRF: RRF(d) = Σ(1 / (k + rank_i(d)))
+    const rrfScores = new Map<string, number>()
+    
+    for (const chunk of allChunks) {
+      const doc = this.documents.find(d => d.id === chunk.documentId)
+      if (!doc || !doc.chunks) continue
+      
+      const chunkIndex = doc.chunks.findIndex((c, idx) => {
+        const cContent = typeof c === 'string' ? c : c.content
+        return cContent === chunk.content
+      })
+      
+      if (chunkIndex === -1) continue
+      
+      const chunkKey = `${chunk.documentId}-${chunkIndex}`
+      let rrfScore = 0
+      
+      // Sum RRF scores from all query variations
+      for (const ranking of allRankings) {
+        const rank = ranking.get(chunkKey)
+        if (rank !== undefined) {
+          rrfScore += 1 / (k + rank)
+        }
+      }
+      
+      rrfScores.set(chunkKey, rrfScore)
+    }
+    
+    // Sort by RRF score
+    const finalRankedChunks = [...allChunks]
+      .map(chunk => {
+        const doc = this.documents.find(d => d.id === chunk.documentId)
+        if (!doc || !doc.chunks) return { chunk, rrfScore: 0 }
+        
+        const chunkIndex = doc.chunks.findIndex((c, idx) => {
+          const cContent = typeof c === 'string' ? c : c.content
+          return cContent === chunk.content
+        })
+        
+        if (chunkIndex === -1) return { chunk, rrfScore: 0 }
+        
+        const chunkKey = `${chunk.documentId}-${chunkIndex}`
+        const rrfScore = rrfScores.get(chunkKey) || 0
+        
+        return {
+          chunk: {
+            ...chunk,
+            similarity: rrfScore // Use RRF score as similarity
+          },
+          rrfScore
+        }
+      })
+      .sort((a, b) => b.rrfScore - a.rrfScore)
+      .map(item => item.chunk)
+    
+    console.log(`Multi-Query RRF: Combined ${allEmbeddings.length} query variations, top chunk RRF score: ${finalRankedChunks[0]?.similarity?.toFixed(4) || 'N/A'}`)
+    
+    return finalRankedChunks.slice(0, topK)
+  }
+
+  /**
+   * Calculate keyword relevance score (BM25-inspired)
+   */
+  private calculateKeywordRelevance(query: string, content: string): number {
+    if (!query || !content) return 0
+
+    const normalizeText = (text: string) => {
+      return text
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+
+    const normalizedQuery = normalizeText(query)
+    const normalizedContent = normalizeText(content)
+
+    const queryTerms = normalizedQuery.split(/\s+/).filter(term => term.length > 2) // Filter out very short terms
+    const contentTerms = normalizedContent.split(/\s+/)
+
+    if (queryTerms.length === 0) return 0
+
+    // Calculate term frequency (TF) and inverse document frequency (IDF) inspired scores
+    let totalScore = 0
+    const termFrequencies = new Map<string, number>()
+
+    // Count term frequencies in content
+    contentTerms.forEach(term => {
+      termFrequencies.set(term, (termFrequencies.get(term) || 0) + 1)
+    })
+
+    // Calculate score for each query term
+    queryTerms.forEach(queryTerm => {
+      const tf = termFrequencies.get(queryTerm) || 0
+      const contentLength = contentTerms.length
+      
+      // BM25-like scoring (simplified)
+      // Score = (tf * idf) / (tf + k1 * (1 - b + b * (docLength / avgDocLength)))
+      // Simplified version without IDF and avgDocLength
+      const k1 = 1.5
+      const b = 0.75
+      const avgDocLength = 200 // Approximate average
+      
+      const score = (tf * 1.0) / (tf + k1 * (1 - b + b * (contentLength / avgDocLength)))
+      totalScore += score
+    })
+
+    // Normalize by number of query terms
+    return totalScore / queryTerms.length
+  }
+
+  /**
+   * Re-rank chunks using cross-encoder-like approach
+   * Uses semantic similarity + exact match + keyword relevance for final ranking
+   */
+  private rerankChunks(
+    chunks: Array<{
+      content: string;
+      source: string;
+      similarity: number;
+      documentId: string;
+      documentName: string;
+      semanticImportance: number;
+      page?: number;
+      bbox?: any;
+      level?: number;
+      chunkType?: string;
+      rrfScore?: number;
+      rrfRanks?: any;
+    }>,
+    question: string,
+    topK: number
+  ): typeof chunks {
+    console.log("=== Re-ranking Chunks ===")
+    console.log(`Re-ranking ${chunks.length} chunks for question: "${question.substring(0, 100)}"`)
+
+    const reranked = chunks.map(chunk => {
+      // Calculate multiple relevance signals
+      const exactMatchScore = this.calculateExactMatchBoost(question, chunk.content)
+      const keywordScore = this.calculateKeywordRelevance(question, chunk.content)
+      const semanticScore = chunk.similarity
+      const importanceScore = chunk.semanticImportance / 3.0 // Normalize to 0-1
+
+      // Cross-encoder-like scoring: weighted combination of all signals
+      // Exact matches get highest priority
+      let rerankScore: number
+      
+      if (exactMatchScore > 0.7) {
+        // Strong exact match - prioritize heavily
+        rerankScore = exactMatchScore * 0.5 + semanticScore * 0.3 + keywordScore * 0.15 + importanceScore * 0.05
+      } else if (exactMatchScore > 0.3) {
+        // Moderate exact match
+        rerankScore = exactMatchScore * 0.35 + semanticScore * 0.35 + keywordScore * 0.2 + importanceScore * 0.1
+      } else {
+        // No exact match - rely on semantic and keyword
+        rerankScore = semanticScore * 0.5 + keywordScore * 0.3 + importanceScore * 0.2
+      }
+
+      // Boost for chunks that appear in multiple RRF strategies (if available)
+      if (chunk.rrfScore !== undefined) {
+        rerankScore = rerankScore * 0.8 + (chunk.rrfScore * 10) * 0.2 // Scale RRF score
+      }
+
+      return {
+        ...chunk,
+        rerankScore,
+        rerankSignals: {
+          exactMatch: exactMatchScore,
+          keyword: keywordScore,
+          semantic: semanticScore,
+          importance: importanceScore
+        }
+      }
+    })
+
+    // Sort by rerank score and return top K
+    const finalReranked = reranked
+      .sort((a, b) => (b.rerankScore || 0) - (a.rerankScore || 0))
+      .slice(0, topK)
+      .map(({ rerankScore, rerankSignals, ...chunk }) => chunk) // Remove temporary fields
+
+    console.log(`Re-ranking complete: ${finalReranked.length} chunks selected`)
+    if (finalReranked.length > 0) {
+      const topChunk = reranked.find(c => c.content === finalReranked[0].content)
+      if (topChunk) {
+        console.log(`Top reranked chunk score: ${topChunk.rerankScore?.toFixed(4)}`)
+        console.log(`  - Exact match: ${topChunk.rerankSignals?.exactMatch.toFixed(3)}`)
+        console.log(`  - Keyword: ${topChunk.rerankSignals?.keyword.toFixed(3)}`)
+        console.log(`  - Semantic: ${topChunk.rerankSignals?.semantic.toFixed(3)}`)
+        console.log(`  - Importance: ${topChunk.rerankSignals?.importance.toFixed(3)}`)
+      }
+    }
+
+    return finalReranked
   }
 
   // Helper to format chunk type for display
@@ -809,7 +1352,8 @@ export class RAGEngine {
     showThinking?: boolean, 
     tokenBudget?: number,
     complexityLevel?: 'simple' | 'normal' | 'complex',
-    filters?: RAGFilterOptions
+    filters?: RAGFilterOptions,
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
   }): Promise<EnhancedQueryResponse> {
     console.log("Enhanced RAG query started:", question);
 
@@ -857,8 +1401,13 @@ export class RAGEngine {
         };
       }
 
+      // Resolve conversation context if history is provided
+      const resolvedQuestion = options?.conversationHistory && options.conversationHistory.length > 0
+        ? await this.resolveConversationContext(question, options.conversationHistory)
+        : question
+
       // Determine processing approach based on complexity
-      return await this.processQueryEnhanced(question, tokenBudget, complexityLevel, showThinking, filters)
+      return await this.processQueryEnhanced(resolvedQuestion, tokenBudget, complexityLevel, showThinking, filters, options?.conversationHistory)
 
     } catch (error) {
       console.error("Error in enhanced RAG query:", error);
@@ -874,14 +1423,15 @@ export class RAGEngine {
     tokenBudget: number, 
     complexityLevel: string,
     showThinking: boolean,
-    filters?: RAGFilterOptions
+    filters?: RAGFilterOptions,
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
   ): Promise<EnhancedQueryResponse> {
     
     // Phase-based token allocation
     const tokenAllocation = this.calculateTokenAllocation(tokenBudget, complexityLevel)
     
-    // Phase 1: Context Analysis and Initial Response
-    const phase1Result = await this.phase1_ContextAnalysis(question, tokenAllocation.context, filters)
+    // Phase 1: Context Analysis and Initial Response (with conversation history)
+    const phase1Result = await this.phase1_ContextAnalysis(question, tokenAllocation.context, filters, conversationHistory)
     
     // Phase 2: Self-Critique and Validation (only for normal/complex queries)
     const phase2Result = complexityLevel === 'simple' 
@@ -915,7 +1465,7 @@ export class RAGEngine {
     }
   }
 
-  private async phase1_ContextAnalysis(question: string, tokenBudget: number, filters?: RAGFilterOptions) {
+  private async phase1_ContextAnalysis(question: string, tokenBudget: number, filters?: RAGFilterOptions, conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>) {
     console.log("Phase 1: Context Analysis and Initial Response")
     
     // Debug: Check system state
@@ -942,20 +1492,64 @@ export class RAGEngine {
     })
     
     try {
-      // Generate embedding for the question
-      console.log("Generating embedding for question:", question.substring(0, 100) + "...")
-      const questionEmbedding = await this.aiClient!.generateEmbedding(question);
+      // Detect and handle vague questions
+      const vaguenessScore = this.detectVagueness(question)
+      console.log(`Vagueness score: ${vaguenessScore.toFixed(2)} (0=clear, 1=very vague)`)
+      
+      let processedQuestion = question
+      let expandedQueries: string[] = []
+      
+      // If question is vague, expand it
+      if (vaguenessScore > 0.4) {
+        console.log("⚠️ Vague question detected - expanding query...")
+        const expansionResult = await this.expandVagueQuery(question)
+        processedQuestion = expansionResult.expandedQuery
+        expandedQueries = expansionResult.alternativeQueries
+        
+        console.log(`Expanded query: "${processedQuestion}"`)
+        console.log(`Alternative queries: ${expandedQueries.length}`)
+      }
+      
+      // Generate embeddings for main query and alternatives
+      console.log("Generating embedding for question:", processedQuestion.substring(0, 100) + "...")
+      const questionEmbedding = await this.aiClient!.generateEmbedding(processedQuestion);
       console.log("Question embedding generated, dimensions:", questionEmbedding.length)
       
-      // Analyze question type for optimal chunk selection
-      const questionType = this.analyzeQuestionType(question)
-      const chunkLimit = this.getOptimalChunkLimit(questionType)
-      console.log(`Question type: ${questionType}, chunk limit: ${chunkLimit}`)
+      // Generate embeddings for alternative queries if available
+      const alternativeEmbeddings: number[][] = []
+      if (expandedQueries.length > 0) {
+        console.log("Generating embeddings for alternative queries...")
+        for (const altQuery of expandedQueries.slice(0, 3)) { // Limit to 3 alternatives
+          try {
+            const altEmbedding = await this.aiClient!.generateEmbedding(altQuery)
+            alternativeEmbeddings.push(altEmbedding)
+          } catch (error) {
+            console.warn(`Failed to generate embedding for alternative query: ${altQuery}`)
+          }
+        }
+      }
       
-      // Find relevant chunks with question-aware boosting
-      console.log("Finding relevant chunks...")
-      let relevantChunks = this.findRelevantChunks(questionEmbedding, chunkLimit, filters, question);
-      console.log(`Found ${relevantChunks.length} relevant chunks`)
+      // Analyze question type for optimal chunk selection
+      const questionType = this.analyzeQuestionType(processedQuestion)
+      const chunkLimit = this.getOptimalChunkLimit(questionType)
+      // Increase chunk limit for vague questions to get more context
+      const adjustedChunkLimit = vaguenessScore > 0.4 ? Math.min(chunkLimit * 2, 15) : chunkLimit
+      console.log(`Question type: ${questionType}, chunk limit: ${adjustedChunkLimit}`)
+      
+      // Find relevant chunks with question-aware boosting, RRF, and re-ranking
+      console.log("Finding relevant chunks with RRF and re-ranking...")
+      const useRRF = true // Enable RRF by default
+      const useReranking = true // Enable re-ranking by default
+      let relevantChunks = this.findRelevantChunks(
+        questionEmbedding, 
+        adjustedChunkLimit, 
+        filters, 
+        processedQuestion, 
+        useRRF, 
+        useReranking,
+        alternativeEmbeddings // Pass alternative embeddings for multi-query retrieval
+      );
+      console.log(`Found ${relevantChunks.length} relevant chunks after RRF and re-ranking`)
       
       // Debug: Log chunk similarities
       if (relevantChunks.length > 0) {
@@ -990,14 +1584,57 @@ export class RAGEngine {
         }
       }
       
+      // Fallback strategies if no chunks found
       if (relevantChunks.length === 0) {
-        return {
-          question,
-          relevantChunks: [],
-          context: "",
-          initialResponse: "I couldn't find relevant information in the uploaded documents to answer your question. This might be because:\n\n1. The question doesn't match the document content\n2. The documents may not have processed correctly\n3. Try rephrasing your question\n\nDocument status: " + this.documents.length + " documents available with " + this.documents.reduce((total, doc) => total + (doc.chunks?.length || 0), 0) + " total chunks.",
-          questionType,
-          tokensUsed: 0
+        console.warn("No relevant chunks found - attempting fallback strategies...")
+        
+        // Strategy 1: Try broader keyword search
+        const keywordChunks = this.fallbackKeywordSearch(processedQuestion, expandedQueries, 10)
+        if (keywordChunks.length > 0) {
+          console.log(`Fallback keyword search found ${keywordChunks.length} chunks`)
+          relevantChunks = keywordChunks
+        }
+        
+        // Strategy 2: Try semantic search with lower threshold
+        if (relevantChunks.length === 0) {
+          console.log("Attempting semantic search with lower threshold...")
+          const lowThresholdChunks = this.findRelevantChunks(
+            questionEmbedding,
+            adjustedChunkLimit * 2, // Get more chunks
+            filters,
+            processedQuestion,
+            useRRF,
+            useReranking,
+            alternativeEmbeddings,
+            0.3 // Lower similarity threshold
+          )
+          if (lowThresholdChunks.length > 0) {
+            console.log(`Low-threshold search found ${lowThresholdChunks.length} chunks`)
+            relevantChunks = lowThresholdChunks
+          }
+        }
+        
+        // Strategy 3: Return top chunks by importance if still nothing
+        if (relevantChunks.length === 0) {
+          console.log("Attempting importance-based retrieval...")
+          const importanceChunks = this.getTopChunksByImportance(10)
+          if (importanceChunks.length > 0) {
+            console.log(`Importance-based retrieval found ${importanceChunks.length} chunks`)
+            relevantChunks = importanceChunks
+          }
+        }
+        
+        // If still no chunks, provide helpful response
+        if (relevantChunks.length === 0) {
+          const clarificationPrompt = this.generateClarificationPrompt(question, vaguenessScore)
+          return {
+            question,
+            relevantChunks: [],
+            context: "",
+            initialResponse: clarificationPrompt,
+            questionType,
+            tokensUsed: 0
+          }
         }
       }
 
@@ -1009,26 +1646,75 @@ export class RAGEngine {
       const context = optimizedChunks.map((chunk: any) => chunk.content).join("\n\n");
       console.log("Context length:", context.length, "characters")
       
-      // Generate initial response with enhanced prompt
+      // Generate initial response with enhanced prompt (include conversation history)
       const systemPrompt = this.createEnhancedSystemPrompt(questionType)
-      const userPrompt = this.createPhase1UserPrompt(question, context)
+      const userPrompt = this.createPhase1UserPrompt(question, context, conversationHistory)
       
       console.log("Generating AI response...")
-      const messages = [
-        { role: "system" as const, content: systemPrompt },
-        { role: "user" as const, content: userPrompt }
-      ];
+      const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+        { role: "system" as const, content: systemPrompt }
+      ]
+      
+      // Add conversation history if available (last 5 exchanges to avoid token limits)
+      if (conversationHistory && conversationHistory.length > 0) {
+        const recentHistory = conversationHistory.slice(-10) // Last 10 messages (5 exchanges)
+        console.log(`Including ${recentHistory.length} previous messages in context`)
+        recentHistory.forEach(msg => {
+          messages.push({ role: msg.role, content: msg.content })
+        })
+      }
+      
+      // Add current question
+      messages.push({ role: "user" as const, content: userPrompt })
 
-      const initialResponse = await this.aiClient!.generateText(messages);
+      // Generate response with low temperature for deterministic, factual responses
+      const initialResponse = await this.aiClient!.generateText(messages, { temperature: 0.1 });
       console.log("AI response generated, length:", initialResponse.length)
+      
+      // Groundedness check: Verify response is based on retrieved chunks
+      const groundednessResult = this.checkGroundedness(initialResponse, optimizedChunks, question)
+      if (!groundednessResult.isGrounded) {
+        console.warn("⚠️ Groundedness check failed - response may contain hallucinations")
+        console.warn("Unverified claims:", groundednessResult.unverifiedClaims)
+        
+        // Regenerate with stricter prompt if groundedness is too low
+        if (groundednessResult.groundednessScore < 0.5) {
+          console.log("Regenerating response with stricter anti-hallucination prompt...")
+          const strictPrompt = this.createStrictAntiHallucinationPrompt(question, context, optimizedChunks)
+          const messagesStrict = [
+            { role: "system" as const, content: systemPrompt },
+            { role: "user" as const, content: strictPrompt }
+          ]
+          const regeneratedResponse = await this.aiClient!.generateText(messagesStrict, { temperature: 0.1 })
+          
+          // Re-check groundedness
+          const regroundedness = this.checkGroundedness(regeneratedResponse, optimizedChunks, question)
+          if (regroundedness.groundednessScore > groundednessResult.groundednessScore) {
+            console.log("✅ Regenerated response has better groundedness")
+            return {
+              question,
+              relevantChunks: optimizedChunks,
+              context: context,
+              initialResponse: this.enforceCitations(regeneratedResponse, optimizedChunks).trim(),
+              questionType,
+              tokensUsed: this.estimateTokens(systemPrompt + strictPrompt + regeneratedResponse),
+              groundednessScore: regroundedness.groundednessScore
+            }
+          }
+        }
+      }
+      
+      // Enforce citations in response
+      const responseWithCitations = this.enforceCitations(initialResponse, optimizedChunks)
 
       return {
         question,
         relevantChunks: optimizedChunks,
         context: context,
-        initialResponse: initialResponse.trim(),
+        initialResponse: responseWithCitations.trim(),
         questionType,
-        tokensUsed: this.estimateTokens(systemPrompt + userPrompt + initialResponse)
+        tokensUsed: this.estimateTokens(systemPrompt + userPrompt + responseWithCitations),
+        groundednessScore: groundednessResult.groundednessScore
       }
     } catch (error) {
       console.error("Error in phase1_ContextAnalysis:", error)
@@ -1056,7 +1742,8 @@ export class RAGEngine {
       { role: "user" as const, content: critiquePrompt }
     ];
 
-    const critiqueResponse = await this.aiClient!.generateText(messages);
+      // Use low temperature for critique to ensure consistent evaluation
+      const critiqueResponse = await this.aiClient!.generateText(messages, { temperature: 0.1 });
     
     // Parse critique response for issues
     const issues = this.parseCritiqueResponse(critiqueResponse)
@@ -1091,7 +1778,20 @@ export class RAGEngine {
         { role: "user" as const, content: refinementPrompt }
       ];
 
-      finalResponse = await this.aiClient!.generateText(messages);
+      // Use low temperature for final response to reduce hallucinations
+      finalResponse = await this.aiClient!.generateText(messages, { temperature: 0.1 });
+      
+      // Final groundedness check and citation enforcement
+      const finalGroundedness = this.checkGroundedness(finalResponse, phase1Result.relevantChunks, phase1Result.question)
+      if (!finalGroundedness.isGrounded) {
+        console.warn("⚠️ Final response groundedness check failed")
+        // Enforce citations and remove unverified claims
+        finalResponse = this.enforceCitations(finalResponse, phase1Result.relevantChunks)
+        finalResponse = this.removeUnverifiedClaims(finalResponse, finalGroundedness.unverifiedClaims)
+      } else {
+        // Still enforce citations even if grounded
+        finalResponse = this.enforceCitations(finalResponse, phase1Result.relevantChunks)
+      }
     } else {
       // Simple processing - use initial response
       finalResponse = phase1Result.initialResponse
@@ -1144,6 +1844,15 @@ Applied improvements based on critical review to ensure accuracy and clarity.
       new Set(phase1Result.relevantChunks.map((chunk: any) => chunk.source))
     ).filter(Boolean) as string[];
 
+    // Check for hallucinations in final response
+    const finalGroundedness = phase1Result.groundednessScore !== undefined 
+      ? phase1Result.groundednessScore 
+      : this.checkGroundedness(finalResponse, phase1Result.relevantChunks, phase1Result.question).groundednessScore
+    
+    const hallucinationDetected = phase2Result?.identifiedIssues?.some((issue: string) => 
+      issue.toLowerCase().includes('hallucination') || issue.toLowerCase().includes('invented') || issue.toLowerCase().includes('fabricated')
+    ) || false
+
     return {
       answer,
       sources,
@@ -1155,7 +1864,9 @@ Applied improvements based on critical review to ensure accuracy and clarity.
         finalRefinement: "Enhanced response based on critical analysis"
       } : undefined,
       qualityMetrics,
-      tokenUsage
+      tokenUsage,
+      groundednessScore: finalGroundedness,
+      hallucinationDetected
     }
   }
 
@@ -1184,6 +1895,310 @@ Applied improvements based on critical review to ensure accuracy and clarity.
     })
 
     return cleaned.trim()
+  }
+
+  /**
+   * Detect if a question is vague (lacks specificity)
+   * Returns score 0-1, where 0 = clear/specific, 1 = very vague
+   */
+  private detectVagueness(question: string): number {
+    if (!question || question.trim().length < 3) return 1.0
+    
+    const questionLower = question.toLowerCase().trim()
+    let vaguenessScore = 0
+    
+    // Very short questions are vague
+    if (questionLower.length < 10) vaguenessScore += 0.3
+    if (questionLower.length < 5) vaguenessScore += 0.4
+    
+    // Single word questions
+    if (questionLower.split(/\s+/).length === 1) vaguenessScore += 0.5
+    
+    // Vague question patterns
+    const vaguePatterns = [
+      /\b(what|tell me|explain|describe|about)\b/i, // Generic question words
+      /\b(this|that|it|these|those)\b/i, // Pronouns without context
+      /\b(things|stuff|information|details)\b/i, // Vague nouns
+      /\?$.*\?$/i, // Multiple question marks
+    ]
+    
+    let vaguePatternMatches = 0
+    for (const pattern of vaguePatterns) {
+      if (pattern.test(questionLower)) vaguePatternMatches++
+    }
+    vaguenessScore += vaguePatternMatches * 0.15
+    
+    // Lack of specific terms (numbers, names, dates, technical terms)
+    const specificTerms = questionLower.match(/\b\d+[A-Z]?|\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+|\b\d{4}|\d+%|\$\d+/g)
+    if (!specificTerms || specificTerms.length === 0) vaguenessScore += 0.2
+    
+    // Questions that are just "what" or "how" without context
+    if (/^(what|how|why|when|where|who)\s*\?*$/i.test(questionLower)) vaguenessScore += 0.4
+    
+    return Math.min(1.0, vaguenessScore)
+  }
+
+  /**
+   * Expand vague questions into more specific queries
+   */
+  private async expandVagueQuery(question: string): Promise<{
+    expandedQuery: string
+    alternativeQueries: string[]
+  }> {
+    try {
+      // Use AI to expand the query
+      const expansionPrompt = `You are a query expansion expert. The user asked a vague question that needs to be made more specific.
+
+ORIGINAL VAGUE QUESTION: "${question}"
+
+TASK: Expand this question into a more specific, detailed query that would help find relevant information in documents.
+
+GUIDELINES:
+1. Keep the core intent of the original question
+2. Add specific terms, context, and details that would help retrieval
+3. Generate 3 alternative phrasings of the expanded query
+4. Focus on what information the user is likely seeking
+
+OUTPUT FORMAT:
+EXPANDED: [one clear, specific version of the question]
+ALTERNATIVE 1: [first alternative phrasing]
+ALTERNATIVE 2: [second alternative phrasing]
+ALTERNATIVE 3: [third alternative phrasing]
+
+Only output the expanded query and alternatives, nothing else.`
+
+      const messages = [
+        { role: "system" as const, content: "You are a query expansion expert. Expand vague questions into specific, searchable queries." },
+        { role: "user" as const, content: expansionPrompt }
+      ]
+      
+      const expansionResponse = await this.aiClient!.generateText(messages, { temperature: 0.3 })
+      
+      // Parse the response
+      const expandedMatch = expansionResponse.match(/EXPANDED:\s*(.+)/i)
+      const alt1Match = expansionResponse.match(/ALTERNATIVE\s+1:\s*(.+)/i)
+      const alt2Match = expansionResponse.match(/ALTERNATIVE\s+2:\s*(.+)/i)
+      const alt3Match = expansionResponse.match(/ALTERNATIVE\s+3:\s*(.+)/i)
+      
+      const expandedQuery = expandedMatch?.[1]?.trim() || question
+      const alternativeQueries = [
+        alt1Match?.[1]?.trim(),
+        alt2Match?.[1]?.trim(),
+        alt3Match?.[1]?.trim()
+      ].filter(Boolean) as string[]
+      
+      return {
+        expandedQuery,
+        alternativeQueries
+      }
+    } catch (error) {
+      console.warn("Query expansion failed, using original question:", error)
+      // Fallback: simple keyword-based expansion
+      return {
+        expandedQuery: question,
+        alternativeQueries: this.generateSimpleAlternatives(question)
+      }
+    }
+  }
+
+  /**
+   * Generate simple alternative queries without AI
+   */
+  private generateSimpleAlternatives(question: string): string[] {
+    const alternatives: string[] = []
+    const questionLower = question.toLowerCase()
+    
+    // Add "what is" if missing
+    if (!/^(what|how|why|when|where|who|which)/i.test(question)) {
+      alternatives.push(`What is ${question}`)
+    }
+    
+    // Add "explain" variant
+    if (!questionLower.includes('explain')) {
+      alternatives.push(`Explain ${question}`)
+    }
+    
+    // Add "information about" variant
+    alternatives.push(`Information about ${question}`)
+    
+    return alternatives.slice(0, 3)
+  }
+
+  /**
+   * Fallback keyword search when semantic search fails
+   */
+  private fallbackKeywordSearch(
+    question: string,
+    alternativeQueries: string[],
+    limit: number
+  ): Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> {
+    console.log("Performing fallback keyword search...")
+    
+    // Extract keywords from question and alternatives
+    const allQueries = [question, ...alternativeQueries]
+    const keywords = new Set<string>()
+    
+    for (const query of allQueries) {
+      // Extract meaningful words (length > 2, not stop words)
+      const words = query.toLowerCase()
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !/^(the|and|or|but|for|with|from|this|that|what|how|why|when|where|who)/.test(w))
+      
+      words.forEach(w => keywords.add(w))
+    }
+    
+    const keywordArray = Array.from(keywords)
+    console.log(`Searching for keywords: ${keywordArray.join(', ')}`)
+    
+    const results: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> = []
+    
+    // Search through all chunks
+    for (const doc of this.documents) {
+      if (!doc.chunks || !doc.chunks.length) continue
+      
+      for (let i = 0; i < doc.chunks.length; i++) {
+        const chunk = doc.chunks[i]
+        const chunkContent = typeof chunk === 'string' ? chunk : chunk.content || ''
+        const chunkLower = chunkContent.toLowerCase()
+        
+        // Count keyword matches
+        let matchCount = 0
+        for (const keyword of keywordArray) {
+          if (chunkLower.includes(keyword)) {
+            matchCount++
+          }
+        }
+        
+        // Calculate relevance score based on keyword matches
+        if (matchCount > 0) {
+          const relevanceScore = matchCount / keywordArray.length
+          const keywordRelevance = this.calculateKeywordRelevance(question, chunkContent)
+          const combinedScore = (relevanceScore * 0.6 + keywordRelevance * 0.4)
+          
+          if (combinedScore > 0.2) { // Lower threshold for keyword search
+            const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
+            let sourceString = `${doc.name || "Unknown Document"} (chunk ${i + 1})`
+            if (chunkMetadata?.page !== undefined) {
+              sourceString = `${doc.name} · p.${chunkMetadata.page}`
+            }
+            
+            results.push({
+              content: chunkContent,
+              source: sourceString,
+              similarity: combinedScore,
+              documentId: doc.id,
+              documentName: doc.name || "Unknown",
+              semanticImportance: 0.5,
+              ...(chunkMetadata || {})
+            })
+          }
+        }
+      }
+    }
+    
+    // Sort by relevance and return top results
+    results.sort((a, b) => b.similarity - a.similarity)
+    return results.slice(0, limit)
+  }
+
+  /**
+   * Get top chunks by semantic importance when retrieval fails
+   */
+  private getTopChunksByImportance(limit: number): Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> {
+    console.log("Retrieving top chunks by importance...")
+    
+    const results: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> = []
+    
+    for (const doc of this.documents) {
+      if (!doc.chunks || !doc.chunks.length) continue
+      
+      for (let i = 0; i < doc.chunks.length; i++) {
+        const chunk = doc.chunks[i]
+        const chunkContent = typeof chunk === 'string' ? chunk : chunk.content || ''
+        const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
+        
+        // Calculate importance based on metadata
+        let importance = 0.5 // Base importance
+        
+        if (chunkMetadata) {
+          // Headings are more important
+          if (chunkMetadata.type === 'heading') {
+            importance += 0.3
+            if (chunkMetadata.level && chunkMetadata.level <= 2) {
+              importance += 0.2 // Top-level headings are very important
+            }
+          }
+          
+          // Tables and lists are important
+          if (chunkMetadata.type === 'table' || chunkMetadata.type === 'list') {
+            importance += 0.2
+          }
+          
+          // Early pages/chunks might be more important (introductions, summaries)
+          if (chunkMetadata.page && chunkMetadata.page <= 5) {
+            importance += 0.1
+          }
+        }
+        
+        // Longer chunks might contain more information
+        if (chunkContent.length > 200) {
+          importance += 0.1
+        }
+        
+        let sourceString = `${doc.name || "Unknown Document"} (chunk ${i + 1})`
+        if (chunkMetadata?.page !== undefined) {
+          sourceString = `${doc.name} · p.${chunkMetadata.page}`
+        }
+        
+        results.push({
+          content: chunkContent,
+          source: sourceString,
+          similarity: importance, // Use importance as similarity score
+          documentId: doc.id,
+          documentName: doc.name || "Unknown",
+          semanticImportance: importance,
+          ...(chunkMetadata || {})
+        })
+      }
+    }
+    
+    // Sort by importance and return top results
+    results.sort((a, b) => b.similarity - a.similarity)
+    return results.slice(0, limit)
+  }
+
+  /**
+   * Generate clarification prompt for vague questions
+   */
+  private generateClarificationPrompt(question: string, vaguenessScore: number): string {
+    const docCount = this.documents.length
+    const totalChunks = this.documents.reduce((total, doc) => total + (doc.chunks?.length || 0), 0)
+    
+    let prompt = `I couldn't find specific information to answer your question: "${question}"\n\n`
+    
+    if (vaguenessScore > 0.6) {
+      prompt += `**Your question is quite vague.** To help me find the right information, could you:\n\n`
+      prompt += `1. **Be more specific**: What exactly are you looking for?\n`
+      prompt += `2. **Add context**: What topic or subject area is this about?\n`
+      prompt += `3. **Specify details**: Are you looking for:\n`
+      prompt += `   - A definition or explanation?\n`
+      prompt += `   - Specific numbers, dates, or facts?\n`
+      prompt += `   - A process or procedure?\n`
+      prompt += `   - A comparison or analysis?\n\n`
+    } else {
+      prompt += `**I couldn't find relevant information in the documents.** This might be because:\n\n`
+      prompt += `1. The question doesn't match the document content\n`
+      prompt += `2. The information might be phrased differently in the documents\n`
+      prompt += `3. Try rephrasing your question with more specific terms\n\n`
+    }
+    
+    prompt += `**Available documents:** ${docCount} document(s) with ${totalChunks} total chunks.\n\n`
+    prompt += `**Suggestions:**\n`
+    prompt += `- Try asking about specific topics, sections, or concepts from the documents\n`
+    prompt += `- Use more specific keywords or terms\n`
+    prompt += `- Ask "What topics are covered in these documents?" to see what's available`
+    
+    return prompt
   }
 
   private analyzeQuestionType(question: string): string {
@@ -1290,17 +2305,26 @@ Applied improvements based on critical review to ensure accuracy and clarity.
   private createEnhancedSystemPrompt(questionType: string): string {
     const basePrompt = `You are an expert document analyst with deep understanding of technical and academic content. Your goal is to provide accurate, comprehensive, and well-structured responses.
 
+⚠️ CRITICAL ANTI-HALLUCINATION RULES (MANDATORY):
+• ABSOLUTELY FORBIDDEN: You MUST NEVER invent, fabricate, or create information that is not explicitly stated in the provided document context
+• ABSOLUTELY FORBIDDEN: You MUST NEVER make up facts, numbers, dates, names, or any details not present in the context
+• ABSOLUTELY FORBIDDEN: You MUST NEVER infer information beyond what is directly stated, even if it seems logical
+• ABSOLUTELY FORBIDDEN: You MUST NEVER use your training data knowledge to fill gaps - ONLY use the provided context
+• MANDATORY: Every factual claim MUST be traceable to a specific citation in the provided context
+• MANDATORY: If information is not in the context, you MUST explicitly state "This information is not available in the provided documents"
+• MANDATORY: If you are uncertain about ANY detail, you MUST say "I cannot confirm this from the provided documents" rather than guessing
+
 CORE PRINCIPLES:
-• Synthesize information from the provided document context with your broader knowledge
-• If context is insufficient, clearly state what you know from documents vs. general knowledge
-• Prioritize accuracy over completeness - say "I don't know" when uncertain
-• Provide specific citations with document names and relevant details
+• Synthesize information ONLY from the provided document context - do NOT use general knowledge
+• If context is insufficient, you MUST state: "The provided documents do not contain sufficient information to answer this question"
+• Prioritize accuracy over completeness - say "I don't know" or "Not found in documents" when uncertain
+• EVERY factual statement MUST have a citation - no exceptions
 • Use clear, professional language appropriate for the content
 
 RESPONSE STRUCTURE:
-• Start with a direct answer to the question
-• Support with evidence from documents (cited)
-• Add relevant context or explanations when helpful
+• Start with a direct answer to the question (ONLY if answerable from context)
+• Support EVERY claim with evidence from documents (cited)
+• If the answer cannot be found in context, state this clearly at the beginning
 • Use proper markdown for readability:
   - ## for main sections, ### for subsections
   - **bold** for key terms and concepts
@@ -1309,17 +2333,19 @@ RESPONSE STRUCTURE:
   - > for important quotes or highlights
   - Code blocks with \`\`\` for technical content
 
-CITATION FORMAT:
-• Reference sources as: [Document Name, relevant page/section if available]
+CITATION FORMAT (MANDATORY):
+• EVERY factual statement MUST include a citation in this format: [Document Name, page/section]
 • Example: "The study found X [Research Paper.pdf, p.5]"
+• If citing multiple sources: "According to [Doc1.pdf, p.3] and [Doc2.pdf, p.7], the results show..."
+• If a statement has no citation, it is considered HALLUCINATION and is FORBIDDEN
 • Group multiple points from same source together when possible
 
 QUALITY STANDARDS:
-• Never invent information not in context or general knowledge
-• Avoid vague language like "the document says" - be specific
-• No confidence ratings, meta-commentary, or self-assessment
-• No preambles like "Based on the provided documents..." - just answer
-• Keep technical accuracy as highest priority`
+• NEVER invent information not in context - this is the highest priority rule
+• NEVER use vague language like "the document says" - be specific with citations
+• NEVER add confidence ratings, meta-commentary, or self-assessment
+• NEVER use preambles like "Based on the provided documents..." - just answer directly
+• Technical accuracy and citation accuracy are the ONLY priorities`
 
     const typeSpecificPrompts = {
       'summary': '\n\nFOR SUMMARIES: Provide hierarchical overview with main themes, key findings, and supporting details. Use headings to organize major topics.',
@@ -1334,42 +2360,131 @@ QUALITY STANDARDS:
     return basePrompt + (typeSpecificPrompts[questionType as keyof typeof typeSpecificPrompts] || typeSpecificPrompts.general)
   }
 
-  private createPhase1UserPrompt(question: string, context: string): string {
-    return `CONTEXT:
+  private createPhase1UserPrompt(question: string, context: string, conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>): string {
+    let prompt = `CONTEXT FROM DOCUMENTS:
 ${context}
 
-QUESTION: ${question}
+QUESTION: ${question}`
 
-Provide a direct, well-formatted response based on the context above. Use clean markdown formatting and focus on answering the question comprehensively.`
+    // Add conversation context note if history exists
+    if (conversationHistory && conversationHistory.length > 0) {
+      prompt += `\n\nCONVERSATION CONTEXT: The user has asked follow-up questions. Use the conversation history above to understand references like "it", "that", "this", or follow-up questions.`
+    }
+
+    prompt += `\n\n⚠️ CRITICAL INSTRUCTIONS:
+1. Answer ONLY using information explicitly stated in the CONTEXT above
+2. If the answer is not in the CONTEXT, you MUST state: "The provided documents do not contain information to answer this question"
+3. EVERY factual statement MUST include a citation: [Document Name, page/section]
+4. DO NOT invent, infer, or create any information not in the CONTEXT
+5. DO NOT use your general knowledge - ONLY use the CONTEXT provided
+6. If you are uncertain about ANY detail, state "I cannot confirm this from the provided documents"
+7. If this is a follow-up question, use the conversation history to understand context and references`
+
+    prompt += `\n\nProvide a direct, well-formatted response based STRICTLY on the context above. Use clean markdown formatting and ensure EVERY claim has a citation.`
+    
+    return prompt
+  }
+
+  /**
+   * Resolve conversation context - expand pronouns and follow-up questions
+   */
+  private async resolveConversationContext(
+    question: string,
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
+  ): Promise<string> {
+    // Check if question contains pronouns or is a follow-up
+    const hasPronouns = /\b(it|this|that|these|those|they|them|he|she|him|her)\b/i.test(question)
+    const isFollowUp = question.length < 30 || /^(what|how|why|when|where|who|which|tell me|explain|describe|can you|will you)\s+/i.test(question)
+    
+    if (!hasPronouns && !isFollowUp) {
+      return question // No resolution needed
+    }
+
+    try {
+      // Use AI to resolve context
+      const contextResolutionPrompt = `You are a conversation context resolver. The user asked a question that may reference previous conversation.
+
+CONVERSATION HISTORY:
+${conversationHistory.slice(-6).map((msg, i) => `${msg.role.toUpperCase()}: ${msg.content}`).join('\n\n')}
+
+CURRENT QUESTION: "${question}"
+
+TASK: If the question contains pronouns (it, this, that, etc.) or is a follow-up question, expand it to be self-contained and clear. Replace pronouns with the actual subjects from the conversation history.
+
+OUTPUT FORMAT:
+RESOLVED: [expanded question with pronouns replaced and context added]
+
+If the question is already clear and self-contained, just repeat it with "RESOLVED: " prefix.
+
+Only output the resolved question, nothing else.`
+
+      const messages = [
+        { role: "system" as const, content: "You are a conversation context resolver. Expand questions with pronouns or follow-ups to be self-contained." },
+        { role: "user" as const, content: contextResolutionPrompt }
+      ]
+
+      const resolved = await this.aiClient!.generateText(messages, { temperature: 0.1 })
+      const resolvedMatch = resolved.match(/RESOLVED:\s*(.+)/i)
+      
+      if (resolvedMatch && resolvedMatch[1]) {
+        const resolvedQuestion = resolvedMatch[1].trim()
+        console.log(`Context resolved: "${question}" → "${resolvedQuestion}"`)
+        return resolvedQuestion
+      }
+      
+      return question // Fallback to original
+    } catch (error) {
+      console.warn("Context resolution failed, using original question:", error)
+      return question
+    }
   }
 
   private createCritiquePrompt(phase1Result: any): string {
-    return `You are a critical reviewer evaluating response quality. Review this response objectively.
+    return `You are a critical reviewer evaluating response quality and checking for HALLUCINATIONS. Review this response with extreme scrutiny.
 
 QUESTION: ${phase1Result.question}
+
+ORIGINAL CONTEXT:
+${phase1Result.context}
 
 INITIAL RESPONSE:
 ${phase1Result.initialResponse}
 
-EVALUATION CHECKLIST:
-1. ACCURACY: Are all facts supported by context or clearly marked as general knowledge?
-2. COMPLETENESS: Does it fully address all parts of the question?
-3. CLARITY: Is the explanation clear and well-organized?
-4. CITATIONS: Are sources properly attributed with specific references?
-5. FORMAT: Is markdown clean and consistent?
-6. RELEVANCE: Does it stay focused on the question?
+⚠️ CRITICAL HALLUCINATION DETECTION CHECKLIST:
+1. HALLUCINATION CHECK: Does EVERY factual claim appear in the ORIGINAL CONTEXT above?
+   - Check each number, date, name, statistic, and specific detail
+   - Mark ANY claim not explicitly in ORIGINAL CONTEXT as HALLUCINATION
+   - Look for invented facts, made-up numbers, or fabricated details
+
+2. CITATION VERIFICATION: Does EVERY claim have a proper citation?
+   - Format: [Document Name, page/section]
+   - NO uncited factual statements are allowed
+   - Verify citations match actual sources
+
+3. ACCURACY: Are all facts supported by ORIGINAL CONTEXT or clearly marked as "not found"?
+   - Compare response claims word-by-word against ORIGINAL CONTEXT
+   - Flag any inference, assumption, or deduction beyond explicit statements
+
+4. COMPLETENESS: Does it fully address all parts of the question using ONLY context?
+5. CLARITY: Is the explanation clear and well-organized?
+6. FORMAT: Is markdown clean and consistent?
+7. RELEVANCE: Does it stay focused on the question?
 
 For each issue found, note:
-• ✓ = Verified and good
+• ✓ = Verified in ORIGINAL CONTEXT and good
 • ? = Uncertain or needs clarification
-• ! = Conflict or error detected
+• ! = HALLUCINATION detected - claim not in ORIGINAL CONTEXT
 • ∅ = Missing important information
+• 🚫 = INVENTED/FABRICATED information (highest priority to flag)
 
-Provide specific, actionable feedback focusing on the most critical improvements.`
+MANDATORY: Flag ALL hallucinations (claims not in ORIGINAL CONTEXT) with 🚫. Provide specific, actionable feedback focusing on removing ALL hallucinations.`
   }
 
   private createRefinementPrompt(phase1Result: any, phase2Result: any): string {
     return `QUESTION: ${phase1Result.question}
+
+ORIGINAL CONTEXT:
+${phase1Result.context}
 
 INITIAL RESPONSE:
 ${phase1Result.initialResponse}
@@ -1377,28 +2492,249 @@ ${phase1Result.initialResponse}
 CRITICAL REVIEW FEEDBACK:
 ${phase2Result.critiqueText}
 
+⚠️ MANDATORY REFINEMENT REQUIREMENTS:
+1. VERIFY EVERY factual claim against the ORIGINAL CONTEXT - remove any information not explicitly stated
+2. ENSURE EVERY statement has a citation: [Document Name, page/section]
+3. REMOVE any invented, inferred, or fabricated information
+4. If any claim cannot be verified in context, REMOVE it or mark as "not found in documents"
+5. DO NOT add any information not in the ORIGINAL CONTEXT
+
 TASK: Create an improved, polished final response that:
 • Addresses all issues identified in the review
-• Maintains factual accuracy with proper citations
+• VERIFIES every claim against the ORIGINAL CONTEXT
+• Maintains factual accuracy with MANDATORY citations for every claim
 • Uses clean, professional markdown formatting
-• Provides direct, comprehensive answer to the question
+• Provides direct, comprehensive answer ONLY from the context
 • Removes any meta-commentary, confidence scores, or artifacts
+• REMOVES any hallucinated or unverified information
 
 IMPORTANT:
 - Output ONLY the refined response itself
 - Do NOT explain what changes were made
 - Do NOT add notes about improvements
-- Focus on delivering the best possible answer`
+- Focus on delivering the best possible answer that is 100% grounded in the provided context
+- If you cannot verify a claim in the ORIGINAL CONTEXT, you MUST remove it`
+  }
+
+  /**
+   * Check if response is grounded in retrieved chunks
+   * Returns groundedness score (0-1) and list of unverified claims
+   */
+  private checkGroundedness(
+    response: string,
+    chunks: Array<{ content: string; source: string; [key: string]: any }>,
+    question: string
+  ): {
+    isGrounded: boolean
+    groundednessScore: number
+    unverifiedClaims: string[]
+    verifiedClaims: string[]
+  } {
+    console.log("=== Groundedness Check ===")
+    
+    // Extract all factual claims from response (sentences with specific information)
+    const sentences = response
+      .split(/[.!?]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 20 && !s.match(/^(##|###|#|\*|•|-|\d+\.)/)) // Filter out headers and list markers
+    
+    const verifiedClaims: string[] = []
+    const unverifiedClaims: string[] = []
+    
+    // Check each sentence against chunks
+    for (const sentence of sentences) {
+      if (sentence.length < 10) continue
+      
+      const sentenceLower = sentence.toLowerCase()
+      // Extract key terms (nouns, numbers, specific terms)
+      const keyTerms = sentenceLower
+        .match(/\b\d+[A-Z]?|\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*|\b\d{4}|\d+%|\$\d+/g) || []
+      
+      // Check if sentence or its key terms appear in any chunk
+      let found = false
+      let matchScore = 0
+      
+      for (const chunk of chunks) {
+        const chunkLower = chunk.content.toLowerCase()
+        
+        // Exact phrase match (high confidence)
+        if (chunkLower.includes(sentenceLower.substring(0, Math.min(100, sentenceLower.length)))) {
+          found = true
+          matchScore = 1.0
+          break
+        }
+        
+        // Key term matching
+        const matchingTerms = keyTerms.filter(term => chunkLower.includes(term))
+        if (matchingTerms.length > 0) {
+          const termMatchRatio = matchingTerms.length / Math.max(keyTerms.length, 1)
+          if (termMatchRatio > 0.5) {
+            found = true
+            matchScore = Math.max(matchScore, termMatchRatio)
+          }
+        }
+        
+        // Semantic similarity check (simplified - check for common words)
+        const sentenceWords = new Set(sentenceLower.split(/\s+/).filter(w => w.length > 3))
+        const chunkWords = new Set(chunkLower.split(/\s+/).filter(w => w.length > 3))
+        const commonWords = [...sentenceWords].filter(w => chunkWords.has(w))
+        if (commonWords.length >= 3) {
+          found = true
+          matchScore = Math.max(matchScore, commonWords.length / sentenceWords.size)
+        }
+      }
+      
+      if (found && matchScore > 0.3) {
+        verifiedClaims.push(sentence)
+      } else {
+        // Check if it's a citation or meta-commentary (these are OK)
+        if (sentence.match(/\[.*\]|source|document|citation|according to/i)) {
+          verifiedClaims.push(sentence) // Citations are considered verified
+        } else {
+          unverifiedClaims.push(sentence)
+        }
+      }
+    }
+    
+    const totalClaims = sentences.length
+    const groundednessScore = totalClaims > 0 ? verifiedClaims.length / totalClaims : 1.0
+    const isGrounded = groundednessScore >= 0.7 // 70% threshold
+    
+    console.log(`Groundedness: ${(groundednessScore * 100).toFixed(1)}% (${verifiedClaims.length}/${totalClaims} claims verified)`)
+    if (unverifiedClaims.length > 0) {
+      console.warn(`⚠️ ${unverifiedClaims.length} unverified claims detected`)
+      unverifiedClaims.slice(0, 3).forEach(claim => console.warn(`  - "${claim.substring(0, 80)}..."`))
+    }
+    
+    return {
+      isGrounded,
+      groundednessScore,
+      unverifiedClaims,
+      verifiedClaims
+    }
+  }
+
+  /**
+   * Enforce citations in response - add citations for claims that don't have them
+   */
+  private enforceCitations(
+    response: string,
+    chunks: Array<{ content: string; source: string; [key: string]: any }>
+  ): string {
+    // Check if response already has citations
+    const hasCitations = /\[.*?\]/.test(response)
+    
+    if (hasCitations) {
+      // Verify existing citations are valid
+      return response
+    }
+    
+    // If no citations, try to add them intelligently
+    // This is a simplified version - in production, you'd use more sophisticated NLP
+    const sentences = response.split(/(?<=[.!?])\s+/)
+    const citedSentences: string[] = []
+    
+    for (const sentence of sentences) {
+      if (sentence.length < 20) {
+        citedSentences.push(sentence)
+        continue
+      }
+      
+      // Find best matching chunk for this sentence
+      let bestMatch: { chunk: typeof chunks[0]; score: number } | null = null
+      
+      for (const chunk of chunks) {
+        const sentenceLower = sentence.toLowerCase()
+        const chunkLower = chunk.content.toLowerCase()
+        
+        // Simple matching score
+        const sentenceWords = sentenceLower.split(/\s+/).filter(w => w.length > 3)
+        const chunkWords = chunkLower.split(/\s+/).filter(w => w.length > 3)
+        const commonWords = sentenceWords.filter(w => chunkWords.includes(w))
+        const score = commonWords.length / Math.max(sentenceWords.length, 1)
+        
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = { chunk, score }
+        }
+      }
+      
+      // Add citation if match is good enough
+      if (bestMatch && bestMatch.score > 0.3) {
+        citedSentences.push(`${sentence} [${bestMatch.chunk.source}]`)
+      } else {
+        citedSentences.push(sentence)
+      }
+    }
+    
+    return citedSentences.join(' ')
+  }
+
+  /**
+   * Remove unverified claims from response
+   */
+  private removeUnverifiedClaims(response: string, unverifiedClaims: string[]): string {
+    let cleaned = response
+    
+    for (const claim of unverifiedClaims) {
+      // Remove the unverified claim (be careful with partial matches)
+      const claimEscaped = claim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(claimEscaped.replace(/\s+/g, '\\s+'), 'gi')
+      cleaned = cleaned.replace(regex, '[Information not verified in provided documents]')
+    }
+    
+    return cleaned
+  }
+
+  /**
+   * Create extremely strict anti-hallucination prompt
+   */
+  private createStrictAntiHallucinationPrompt(question: string, context: string, chunks: Array<{ source: string }>): string {
+    const sourceList = chunks.map((c, i) => `${i + 1}. ${c.source}`).join('\n')
+    
+    return `⚠️ CRITICAL: ANTI-HALLUCINATION MODE ACTIVATED ⚠️
+
+CONTEXT FROM DOCUMENTS (ONLY SOURCE OF INFORMATION):
+${context}
+
+AVAILABLE SOURCES:
+${sourceList}
+
+QUESTION: ${question}
+
+🚫 ABSOLUTE PROHIBITIONS:
+1. DO NOT invent, create, or fabricate ANY information
+2. DO NOT use your training data knowledge to fill gaps
+3. DO NOT infer or deduce information beyond what is explicitly stated
+4. DO NOT make assumptions, even if they seem logical
+5. DO NOT add details not present in the CONTEXT above
+
+✅ MANDATORY REQUIREMENTS:
+1. Answer ONLY using information explicitly stated in the CONTEXT
+2. If the answer is not in CONTEXT, state: "The provided documents do not contain information to answer this question"
+3. EVERY factual statement MUST include a citation: [Source Name]
+4. If you cannot find information in CONTEXT, say "Not found in provided documents"
+5. Verify EVERY claim against the CONTEXT before including it
+
+CITATION FORMAT (MANDATORY):
+- Format: [Source Name] or [Source Name, page/section]
+- Example: "The study found X [Research Paper.pdf, p.5]"
+- NO statement without citation is allowed
+
+Provide your response now, ensuring EVERY claim is cited and verified against the CONTEXT.`
   }
 
   private parseCritiqueResponse(critique: string): string[] {
     const issues = []
     
-    if (critique.includes('?')) {
-      issues.push('Uncertain information identified')
+    // Check for hallucinations (highest priority)
+    if (critique.includes('🚫') || critique.toLowerCase().includes('hallucination') || critique.toLowerCase().includes('invented') || critique.toLowerCase().includes('fabricated')) {
+      issues.push('HALLUCINATION DETECTED - Invented or fabricated information found')
     }
     if (critique.includes('!')) {
-      issues.push('Conflicting information found')  
+      issues.push('Conflicting information found or hallucination detected')  
+    }
+    if (critique.includes('?')) {
+      issues.push('Uncertain information identified')
     }
     if (critique.includes('∅')) {
       issues.push('Missing information noted')
@@ -1408,6 +2744,9 @@ IMPORTANT:
     }
     if (critique.toLowerCase().includes('incomplete')) {
       issues.push('Incomplete coverage identified')
+    }
+    if (critique.toLowerCase().includes('not in context') || critique.toLowerCase().includes('not in original context')) {
+      issues.push('Claims not verified in provided context')
     }
     
     return issues

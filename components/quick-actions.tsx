@@ -97,7 +97,7 @@ export function QuickActions({ onClearChat, onNewSession, disabled = false }: Qu
             }
             
             if (msg.metadata) {
-              content += `*Response time: ${msg.metadata.responseTime}ms, Relevance: ${(msg.metadata.relevanceScore || 0 * 100).toFixed(1)}%*\n\n`
+              content += `*Response time: ${msg.metadata.responseTime}ms, Relevance: ${((msg.metadata.relevanceScore || 0) * 100).toFixed(1)}%*\n\n`
             }
             
             content += `---\n\n`
