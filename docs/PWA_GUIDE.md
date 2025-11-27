@@ -394,7 +394,7 @@ module.exports = withPWA({
 {
   "name": "QuantumPDF - AI Document Analysis",
   "short_name": "QuantumPDF",
-  "description": "AI-powered document analysis with RAG, multimodal extraction, and specialized agents",
+  "description": "AI-powered document analysis with RAG, multimodal extraction, and enhanced UI/UX features",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -493,7 +493,7 @@ import type { Metadata, Viewport } from 'next'
 
 export const metadata: Metadata = {
   title: 'QuantumPDF - AI Document Analysis',
-  description: 'AI-powered document analysis with RAG, multimodal extraction, and specialized agents',
+  description: 'AI-powered document analysis with RAG, multimodal extraction, and enhanced UI/UX features',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

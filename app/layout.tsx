@@ -25,16 +25,14 @@ export const metadata: Metadata = {
     default: 'QuantumPDF ChatApp - AI-Powered PDF Analysis & Document Intelligence',
     template: '%s | QuantumPDF ChatApp'
   },
-  description: 'Transform your PDFs into intelligent, interactive knowledge bases with AI-powered conversations. Upload documents, extract insights, and chat with your files using cutting-edge language models like GPT-4, Claude, Mistral, and more.',
+  description: 'AI-powered document analysis platform. Upload PDFs, Word docs, Excel files, and chat with them using advanced AI. Features clickable citations, source cards, document filtering, and conversation export.',
   keywords: [
-    'PDF AI chat', 'document analysis', 'AI PDF reader', 'intelligent document processing',
-    'RAG chatbot', 'PDF conversation', 'document intelligence', 'AI document assistant',
-    'PDF to text', 'document Q&A', 'smart PDF viewer', 'AI-powered research',
-    'document summarization', 'PDF knowledge base', 'conversational AI',
-    'machine learning documents', 'natural language processing', 'document understanding',
-    'AI file analysis', 'PDF automation', 'document insights', 'intelligent search',
-    'GPT PDF', 'Claude PDF', 'Mistral AI', 'OpenAI documents', 'vector search',
-    'semantic search', 'document embeddings', 'AI research assistant'
+    'document AI chat', 'document analysis', 'AI document reader', 'intelligent document processing',
+    'RAG chatbot', 'document conversation', 'document intelligence', 'AI document assistant',
+    'document Q&A', 'AI-powered research', 'document summarization', 'conversational AI',
+    'AI file analysis', 'document insights', 'intelligent search', 'vector search',
+    'semantic search', 'document embeddings', 'AI research assistant',
+    'clickable citations', 'source cards', 'document filtering', 'query history'
   ],
   authors: [{ name: 'Kedhareswer', url: 'https://github.com/Kedhareswer' }],
   creator: 'Kedhareswer',
@@ -64,7 +62,7 @@ export const metadata: Metadata = {
     type: 'website',
     siteName: 'QuantumPDF ChatApp',
     title: 'QuantumPDF ChatApp - AI-Powered PDF Analysis & Document Intelligence',
-    description: 'Transform your PDFs into intelligent, interactive knowledge bases with AI-powered conversations. Upload documents, extract insights, and chat with your files using cutting-edge language models.',
+    description: 'AI-powered document analysis platform. Upload and chat with PDFs, Word docs, Excel files using advanced AI. Features clickable citations, source cards, and document filtering.',
     url: 'https://quantumpdf-chatapp.vercel.app',
     images: [
       {
@@ -88,7 +86,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'QuantumPDF ChatApp - AI-Powered PDF Analysis',
-    description: 'Transform your PDFs into intelligent conversations with AI. Upload, analyze, and chat with documents using advanced language models.',
+    description: 'AI-powered document analysis. Chat with PDFs, Word docs, Excel files. Features clickable citations, source cards, and document filtering.',
     site: '@quantumpdf',
     creator: '@kedhareswer',
     images: ['/twitter-image.png'],

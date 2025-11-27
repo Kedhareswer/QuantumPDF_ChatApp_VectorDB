@@ -9,7 +9,7 @@
 - [Data Flow Diagrams](#data-flow-diagrams)
 - [Component Interactions](#component-interactions)
 - [Processing Pipelines](#processing-pipelines)
-- [Domain Agents System](#domain-agents-system)
+- [UI/UX Features](#uiux-features)
 - [Multimodal Processing](#multimodal-processing)
 - [State Management](#state-management)
 
@@ -25,7 +25,7 @@ graph TB
         UI[React UI Components]
         STATE[Zustand State Store]
         PWA[PWA Service Worker]
-        AGENT_UI[Agent Selector UI]
+        UI_FEATURES[Enhanced UI Features<br/>Source Cards, Citations,<br/>Filtering, History, Export]
     end
 
     subgraph "Processing Layer"
@@ -39,7 +39,6 @@ graph TB
         AI[AI Client<br/>19+ Providers]
         EMB[Embedding Generation<br/>with Fallback]
         TEXT[Text Generation<br/>Streaming Support]
-        AGENTS[Domain Agents<br/>Specialized Analysis]
         LOCAL[Local Models<br/>Transformers.js]
     end
 
@@ -49,7 +48,7 @@ graph TB
     end
 
     UI -->|User Actions| STATE
-    AGENT_UI -->|Agent Selection| AGENTS
+    UI_FEATURES -->|Enhanced UX| UI
     STATE -->|Document Upload| PDF
     PDF -->|Extracted Text| CHUNK
     PDF -->|Multimodal Data| MULTI
@@ -59,19 +58,17 @@ graph TB
     UI -->|Query| RAG
     RAG -->|Search| VDB
     VDB -->|Retrieved Chunks| RAG
-    RAG -->|Run Agent| AGENTS
-    AGENTS -->|Specialized Analysis| AI
     RAG -->|Generate Response| AI
     AI -->|Answer| UI
     PWA -->|Offline Support| CACHE
     STATE -->|Persist Config| CACHE
-    LOCAL -->|Summarization| AGENTS
+    LOCAL -->|Summarization| AI
 
     style UI fill:#e1f5ff
     style RAG fill:#fff4e1
     style AI fill:#f3e1ff
     style VDB fill:#e1ffe1
-    style AGENTS fill:#ffe1e8
+    style UI_FEATURES fill:#ffe1e8
     style MULTI fill:#e1f0ff
 ```
 
@@ -145,7 +142,6 @@ graph TD
         DOC[Document Management]
         EMB[Embedding Manager]
         QUERY[Query Processor]
-        AGENT_MGR[Agent Manager]
     end
 
     subgraph "3-Phase Query Processing"
@@ -154,11 +150,13 @@ graph TD
         P3[Phase 3: Refinement<br/>- Apply improvements<br/>- Clean artifacts<br/>- Calculate quality metrics]
     end
 
-    subgraph "Domain Agents"
-        ANALOGY[Analogy Maker Agent<br/>Simple explanations]
-        COMPLY[Compliance Checker<br/>Legal/policy analysis]
-        KEYTERMS[Key Terms Extractor<br/>Vocabulary & definitions]
-        SUMMARY[Summary Agent<br/>Local model summarization]
+    subgraph "Enhanced UI Features"
+        SOURCE_CARDS[Source Cards<br/>Interactive source display]
+        CITATIONS[Clickable Citations<br/>Page navigation]
+        FILTER[Document Filtering<br/>Multi-document search]
+        CHUNKS[Chunk Visualization<br/>Retrieval transparency]
+        HISTORY[Query History<br/>Persistent query storage]
+        EXPORT[Export Conversations<br/>Markdown/PDF export]
     end
 
     subgraph "Supporting Systems"
@@ -176,20 +174,23 @@ graph TD
     P1 -.-> DIV
     P1 -.-> TOKEN
     P3 -.-> QUALITY
-    QUERY --> AGENT_MGR
-    AGENT_MGR --> ANALOGY
-    AGENT_MGR --> COMPLY
-    AGENT_MGR --> KEYTERMS
-    AGENT_MGR --> SUMMARY
+    QUERY --> SOURCE_CARDS
+    QUERY --> CITATIONS
+    QUERY --> FILTER
+    QUERY --> CHUNKS
+    QUERY --> HISTORY
+    QUERY --> EXPORT
 
     style P1 fill:#e3f2fd
     style P2 fill:#fff3e0
     style P3 fill:#f3e5f5
     style QUALITY fill:#e8f5e9
-    style ANALOGY fill:#fce4ec
-    style COMPLY fill:#e8eaf6
-    style KEYTERMS fill:#e0f7fa
-    style SUMMARY fill:#f3e5f5
+    style SOURCE_CARDS fill:#fce4ec
+    style CITATIONS fill:#e8eaf6
+    style FILTER fill:#e0f7fa
+    style CHUNKS fill:#f3e5f5
+    style HISTORY fill:#fff9c4
+    style EXPORT fill:#e1f5ff
 ```
 
 ### Multi-Provider AI Client Architecture
@@ -315,21 +316,18 @@ sequenceDiagram
     UI-->>User: Document Ready
 ```
 
-### Query Processing Flow (3-Phase RAG with Agents)
+### Query Processing Flow (3-Phase RAG)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant UI as React UI
-    participant AGENT_SEL as Agent Selector
     participant RAG as RAG Engine
-    participant AGENT as Domain Agent
     participant AI as AI Client
     participant VDB as Vector Database
 
     User->>UI: Ask Question
-    User->>AGENT_SEL: Select Agent (Optional)
-    UI->>RAG: query(question, options, selectedAgent)
+    UI->>RAG: query(question, options)
 
     activate RAG
 
@@ -349,14 +347,6 @@ sequenceDiagram
     RAG->>AI: Generate Initial Response
     AI-->>RAG: Initial Answer
 
-    alt Agent Selected
-        Note over RAG,AGENT: Run Domain Agent
-        RAG->>AGENT: Process with Agent
-        AGENT->>AI: Agent-Specific Analysis
-        AI-->>AGENT: Agent Response
-        AGENT-->>RAG: Enhanced Analysis
-    end
-
     alt Complexity: Normal or Complex
         Note over RAG: PHASE 2: Self-Critique
         RAG->>AI: Critique Response
@@ -371,92 +361,10 @@ sequenceDiagram
 
     RAG->>RAG: Clean Artifacts
     RAG->>RAG: Calculate Quality Metrics
-    RAG-->>UI: EnhancedQueryResponse + Agent Output
+    RAG-->>UI: EnhancedQueryResponse
     deactivate RAG
 
-    UI-->>User: Display Answer with Sources & Agent Analysis
-```
-
----
-
-## Domain Agents System
-
-### Agent Architecture
-
-```mermaid
-graph TB
-    subgraph "Agent Manager"
-        MGR[Agent Manager<br/>Orchestration & Selection]
-    end
-
-    subgraph "Available Agents"
-        A1[Analogy Maker Agent<br/>- Simplifies complex concepts<br/>- Uses everyday analogies<br/>- For educational contexts]
-        A2[Compliance Checker Agent<br/>- Legal document analysis<br/>- Policy gap detection<br/>- Risk identification]
-        A3[Key Terms Extractor<br/>- Vocabulary extraction<br/>- Definition generation<br/>- Domain terminology]
-        A4[Summary Agent<br/>- Concise summaries<br/>- Uses local models<br/>- Token-efficient]
-    end
-
-    subgraph "Agent Processing"
-        INPUT[Retrieved Context + Query]
-        PROMPT[Agent-Specific Prompt]
-        PROCESS[AI Processing]
-        OUTPUT[Specialized Analysis]
-    end
-
-    subgraph "Integration Points"
-        UI[Agent Selector UI]
-        RAG[RAG Engine Query]
-        STORE[State Management]
-    end
-
-    UI -->|User Selection| MGR
-    MGR --> A1
-    MGR --> A2
-    MGR --> A3
-    MGR --> A4
-    
-    INPUT --> PROMPT
-    PROMPT --> PROCESS
-    PROCESS --> OUTPUT
-    
-    RAG -->|Context| INPUT
-    OUTPUT -->|Results| RAG
-
-    style A1 fill:#fce4ec
-    style A2 fill:#e8eaf6
-    style A3 fill:#e0f7fa
-    style A4 fill:#f3e5f5
-    style MGR fill:#fff9c4
-```
-
-### Agent Selection Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant AgentSelector as Agent Selector UI
-    participant Store as Zustand Store
-    participant RAG as RAG Engine
-    participant Agent as Selected Agent
-    participant AI as AI Client
-
-    User->>AgentSelector: Select Agent Type
-    AgentSelector->>Store: Update selectedAgent
-    AgentSelector->>Store: Update agentSettings
-
-    User->>RAG: Submit Query
-    RAG->>Store: Get selectedAgent
-    
-    alt Agent Selected
-        RAG->>Agent: Initialize Agent
-        Agent->>Agent: Build Specialized Prompt
-        Agent->>AI: Generate Analysis
-        AI-->>Agent: Agent Response
-        Agent-->>RAG: Structured Analysis
-        RAG->>RAG: Merge with RAG Response
-    end
-    
-    RAG-->>User: Combined Response
+    UI-->>User: Display Answer with Sources & UI Features
 ```
 
 ---
@@ -664,14 +572,6 @@ interface AppState {
   wandbConfig: WandbConfig     // W&B configuration (optional)
   mathpixConfig: MathpixConfig // Mathpix API configuration
 
-  // Agent State
-  selectedAgent: AgentType | 'none'  // Current agent selection
-  agentSettings: {              // Per-agent settings
-    [key in AgentType]?: {
-      enabled: boolean
-      useLocalModels?: boolean
-    }
-  }
 
   // UI State (Persisted)
   activeTab: TabType          // Current active tab
@@ -688,7 +588,6 @@ interface AppState {
   setAIConfig: (config: AIConfig) => void
   setVectorDBConfig: (config: VectorDBConfig) => void
   setMathpixConfig: (config: MathpixConfig) => void
-  setSelectedAgent: (agent: AgentType | 'none') => void
   // ... more actions
 }
 ```
@@ -709,7 +608,6 @@ graph LR
         AI[AI Config<br/>Persisted]
         VDB[Vector DB Config<br/>Persisted]
         MATHPIX[Mathpix Config<br/>Persisted]
-        AGENTS[Agent Settings<br/>Persisted]
         UI[UI Preferences<br/>Persisted]
     end
 
@@ -718,7 +616,6 @@ graph LR
         LIB[DocumentLibrary]
         CFG[Configuration]
         APP[App Layout]
-        AGENT_UI[AgentSelector]
     end
 
     STATE --> MSGS
@@ -726,13 +623,11 @@ graph LR
     STATE --> AI
     STATE --> VDB
     STATE --> MATHPIX
-    STATE --> AGENTS
     STATE --> UI
 
     AI --> PERSIST
     VDB --> PERSIST
     MATHPIX --> PERSIST
-    AGENTS --> PERSIST
     UI --> PERSIST
     PERSIST --> LOCAL
 
@@ -742,13 +637,12 @@ graph LR
     CFG -->|useAppStore| VDB
     CFG -->|useAppStore| MATHPIX
     APP -->|useAppStore| UI
-    AGENT_UI -->|useAppStore| AGENTS
 
     style STATE fill:#fff9c4
     style PERSIST fill:#e8f5e9
     style LOCAL fill:#f3e5f5
     style MATHPIX fill:#e3f2fd
-    style AGENTS fill:#fce4ec
+    style UI_FEATURES fill:#fce4ec
 ```
 
 ---
@@ -772,11 +666,19 @@ graph TB
 
     subgraph "Core Features"
         CHAT[ChatInterface<br/>Message Display + Input]
-        AGENT_SEL[AgentSelector<br/>RAG Agent Selection]
         DOCS[DocumentLibrary<br/>Document Management]
         UPLOAD[UnifiedPDFProcessor<br/>Multi-Format Upload]
         CONFIG[UnifiedConfiguration<br/>AI, VectorDB & Mathpix Settings]
         STATUS[SystemStatus<br/>Health Monitoring]
+    end
+
+    subgraph "Enhanced UI Components"
+        SOURCE_CARDS[SourceCards<br/>Interactive Source Display]
+        CITATIONS[CitationBadge<br/>Clickable Citations]
+        FILTER[DocumentFilter<br/>Multi-Document Filtering]
+        CHUNKS[ChunkVisualization<br/>Retrieval Transparency]
+        HISTORY[QueryHistory<br/>Query Persistence]
+        EXPORT[ExportMenu<br/>Conversation Export]
     end
 
     subgraph "UI Components"
@@ -796,7 +698,12 @@ graph TB
     SIDEBAR --> STATUS
 
     MAIN --> CHAT
-    CHAT --> AGENT_SEL
+    CHAT --> SOURCE_CARDS
+    CHAT --> CITATIONS
+    CHAT --> FILTER
+    CHAT --> CHUNKS
+    CHAT --> HISTORY
+    CHAT --> EXPORT
     CHAT --> MSG
     CHAT --> QUICK
     CHAT --> THINKING
@@ -807,7 +714,7 @@ graph TB
     style CLIENT fill:#e3f2fd
     style CHAT fill:#f3e5f5
     style UPLOAD fill:#fff3e0
-    style AGENT_SEL fill:#fce4ec
+    style SOURCE_CARDS fill:#fce4ec
     style CONFIG fill:#e8f5e9
 ```
 
@@ -909,13 +816,13 @@ graph TB
 
 This document provides comprehensive visual representations of:
 
-1. **System Architecture** - Overall structure with agents and multimodal support
-2. **Core Components** - RAG engine, AI client, domain agents
-3. **Data Flows** - Document processing, query handling with agents
-4. **Domain Agents** - Specialized analysis capabilities
+1. **System Architecture** - Overall structure with enhanced UI features and multimodal support
+2. **Core Components** - RAG engine, AI client, enhanced UI components
+3. **Data Flows** - Document processing, query handling with 3-phase RAG
+4. **Enhanced UI/UX Features** - Source cards, citations, filtering, chunk visualization, history, export
 5. **Multimodal Processing** - Images, tables, equations with Mathpix
 6. **Processing Pipelines** - PDF extraction, chunking, multi-format support
-7. **State Management** - Zustand store with agent settings
+7. **State Management** - Zustand store with configuration persistence
 8. **Performance** - Caching strategies and optimizations
 9. **Security** - Privacy-focused architecture
 
@@ -925,4 +832,4 @@ These diagrams serve as a visual guide to understanding the complex interactions
 
 **Last Updated**: November 2025
 **Version**: 3.0.0
-**New Features**: Domain Agents, Mathpix Integration, Multimodal Processing, Agent UI
+**New Features**: Enhanced UI/UX Features, Mathpix Integration, Multimodal Processing

@@ -11,7 +11,7 @@
 2. [Core Components](#core-components)
 3. [AI Provider Configuration](#ai-provider-configuration)
 4. [RAG Engine Implementation](#rag-engine-implementation)
-5. [Domain Agents](#domain-agents)
+5. [Enhanced UI/UX Features](#enhanced-uiux-features)
 6. [Mathpix Integration](#mathpix-integration)
 7. [Multimodal Processing](#multimodal-processing)
 8. [Vector Database Integration](#vector-database-integration)
@@ -82,8 +82,13 @@ app/
 └── manifest.json         # PWA manifest
 
 components/
-├── agent-selector.tsx    # RAG agent selection UI
-├── chat-interface.tsx    # Chat with streaming & agents
+├── chat-interface.tsx    # Chat with streaming
+├── source-card.tsx       # Interactive source cards
+├── citation-badge.tsx    # Clickable citations
+├── document-filter.tsx   # Document filtering UI
+├── chunk-visualization.tsx # Chunk visualization
+├── query-history.tsx    # Query history sidebar
+├── export-menu.tsx      # Export conversations
 ├── unified-pdf-processor.tsx  # Multi-format file upload
 ├── unified-configuration.tsx  # Settings panel
 ├── document-library.tsx  # Document management
@@ -92,7 +97,6 @@ components/
 lib/
 ├── ai-client.ts          # Multi-provider AI client
 ├── rag-engine.ts         # Core RAG with 3-phase processing
-├── domain-agents.ts      # Specialized analysis agents
 ├── mathpix-processor.ts  # Mathpix API + Math.js
 ├── store.ts              # Zustand state management
 └── vector-database-client.ts  # Vector DB abstraction
@@ -267,130 +271,103 @@ const refinedAnswer = await refineAnswer(contextAnalysis, critique)
 
 ---
 
-## Domain Agents
+## Enhanced UI/UX Features
 
-### Available Agents
+### Source Cards
+
+Interactive source display with document metadata and similarity scores.
 
 ```typescript
-import { AgentType, getAgentManager } from '@/lib/domain-agents'
+// components/source-card.tsx
+import { SourceCards } from '@/components/source-card'
 
-// Available agent types
-type AgentType = 
-  | 'analogy-maker'      // Simplify with analogies
-  | 'compliance-checker' // Legal/policy analysis
-  | 'key-terms'          // Vocabulary extraction
-  | 'summary'            // Concise summaries
-  | 'explainer'          // Detailed explanations
-  | 'fact-checker'       // Factual verification
+<SourceCards
+  sources={response.sources}
+  chunks={response.chunks}
+  onViewPage={(documentId, page) => {
+    // Navigate to PDF page
+  }}
+/>
 ```
 
-### Using Agents
+### Clickable Citations
+
+Inline citation badges that allow navigation to specific PDF pages.
 
 ```typescript
-// Get agent manager
-const agentManager = getAgentManager(aiClient, ragEngine)
+// components/citation-badge.tsx
+import { CitationBadge } from '@/components/citation-badge'
 
-// Run specific agent
-const result = await agentManager.runAgent('analogy-maker', {
-  query: 'Explain quantum entanglement',
-  context: retrievedChunks,
-  options: {
-    useLocalModels: false,
-    maxAnalogies: 3
-  }
-})
-
-// Agent result structure
-interface AgentResult {
-  agentType: AgentType
-  output: string
-  metadata: {
-    processingTime: number
-    tokensUsed: number
-    modelUsed: string
-  }
-}
+// In markdown content, replace [1] with:
+<CitationBadge
+  index={1}
+  source="Document Name · p.5"
+  documentId="doc-123"
+  page={5}
+  onViewPage={handleViewPage}
+/>
 ```
 
-### Agent Implementation Details
+### Document Filtering
+
+Multi-select document filter for scoped queries.
 
 ```typescript
-// Analogy Maker Agent
-class AnalogyMakerAgent implements DomainAgent {
-  async run(context: AgentContext): Promise<AgentResult> {
-    const prompt = `
-      Create simple, everyday analogies for these concepts:
-      ${context.query}
-      
-      Based on this context:
-      ${context.chunks.map(c => c.content).join('\n')}
-      
-      Format: [Concept] is like [Analogy] because [Explanation]
-    `
-    return this.aiClient.generateText(prompt)
-  }
-}
+// components/document-filter.tsx
+import { DocumentFilter } from '@/components/document-filter'
 
-// Summary Agent with Local Model Option
-class SummaryAgent implements DomainAgent {
-  async run(context: AgentContext): Promise<AgentResult> {
-    if (context.options?.useLocalModels) {
-      // Use Transformers.js (Xenova/distilbart-cnn-6-6)
-      return this.localSummarizer.summarize(context.chunks)
-    }
-    // Use AI provider API
-    return this.aiClient.generateText(summaryPrompt)
-  }
-}
+<DocumentFilter
+  documents={documents}
+  selectedDocumentIds={selectedDocumentIds}
+  onSelectionChange={(ids) => {
+    setSelectedDocumentIds(ids)
+    // Pass to RAG query
+    ragEngine.query(query, { filters: { documentIds: ids } })
+  }}
+/>
 ```
 
-### Agent UI Integration
+### Chunk Visualization
+
+Expandable view of retrieved chunks with similarity scores.
 
 ```typescript
-// In chat-interface.tsx
-import { AgentSelector } from '@/components/agent-selector'
+// components/chunk-visualization.tsx
+import { ChunkVisualization } from '@/components/chunk-visualization'
 
-function ChatInterface({ aiClient, ragEngine }) {
-  const [selectedAgent, setSelectedAgent] = useState<AgentType | 'none'>('none')
-  const [agentSettings, setAgentSettings] = useState({
-    'summary': { enabled: true, useLocalModels: true },
-    'analogy-maker': { enabled: true },
-    'compliance-checker': { enabled: true },
-    'key-terms': { enabled: true }
-  })
+<ChunkVisualization
+  chunks={response.chunks}
+  onViewPage={handleViewPage}
+/>
+```
 
-  const handleSend = async (message: string) => {
-    // Standard RAG query
-    const ragResult = await ragEngine.query(message)
-    
-    // If agent selected, run additional analysis
-    if (selectedAgent !== 'none' && agentSettings[selectedAgent]?.enabled) {
-      const agentResult = await agentManager.runAgent(selectedAgent, {
-        query: message,
-        context: ragResult.chunks,
-        options: agentSettings[selectedAgent]
-      })
-      // Combine results
-      return combineResults(ragResult, agentResult)
-    }
-    
-    return ragResult
-  }
+### Query History
 
-  return (
-    <>
-      <AgentSelector
-        availableAgents={['analogy-maker', 'compliance-checker', 'key-terms', 'summary']}
-        selectedAgent={selectedAgent}
-        onSelectAgent={setSelectedAgent}
-        agentSettings={agentSettings}
-        onToggleAgent={(agent, enabled) => ...}
-        onToggleLocalModels={(agent, useLocal) => ...}
-      />
-      {/* Chat UI */}
-    </>
-  )
-}
+Persistent query storage with search and re-run functionality.
+
+```typescript
+// components/query-history.tsx
+import { QueryHistory, useQueryHistory } from '@/components/query-history'
+
+// In component
+const { addQueryHistory } = useQueryHistory()
+
+// After query
+addQueryHistory(query, response.length)
+
+// In header
+<QueryHistory onSelectQuery={handleQuerySelect} />
+```
+
+### Export Conversations
+
+Export conversations in multiple formats.
+
+```typescript
+// components/export-menu.tsx
+import { ExportMenu } from '@/components/export-menu'
+
+<ExportMenu messages={messages} />
 ```
 
 ---
@@ -683,10 +660,6 @@ interface AppState {
   messages: ChatMessage[]
   isStreaming: boolean
   
-  // Agent State (NEW)
-  selectedAgent: AgentType | 'none'
-  agentSettings: AgentSettings
-  
   // UI State
   sidebarOpen: boolean
   activeTab: string
@@ -696,7 +669,6 @@ interface AppState {
   removeDocument: (id: string) => void
   setAIProvider: (provider: AIProvider) => void
   setMathpixConfig: (config: MathpixConfig) => void
-  setSelectedAgent: (agent: AgentType | 'none') => void
   addMessage: (message: ChatMessage) => void
 }
 ```
@@ -712,7 +684,7 @@ function MyComponent() {
   const addDocument = useAppStore((state) => state.addDocument)
   
   // Or destructure multiple values
-  const { selectedAgent, setSelectedAgent, agentSettings } = useAppStore()
+  const { documents, aiConfig } = useAppStore()
   
   return (
     // Your component
@@ -910,4 +882,5 @@ CMD ["npm", "start"]
 ---
 
 **Generated**: November 2025  
-**Project**: QuantumPDF ChatApp v3.0.0
+**Project**: QuantumPDF ChatApp v3.0.0  
+**Latest Updates**: Enhanced UI/UX features (Source Cards, Citations, Filtering, Chunk Visualization, Query History, Export)

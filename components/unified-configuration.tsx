@@ -1121,57 +1121,6 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
               </CardContent>
             </Card>
 
-            {/* Domain Agents Info */}
-            <Card className="border-2 border-black shadow-none">
-              <CardHeader className="border-b border-black">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Brain className="w-4 h-4" />
-                  <span>DOMAIN AGENTS</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                <Alert className="border-purple-200 bg-purple-50">
-                  <Brain className="w-4 h-4 text-purple-600" />
-                  <AlertDescription className="text-xs text-purple-800">
-                    <p className="mb-2">
-                      <strong>Domain Agents</strong> are specialized AI chains that run post-retrieval analysis
-                      on your documents. Access them via the <strong>Agents</strong> button in the chat header.
-                    </p>
-                  </AlertDescription>
-                </Alert>
-
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-2 rounded bg-purple-50 border border-purple-100">
-                    <Sparkles className="w-4 h-4 text-purple-600 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Analogy Maker</p>
-                      <p className="text-xs text-gray-600">Creates relatable analogies for complex concepts</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-2 rounded bg-amber-50 border border-amber-100">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Compliance Checker</p>
-                      <p className="text-xs text-gray-600">Identifies ambiguous clauses and policy issues</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-2 rounded bg-blue-50 border border-blue-100">
-                    <Search className="w-4 h-4 text-blue-600 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Key Terms Extractor</p>
-                      <p className="text-xs text-gray-600">Extracts and defines important terminology</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-2 rounded bg-green-50 border border-green-100">
-                    <Cpu className="w-4 h-4 text-green-600 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Quick Summary</p>
-                      <p className="text-xs text-gray-600">Generates concise document summaries locally</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
       </Tabs>

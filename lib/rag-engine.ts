@@ -707,9 +707,9 @@ export class RAGEngine {
 
               if (typeof semanticSimilarity === "number" && !isNaN(semanticSimilarity)) {
                 // Extract chunk content and metadata first
-                // Support both string chunks and TextChunk objects
-                const chunkContent = typeof chunk === 'string' ? chunk : chunk.content
-                const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
+                  // Support both string chunks and TextChunk objects
+                  const chunkContent = typeof chunk === 'string' ? chunk : chunk.content
+                  const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
 
                 // Calculate exact match boost for identifiers (Article numbers, Section numbers, etc.)
                 const exactMatchBoost = question ? this.calculateExactMatchBoost(question, chunkContent || '') : 0
@@ -1627,13 +1627,13 @@ export class RAGEngine {
         // If still no chunks, provide helpful response
         if (relevantChunks.length === 0) {
           const clarificationPrompt = this.generateClarificationPrompt(question, vaguenessScore)
-          return {
-            question,
-            relevantChunks: [],
-            context: "",
+        return {
+          question,
+          relevantChunks: [],
+          context: "",
             initialResponse: clarificationPrompt,
-            questionType,
-            tokensUsed: 0
+          questionType,
+          tokensUsed: 0
           }
         }
       }
@@ -1670,7 +1670,7 @@ export class RAGEngine {
       // Generate response with low temperature for deterministic, factual responses
       const initialResponse = await this.aiClient!.generateText(messages, { temperature: 0.1 });
       console.log("AI response generated, length:", initialResponse.length)
-      
+
       // Groundedness check: Verify response is based on retrieved chunks
       const groundednessResult = this.checkGroundedness(initialResponse, optimizedChunks, question)
       if (!groundednessResult.isGrounded) {
@@ -1691,12 +1691,12 @@ export class RAGEngine {
           const regroundedness = this.checkGroundedness(regeneratedResponse, optimizedChunks, question)
           if (regroundedness.groundednessScore > groundednessResult.groundednessScore) {
             console.log("✅ Regenerated response has better groundedness")
-            return {
-              question,
-              relevantChunks: optimizedChunks,
-              context: context,
+      return {
+        question,
+        relevantChunks: optimizedChunks,
+        context: context,
               initialResponse: this.enforceCitations(regeneratedResponse, optimizedChunks).trim(),
-              questionType,
+        questionType,
               tokensUsed: this.estimateTokens(systemPrompt + strictPrompt + regeneratedResponse),
               groundednessScore: regroundedness.groundednessScore
             }

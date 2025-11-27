@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'QuantumPDF ChatApp - AI-Powered PDF Analysis',
     short_name: 'QuantumPDF',
-    description: 'Transform your PDFs into intelligent conversations with AI-powered document analysis and chat capabilities. Works offline with full privacy.',
+    description: 'Transform your PDFs into intelligent conversations with AI-powered document analysis and chat capabilities. Enhanced UI with clickable citations, source cards, filtering, chunk visualization, query history, and export. Works offline with full privacy.',
     start_url: '/',
     display: 'standalone',
     background_color: '#ffffff',

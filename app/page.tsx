@@ -150,7 +150,8 @@ export default function QuantumPDFChatbot() {
   const handleSendMessage = async (content: string, options?: {
     showThinking?: boolean,
     complexityLevel?: 'simple' | 'normal' | 'complex',
-    useContext?: boolean
+    useContext?: boolean,
+    documentIds?: string[]
   }) => {
     if ((options?.useContext ?? true) && !documents.length) {
       addError({
@@ -207,11 +208,17 @@ export default function QuantumPDFChatbot() {
           content: msg.content
         }))
 
+      // Build filters if documentIds provided
+      const filters = options?.documentIds && options.documentIds.length > 0
+        ? { documentIds: options.documentIds }
+        : undefined
+
       const response = await ragEngine.query(content, {
         showThinking,
         complexityLevel: detectedComplexity,
         tokenBudget: 4000,
-        conversationHistory: recentHistory
+        conversationHistory: recentHistory,
+        filters
       })
         responseAnswer = response.answer
         responseSources = response.sources
@@ -227,7 +234,7 @@ export default function QuantumPDFChatbot() {
         metadata: {
           ...(responseMeta.tokenUsage ? {responseTime: responseMeta.tokenUsage.totalTokens * 2} : {}),
           ...(responseMeta.relevanceScore !== undefined ? {relevanceScore: responseMeta.relevanceScore} : {}),
-          ...(responseMeta.retrievedChunks ? {retrievedChunks: responseMeta.retrievedChunks.length} : {}),
+          ...(responseMeta.retrievedChunks ? {retrievedChunks: responseMeta.retrievedChunks} : {}), // Pass full chunks array
           ...(responseMeta.qualityMetrics ? {qualityMetrics: responseMeta.qualityMetrics} : {}),
           ...(responseMeta.tokenUsage ? {tokenUsage: responseMeta.tokenUsage} : {}),
           ...(responseMeta.reasoning ? {reasoning: responseMeta.reasoning} : {}),

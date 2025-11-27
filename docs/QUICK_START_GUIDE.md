@@ -64,15 +64,14 @@ Open [http://localhost:3000](http://localhost:3000)
 3. AI analyzes your documents and responds
 4. Sources shown with each response
 
-### Use Domain Agents (NEW)
+### Enhanced UI Features
 
-1. Expand **"Advanced Controls"** in chat
-2. Select an agent from the dropdown:
-   - **Analogy Maker**: Simplify concepts
-   - **Compliance Checker**: Legal analysis
-   - **Key Terms**: Extract vocabulary
-   - **Summary**: Concise summaries
-3. Ask your question - agent enhances the response
+1. **Source Cards**: View sources with similarity scores below each message
+2. **Clickable Citations**: Click citation badges to navigate to PDF pages
+3. **Document Filtering**: Use filter chips above input to search specific documents
+4. **Chunk Visualization**: Expand "View Retrieved Chunks" to see retrieval details
+5. **Query History**: Click History button in header to access previous queries
+6. **Export**: Use Export menu to save conversations as Markdown or PDF
 
 ---
 
@@ -126,7 +125,7 @@ For cloud vector storage:
 | Multi-format Docs | ✅ | PDF, DOCX, XLSX, CSV |
 | 19 AI Providers | ✅ | OpenAI, Anthropic, Groq, etc. |
 | 3-Phase RAG | ✅ | Context, Critique, Refine |
-| Domain Agents | ✅ | Specialized analysis |
+| Enhanced UI/UX | ✅ | Source Cards, Citations, Filtering, etc. |
 | Mathpix OCR | ✅ | Professional equation extraction |
 | Image Captioning | ✅ | AI-powered image analysis |
 | Table Extraction | ✅ | Detect and parse tables |
@@ -179,7 +178,7 @@ For cloud vector storage:
 
 1. **Upload your first document** - Try a PDF with mixed content
 2. **Ask questions** - Test different query types
-3. **Try domain agents** - Enable Analogy Maker for explanations
+3. **Explore UI features** - Try source cards, filtering, and chunk visualization
 4. **Configure Mathpix** - If your docs have equations
 5. **Install as PWA** - Click install button in browser
 

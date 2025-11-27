@@ -250,7 +250,7 @@ export class PDFParser {
               fullText += `\n\n--- Page ${pageNum} (Processing Error) ---\n[Page content could not be extracted]`
             }
           } else {
-            fullText += `\n\n--- Page ${pageNum} (Processing Error) ---\n[Page content could not be extracted]`
+          fullText += `\n\n--- Page ${pageNum} (Processing Error) ---\n[Page content could not be extracted]`
           }
         }
       }

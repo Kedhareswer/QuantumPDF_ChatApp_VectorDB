@@ -43,8 +43,24 @@ import { ThinkingBubble } from "@/components/thinking-bubble"
 import { useToast } from "@/hooks/use-toast"
 import { useAppStore } from "@/lib/store"
 import { QuickActions } from "@/components/quick-actions"
-import { AgentSelector } from "@/components/agent-selector"
-import type { AgentOutput } from "@/lib/domain-agents"
+import { SourceCards } from "@/components/source-card"
+import { CitationBadge, parseCitations } from "@/components/citation-badge"
+import { DocumentFilter } from "@/components/document-filter"
+import { ChunkVisualization } from "@/components/chunk-visualization"
+import { QueryHistory } from "@/components/query-history"
+import { ExportMenu } from "@/components/export-menu"
+
+interface RetrievedChunk {
+  content: string
+  source: string
+  similarity: number
+  documentId?: string
+  documentName?: string
+  page?: number
+  bbox?: any
+  level?: number
+  chunkType?: string
+}
 
 interface Message {
   id: string
@@ -55,7 +71,7 @@ interface Message {
   metadata?: {
     responseTime?: number
     relevanceScore?: number
-    retrievedChunks?: number
+    retrievedChunks?: RetrievedChunk[] // Full chunks array with metadata
     qualityMetrics?: {
       accuracyScore: number
       completenessScore: number
@@ -90,8 +106,6 @@ interface ChatInterfaceProps {
   isProcessing: boolean
   disabled: boolean
   ragEngine?: any // Add ragEngine prop for diagnostics
-  documentContext?: string // Full document context for agents
-  aiClient?: any // AI client for agent processing
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -348,56 +362,39 @@ export function ChatInterface({
   })
   // Search mode: smart detection (no explicit controls)
   const [useContext, setUseContext] = useState(true)
-  // Agent results for context
-  const [lastAgentResult, setLastAgentResult] = useState<AgentOutput | null>(null)
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  const [viewingDocument, setViewingDocument] = useState<{id: string, page: number} | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
-  // Handler for agent results
-  const handleAgentResult = (result: AgentOutput) => {
-    setLastAgentResult(result)
-    
-    // Add agent result as a message
-    if (onAddMessage) {
-      const agentMessage: Message = {
-        id: `agent-${Date.now()}`,
-        role: "assistant",
-        content: `## 🤖 ${result.agentType.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Analysis\n\n${result.result}`,
-        timestamp: new Date(),
-        sources: ['Agent Analysis'],
-        metadata: {
-          responseTime: result.processingTime,
-          relevanceScore: result.confidence,
-        },
-      }
-      onAddMessage(agentMessage)
-    }
+  const { aiConfig, vectorDBConfig, setActiveTab, modelStatus, documents: storeDocuments } = useAppStore()
+  
+  // Get documents for filter
+  const filterDocuments = (storeDocuments || []).map(doc => ({
+    id: doc.id,
+    name: doc.name
+  }))
 
+  const handleViewPage = (documentId: string, page: number) => {
+    setViewingDocument({ id: documentId, page })
+    setPdfViewerOpen(true)
+    const docName = storeDocuments.find(d => d.id === documentId)?.name || 'document'
     toast({
-      title: "Agent Analysis Complete",
-      description: `${result.agentType} completed in ${result.processingTime}ms with ${Math.round(result.confidence * 100)}% confidence`,
+      title: "PDF Viewer",
+      description: `Opening ${docName} at page ${page}`,
     })
   }
 
-  // Get document context from RAG engine if not provided
-  const getDocumentContext = (): string => {
-    if (documentContext) return documentContext
-    
-    if (ragEngine) {
-      try {
-        const docs = ragEngine.getDocuments?.() || []
-        return docs.map((d: any) => d.chunks?.join('\n') || '').join('\n\n').slice(0, 10000)
-      } catch {
-        return ''
-      }
+  const handleSelectQuery = (query: string) => {
+    if (inputRef.current) {
+      inputRef.current.value = query
+      setInput(query)
+      inputRef.current.focus()
     }
-    
-    return ''
   }
-
-  const { aiConfig, vectorDBConfig, setActiveTab, modelStatus } = useAppStore()
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -548,27 +545,28 @@ ${diagnostics.documents.length === 0
     onSendMessage(text, {
       useContext,
       showThinking: enhancedOptions.showThinking,
-      complexityLevel: enhancedOptions.complexityLevel === 'auto' ? undefined : (enhancedOptions.complexityLevel as any)
+      complexityLevel: enhancedOptions.complexityLevel === 'auto' ? undefined : (enhancedOptions.complexityLevel as any),
+      documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined
     })
+    
+    // Add to query history
+    if (typeof window !== 'undefined' && (window as any).__addQueryToHistory) {
+      (window as any).__addQueryToHistory(text)
+    }
   }
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-white">
       {/* Chat Header with Controls */}
       <div className="border-b border-gray-200 p-2 sm:p-3 md:p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm sm:text-base md:text-lg font-semibold">Chat</h2>
-          <div className="flex items-center space-x-1 sm:space-x-2">
-            {/* Agent Selector */}
-            <AgentSelector
-              disabled={disabled || isProcessing}
-              context={getDocumentContext()}
-              question={messages.filter(m => m.role === 'user').slice(-1)[0]?.content || ''}
-              chunks={[]}
-              onAgentResult={handleAgentResult}
-              aiClient={aiClient}
-            />
+          <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap">
+            {/* Query History & Export */}
+            <QueryHistory onSelectQuery={handleSelectQuery} />
+            <ExportMenu messages={messages} />
             
+            {/* Settings */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -593,7 +591,7 @@ ${diagnostics.documents.length === 0
           />
         </div>
         </div>
-        
+
         {/* Enhanced Controls */}
         {showAdvancedControls && (
           <Card className="mt-3 border border-purple-200 bg-purple-50/50">
@@ -901,34 +899,23 @@ ${diagnostics.documents.length === 0
                       </div>
                     </div>
 
-                    {message.sources && message.sources.length > 0 && (
-                      <Card className="mt-6 border border-gray-200 bg-gray-50">
-                        <Collapsible defaultOpen={false}>
-                          <CollapsibleTrigger asChild>
-                            <Button variant="ghost" className="w-full justify-between p-4 h-auto">
-                              <div className="flex items-center space-x-2">
-                                <FileText className="w-4 h-4 text-gray-600" />
-                                <span className="text-sm font-bold text-gray-700">SOURCES ({message.sources.length})</span>
-                              </div>
-                              <ChevronDown className="w-4 h-4" />
-                            </Button>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent>
-                            <CardContent className="p-4 pt-0">
-                              <div className="space-y-3">
-                                {message.sources.map((source, index) => (
-                                  <div
-                                    key={index}
-                                    className="text-sm bg-white p-3 border border-gray-200 font-mono rounded-sm"
-                                  >
-                                    <span className="text-gray-600 font-bold">#{index + 1}</span> {source}
-                                  </div>
-                                ))}
-                              </div>
-                            </CardContent>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      </Card>
+                    {/* Source Cards */}
+                    {(message.sources && message.sources.length > 0) || (message.metadata?.retrievedChunks && message.metadata.retrievedChunks.length > 0) ? (
+                      <div className="mt-6">
+                        <SourceCards
+                          sources={message.sources || []}
+                          chunks={message.metadata?.retrievedChunks}
+                          onViewPage={handleViewPage}
+                        />
+                      </div>
+                    ) : null}
+
+                    {/* Chunk Visualization */}
+                    {message.metadata?.retrievedChunks && message.metadata.retrievedChunks.length > 0 && (
+                      <ChunkVisualization
+                        chunks={message.metadata.retrievedChunks}
+                        onViewPage={handleViewPage}
+                      />
                     )}
                     </div>
                   </div>
@@ -946,6 +933,17 @@ ${diagnostics.documents.length === 0
       {/* Input Area */}
       <div className="border-t-2 border-black bg-white sticky bottom-0 z-10">
         <div className="max-w-4xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4 md:py-6">
+          {/* Document Filter */}
+          {filterDocuments.length > 0 && (
+            <div className="mb-3">
+              <DocumentFilter
+                documents={filterDocuments}
+                selectedDocumentIds={selectedDocumentIds}
+                onSelectionChange={setSelectedDocumentIds}
+              />
+            </div>
+          )}
+
           <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
             {/* Search mode removed */}
 

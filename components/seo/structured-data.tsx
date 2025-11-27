@@ -90,14 +90,14 @@ export function StructuredData() {
     '@type': 'WebApplication',
     name: 'QuantumPDF ChatApp',
     alternateName: 'QuantumPDF',
-    description: 'AI-powered PDF analysis and document intelligence platform that transforms PDFs into interactive knowledge bases with conversational AI capabilities.',
+    description: 'AI-powered PDF analysis and document intelligence platform that transforms PDFs into interactive knowledge bases with conversational AI capabilities. Features enhanced UI with clickable citations, source cards, document filtering, chunk visualization, query history, and conversation export.',
     url: 'https://quantumpdf-chatapp.vercel.app',
     applicationCategory: 'BusinessApplication',
     applicationSubCategory: 'Document Management',
     operatingSystem: 'Web Browser',
     browserRequirements: 'Requires JavaScript. Requires HTML5.',
-    softwareVersion: '2.0.0',
-    releaseNotes: 'Enhanced with streaming AI responses, Mistral AI integration, and improved user interface.',
+    softwareVersion: '3.0.0',
+    releaseNotes: 'Version 3.0.0: Enhanced UI/UX with clickable citations, interactive source cards, document filtering, chunk visualization, query history, and conversation export. Improved RAG system with 3-phase processing, hybrid search, and anti-hallucination measures.',
     author: {
       '@type': 'Person',
       name: 'Kedhareswer',
@@ -121,15 +121,20 @@ export function StructuredData() {
       validFrom: '2024-01-01'
     },
     featureList: [
-      'AI-powered PDF analysis',
-      'Multi-provider AI integration (OpenAI, Anthropic, Mistral, Groq)',
+      'AI-powered PDF analysis with 3-phase RAG processing',
+      'Multi-provider AI integration (19+ providers: OpenAI, Anthropic, Mistral, Groq, DeepSeek, etc.)',
       'Real-time streaming responses',
-      'Document intelligence and summarization',
-      'Vector-based semantic search',
+      'Enhanced UI/UX: Clickable citations with page navigation',
+      'Interactive source cards with similarity scores',
+      'Document filtering for scoped queries',
+      'Chunk visualization for retrieval transparency',
+      'Query history with persistent storage',
+      'Conversation export (Markdown, PDF, clipboard)',
+      'Vector-based semantic search with hybrid scoring',
       'Conversational document interface',
-      'RAG (Retrieval Augmented Generation)',
-      'Multiple AI model support',
-      'Secure document processing'
+      'Mathpix integration for equation extraction',
+      'Multimodal processing (images, tables, equations)',
+      'Secure document processing with privacy-first architecture'
     ],
     screenshot: 'https://quantumpdf-chatapp.vercel.app/screenshot.png',
     aggregateRating: {
@@ -151,10 +156,10 @@ export function StructuredData() {
           '@type': 'Person',
           name: 'AI Researcher'
         },
-        reviewBody: 'Excellent tool for document analysis with cutting-edge AI integration.'
+        reviewBody: 'Excellent tool for document analysis with cutting-edge AI integration and enhanced UI features including clickable citations and source cards.'
       }
     ],
-    keywords: 'PDF AI chat, document analysis, AI PDF reader, intelligent document processing, RAG chatbot, PDF conversation, document intelligence, AI document assistant',
+    keywords: 'PDF AI chat, document analysis, AI PDF reader, intelligent document processing, RAG chatbot, PDF conversation, document intelligence, AI document assistant, clickable citations, source cards, document filtering, chunk visualization, query history, conversation export, PDF citation navigation',
     inLanguage: 'English',
     copyrightHolder: {
       '@type': 'Person',
@@ -162,7 +167,7 @@ export function StructuredData() {
     },
     copyrightYear: 2024,
     dateCreated: '2024-01-01',
-    dateModified: '2024-12-10',
+    dateModified: '2024-11-30',
     datePublished: '2024-01-01',
     license: 'https://opensource.org/licenses/MIT',
     mainEntityOfPage: {
@@ -247,7 +252,7 @@ export function FAQSchema() {
         name: 'What is QuantumPDF ChatApp?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'QuantumPDF ChatApp is an AI-powered document intelligence platform that allows you to upload PDF documents and have natural language conversations with them using advanced language models like GPT-4, Claude, and Mistral.'
+          text: 'QuantumPDF ChatApp is an AI-powered document intelligence platform that allows you to upload PDF documents and have natural language conversations with them using advanced language models like GPT-4, Claude, and Mistral. Version 3.0 features enhanced UI with clickable citations, source cards, document filtering, chunk visualization, query history, and conversation export.'
         }
       },
       {
@@ -255,7 +260,7 @@ export function FAQSchema() {
         name: 'Which AI models are supported?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'We support multiple AI providers including OpenAI (GPT-4, GPT-3.5), Anthropic (Claude), Mistral AI, Groq, DeepSeek, and many others. You can choose the best model for your specific use case.'
+          text: 'We support 19+ AI providers including OpenAI (GPT-4, GPT-3.5), Anthropic (Claude), Mistral AI, Groq, DeepSeek, HuggingFace, Fireworks, DeepInfra, and many others. You can choose the best model for your specific use case.'
         }
       },
       {
@@ -271,7 +276,7 @@ export function FAQSchema() {
         name: 'How does the AI understand my PDF?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Our system uses advanced techniques like RAG (Retrieval Augmented Generation) and vector embeddings to understand document content. The AI breaks down your PDF into searchable chunks and creates semantic representations for intelligent responses.'
+          text: 'Our system uses advanced 3-phase RAG (Retrieval Augmented Generation) with hybrid search, reciprocal rank fusion, and re-ranking. The AI breaks down your PDF into searchable chunks, creates semantic embeddings, and uses vector search with anti-hallucination measures to provide accurate, cited responses. You can visualize retrieved chunks and see similarity scores for transparency.'
         }
       },
       {

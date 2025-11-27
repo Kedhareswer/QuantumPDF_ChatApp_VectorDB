@@ -49,15 +49,16 @@
 | Anyscale | ✅ | ✅ | ✅ |
 | OpenRouter | ✅ | ✅ | ✅ |
 
-### ✅ Domain Agents System (NEW)
+### ✅ Enhanced UI/UX Features
 
-| Agent | Status | Purpose |
-|-------|--------|---------|
-| Analogy Maker | ✅ Complete | Simplify complex concepts with everyday analogies |
-| Compliance Checker | ✅ Complete | Legal/policy analysis, risk identification |
-| Key Terms Extractor | ✅ Complete | Vocabulary extraction and definitions |
-| Summary Agent | ✅ Complete | Concise summaries using local models |
-| Agent Selector UI | ✅ Complete | Dropdown/toggle interface in chat |
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Source Cards | ✅ Complete | Interactive cards with document name, page, similarity score |
+| Clickable Citations | ✅ Complete | Inline citation badges with page navigation |
+| Document Filtering | ✅ Complete | Multi-select document filter with chips |
+| Chunk Visualization | ✅ Complete | Expandable view of retrieved chunks with scores |
+| Query History | ✅ Complete | Persistent query history with search and re-run |
+| Export Conversations | ✅ Complete | Export as Markdown, PDF, or copy to clipboard |
 
 ### ✅ Mathpix Integration (NEW)
 
@@ -125,7 +126,12 @@
 | Feature | Status | Description |
 |---------|--------|-------------|
 | Chat Interface | ✅ Complete | Streaming, markdown, code highlighting |
-| Agent Selector | ✅ Complete | Dropdown with descriptions |
+| Source Cards | ✅ Complete | Interactive source display with metadata |
+| Clickable Citations | ✅ Complete | Inline citations with page navigation |
+| Document Filtering | ✅ Complete | Multi-document search filtering |
+| Chunk Visualization | ✅ Complete | Transparency into retrieval process |
+| Query History | ✅ Complete | Persistent query storage and re-run |
+| Export Conversations | ✅ Complete | Markdown/PDF export functionality |
 | Document Library | ✅ Complete | Upload, manage, filter documents |
 | Configuration Panel | ✅ Complete | AI, Vector DB, Mathpix settings |
 | System Status | ✅ Complete | Health monitoring dashboard |
@@ -168,7 +174,6 @@ lib/
 ├── ai-client.ts              # Multi-provider AI client (19 providers)
 ├── advanced-chunking.ts      # Semantic chunking with metadata
 ├── docx-processor.ts         # Word document processing
-├── domain-agents.ts          # Specialized analysis agents
 ├── enhanced-pdf-processor.ts # Main PDF processor with multimodal
 ├── enhanced-url-processor.ts # URL/web content processing
 ├── equation-extractor.ts     # Math/equation detection + Mathpix
@@ -176,7 +181,7 @@ lib/
 ├── image-captioner.ts        # Vision model captioning service
 ├── image-extractor.ts        # PDF/DOCX image extraction
 ├── local-summarizer.ts       # Transformers.js summarization
-├── ocr-processor.ts          # Tesseract.js OCR wrapper
+├── ocr-processor.ts          # Tesseract.js + PaddleOCR.js wrapper
 ├── pdf-parser.ts             # PDF.js text extraction
 ├── rag-engine.ts             # Core RAG with 3-phase processing
 ├── spreadsheet-processor.ts  # Excel/CSV processing
@@ -192,8 +197,13 @@ lib/
 
 ```
 components/
-├── agent-selector.tsx        # RAG agent selection UI (NEW)
-├── chat-interface.tsx        # Chat UI with agent integration
+├── chat-interface.tsx        # Chat UI with enhanced features
+├── source-card.tsx           # Interactive source cards (NEW)
+├── citation-badge.tsx        # Clickable citations (NEW)
+├── document-filter.tsx       # Document filtering UI (NEW)
+├── chunk-visualization.tsx   # Chunk transparency (NEW)
+├── query-history.tsx         # Query persistence (NEW)
+├── export-menu.tsx           # Conversation export (NEW)
 ├── client-layout.tsx         # Main app container
 ├── document-library.tsx      # Document management
 ├── error-boundary.tsx        # Error handling
@@ -259,16 +269,6 @@ interface VectorDBConfig {
 }
 ```
 
-### Agent Settings (NEW)
-
-```typescript
-interface AgentSettings {
-  'analogy-maker'?: { enabled: boolean }
-  'compliance-checker'?: { enabled: boolean }
-  'key-terms'?: { enabled: boolean }
-  'summary'?: { enabled: boolean; useLocalModels?: boolean }
-}
-```
 
 ---
 
@@ -300,7 +300,6 @@ npm test -- --watch
 | AI Client | ✅ | `__tests__/ai-client.test.ts` |
 | RAG Engine | ✅ | `__tests__/rag-engine.test.ts` |
 | Advanced Chunking | ✅ | `__tests__/advanced-chunking.test.ts` |
-| Domain Agents | 🔄 Planned | - |
 | Mathpix Processor | 🔄 Planned | - |
 
 ---
@@ -326,10 +325,13 @@ npm test -- --watch
 
 ### New Features
 
-1. **Domain Agents System**
-   - 4 specialized agents for different analysis needs
-   - Agent selector UI in chat interface
-   - Per-agent settings with local model option
+1. **Enhanced UI/UX Features**
+   - Source cards with interactive metadata display
+   - Clickable citations with page navigation
+   - Document filtering for scoped queries
+   - Chunk visualization for retrieval transparency
+   - Query history with persistent storage
+   - Export conversations in multiple formats
 
 2. **Mathpix Integration**
    - Professional equation OCR
@@ -342,12 +344,6 @@ npm test -- --watch
    - AI-powered image captioning
    - Table detection and preservation
    - Equation extraction with Math.js evaluation
-
-4. **Agent UI Selection**
-   - Dropdown in chat interface
-   - Agent descriptions and icons
-   - Enable/disable toggles
-   - Local model option for Summary agent
 
 ### Improvements
 
@@ -365,7 +361,7 @@ npm test -- --watch
 
 3. **Documentation**
    - Updated all architecture diagrams
-   - Added agent system documentation
+   - Added enhanced UI/UX features documentation
    - Added Mathpix integration guide
    - Comprehensive API documentation
 
@@ -377,7 +373,7 @@ npm test -- --watch
 
 - [x] Multi-provider AI support (19 providers)
 - [x] 3-Phase RAG processing
-- [x] Domain agents system
+- [x] Enhanced UI/UX features (Source Cards, Citations, Filtering, Chunk Visualization, History, Export)
 - [x] Mathpix equation OCR
 - [x] Multimodal extraction (images, tables, equations)
 - [x] Local model support (Transformers.js)

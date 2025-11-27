@@ -20,7 +20,7 @@ NOTE: THE BELOW INFOGRAPHIC IS FOR v1.3 --> We are currently v3.0
 |---------|-------------|
 | **3-Phase RAG** | Context Analysis → Self-Critique → Refined Answer |
 | **19 AI Providers** | OpenAI, Anthropic, Groq, DeepSeek, Mistral, and more |
-| **Domain Agents** | Specialized analysis: analogies, compliance, key terms, summaries |
+| **Enhanced UI/UX** | Source Cards, Citations, Filtering, Chunk Visualization, History, Export |
 | **Mathpix Integration** | Professional equation OCR for LaTeX extraction |
 | **Multimodal Processing** | Images, tables, equations extracted and analyzed |
 | **Multi-Format Support** | PDF, DOCX, XLSX, CSV processing |
@@ -68,14 +68,16 @@ NOTE: THE BELOW INFOGRAPHIC IS FOR v1.3 --> We are currently v3.0
 </tr>
 </table>
 
-### Domain Agents
+### Enhanced UI/UX Features
 
-| Agent | Purpose | Model |
-|-------|---------|-------|
-| 🎯 **Analogy Maker** | Simplify complex concepts with everyday analogies | Cloud API |
-| ⚖️ **Compliance Checker** | Legal/policy analysis, risk identification | Cloud API |
-| 📚 **Key Terms** | Extract and define important vocabulary | Cloud API |
-| 📝 **Summary** | Concise document summaries | Local (Transformers.js) or API |
+| Feature | Purpose | Location |
+|---------|---------|----------|
+| 📄 **Source Cards** | Interactive source display with metadata | Below messages |
+| 🔗 **Clickable Citations** | Inline citations with page navigation | In message content |
+| 🔍 **Document Filtering** | Filter queries to specific documents | Above input |
+| 📊 **Chunk Visualization** | View retrieved chunks with similarity scores | Expandable section |
+| 📜 **Query History** | Persistent query storage and re-run | Header sidebar |
+| 💾 **Export Conversations** | Export as Markdown, PDF, or clipboard | Header menu |
 
 ---
 
@@ -144,12 +146,14 @@ Supported formats: PDF, DOCX, DOC, XLSX, XLS, CSV, TSV
 2. AI retrieves relevant context using 3-phase RAG
 3. Response includes sources and confidence metrics
 
-### Use Domain Agents
+### Enhanced UI Features
 
-1. Expand "Advanced Controls" in chat
-2. Select agent from dropdown
-3. Enable/configure agent settings
-4. Query - agent enhances response
+1. **Source Cards**: View sources with similarity scores and page numbers
+2. **Clickable Citations**: Click citations to jump to PDF pages
+3. **Document Filtering**: Filter queries to specific documents using chips
+4. **Chunk Visualization**: Expand to see all retrieved chunks
+5. **Query History**: Access previous queries from sidebar
+6. **Export**: Export conversations as Markdown or PDF
 
 ### Configure Mathpix (Optional)
 
@@ -189,11 +193,14 @@ Supported formats: PDF, DOCX, DOC, XLSX, XLS, CSV, TSV
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Domain Agents                                    │
+│                      Enhanced UI/UX Features                             │
 │  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐               │
-│  │  Analogy  │ │Compliance │ │ Key Terms │ │  Summary  │               │
-│  │   Maker   │ │  Checker  │ │ Extractor │ │   Agent   │               │
+│  │  Source   │ │Citations  │ │  Filter   │ │  Chunks   │               │
+│  │  Cards    │ │           │ │           │ │  View     │               │
 │  └───────────┘ └───────────┘ └───────────┘ └───────────┘               │
+│  ┌───────────┐ ┌───────────┐                                            │
+│  │  History  │ │  Export   │                                            │
+│  └───────────┘ └───────────┘                                            │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -213,14 +220,18 @@ QuantumPDF_ChatApp_VectorDB/
 │   ├── layout.tsx         # Root layout
 │   └── manifest.json      # PWA manifest
 ├── components/            # React components
-│   ├── agent-selector.tsx # Agent selection UI
 │   ├── chat-interface.tsx # Chat with streaming
+│   ├── source-card.tsx   # Interactive source cards
+│   ├── citation-badge.tsx # Clickable citations
+│   ├── document-filter.tsx # Document filtering
+│   ├── chunk-visualization.tsx # Chunk transparency
+│   ├── query-history.tsx # Query persistence
+│   ├── export-menu.tsx   # Conversation export
 │   ├── unified-pdf-processor.tsx # File upload
 │   └── unified-configuration.tsx # Settings panel
 ├── lib/                   # Core libraries
 │   ├── ai-client.ts       # Multi-provider AI client
 │   ├── rag-engine.ts      # 3-phase RAG system
-│   ├── domain-agents.ts   # Specialized agents
 │   ├── mathpix-processor.ts # Equation OCR
 │   ├── advanced-chunking.ts # Semantic chunking
 │   └── store.ts           # Zustand state
@@ -257,15 +268,22 @@ const ragConfig = {
 }
 ```
 
-### Agent Settings
+### UI Feature Configuration
 
 ```typescript
-const agentSettings = {
-  'analogy-maker': { enabled: true },
-  'compliance-checker': { enabled: true },
-  'key-terms': { enabled: true },
-  'summary': { enabled: true, useLocalModels: true }
-}
+// Document filtering
+const selectedDocumentIds = ['doc-1', 'doc-2']
+
+// Query with filter
+await ragEngine.query(query, {
+  filters: { documentIds: selectedDocumentIds }
+})
+
+// Export conversations
+<ExportMenu messages={messages} />
+
+// Query history (auto-saves)
+<QueryHistory onSelectQuery={handleQuery} />
 ```
 
 ---

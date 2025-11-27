@@ -545,6 +545,345 @@ ${input.context.substring(0, 3000)}`
 }
 
 /**
+ * Explainer Agent
+ * Provides detailed, step-by-step explanations of processes, mechanisms, or concepts
+ */
+export class ExplainerAgent extends BaseAgent {
+  constructor(config: AgentConfig) {
+    super('explainer', config)
+  }
+
+  async process(input: AgentInput): Promise<AgentOutput> {
+    const startTime = Date.now()
+
+    try {
+      // Extract process steps or mechanisms from context
+      const processes = this.extractProcesses(input.context)
+      
+      if (processes.length === 0) {
+        return this.createOutput(
+          'No clear processes or mechanisms found to explain.',
+          0.5,
+          { processes: [] },
+          startTime
+        )
+      }
+
+      // Generate detailed explanation with AI if available
+      if (this.config.aiClient) {
+        const explanation = await this.explainWithAI(input, processes)
+        return this.createOutput(
+          explanation,
+          0.85,
+          { processes, method: 'ai-explanation' },
+          startTime
+        )
+      }
+
+      // Fallback to structured template explanation
+      const templateExplanation = this.generateTemplateExplanation(processes, input.question)
+      return this.createOutput(
+        templateExplanation,
+        0.65,
+        { processes, method: 'template' },
+        startTime
+      )
+    } catch (error) {
+      console.error('ExplainerAgent error:', error)
+      return this.createOutput(
+        'Unable to generate explanation for this content.',
+        0.3,
+        { error: error instanceof Error ? error.message : 'Unknown error' },
+        startTime
+      )
+    }
+  }
+
+  private extractProcesses(context: string): Array<{ step: string; order: number }> {
+    const processes: Array<{ step: string; order: number }> = []
+    
+    // Look for numbered steps, ordered lists, or sequential patterns
+    const patterns = [
+      /(?:^|\n)\s*(\d+)[\.\)]\s*([^\n]+)/g, // Numbered steps: "1. Step one"
+      /(?:^|\n)\s*[-•]\s*([^\n]+)/g, // Bullet points
+      /(?:first|second|third|then|next|finally|step \d+)[:\s]+([^\n\.]+)/gi, // Sequential keywords
+      /(?:process|procedure|method|mechanism)[:\s]+([^\n\.]{20,200})/gi, // Process descriptions
+    ]
+
+    let order = 1
+    for (const pattern of patterns) {
+      const matches = context.matchAll(pattern)
+      for (const match of matches) {
+        const step = (match[1] || match[0]).trim()
+        if (step.length > 10 && step.length < 300 && !processes.some(p => p.step.includes(step.substring(0, 50)))) {
+          processes.push({ step, order: order++ })
+          if (processes.length >= 10) break // Limit to 10 steps
+        }
+      }
+      if (processes.length >= 10) break
+    }
+
+    return processes.slice(0, 10)
+  }
+
+  private async explainWithAI(input: AgentInput, processes: Array<{ step: string; order: number }>): Promise<string> {
+    const processesText = processes.map(p => `${p.order}. ${p.step}`).join('\n')
+    
+    const prompt = `Based on the following context about "${input.question}":
+
+${input.context.substring(0, 2500)}
+
+Provide a clear, step-by-step explanation that:
+1. Breaks down the process or concept into logical steps
+2. Explains each step in simple terms
+3. Shows how steps connect to each other
+4. Uses examples from the context when possible
+
+Format as:
+## Overview
+[Brief overview]
+
+## Step-by-Step Explanation
+[Numbered steps with clear explanations]
+
+## Key Takeaways
+[Summary of main points]`
+
+    const messages = [
+      { role: 'system' as const, content: 'You are an expert educator. Explain complex topics clearly and step-by-step.' },
+      { role: 'user' as const, content: prompt }
+    ]
+
+    return await this.config.aiClient.generateText(messages)
+  }
+
+  private generateTemplateExplanation(processes: Array<{ step: string; order: number }>, question: string): string {
+    let explanation = `## Explanation: ${question}\n\n`
+    
+    if (processes.length > 0) {
+      explanation += '### Step-by-Step Process:\n\n'
+      processes.forEach(p => {
+        explanation += `${p.order}. ${p.step}\n\n`
+      })
+    } else {
+      explanation += 'The content describes a process or mechanism. Review the context for detailed steps.\n\n'
+    }
+
+    explanation += '### Summary\n'
+    explanation += 'This explanation breaks down the concept into clear, sequential steps for better understanding.'
+
+    return explanation
+  }
+}
+
+/**
+ * Fact Checker Agent
+ * Verifies factual claims, statistics, and specific information against retrieved context
+ */
+export class FactCheckerAgent extends BaseAgent {
+  constructor(config: AgentConfig) {
+    super('fact-checker', config)
+  }
+
+  async process(input: AgentInput): Promise<AgentOutput> {
+    const startTime = Date.now()
+
+    try {
+      // Extract claims and facts from the question
+      const claims = this.extractClaims(input.question, input.context)
+      
+      if (claims.length === 0) {
+        return this.createOutput(
+          'No specific factual claims detected to verify.',
+          0.5,
+          { claims: [] },
+          startTime
+        )
+      }
+
+      // Verify claims against context
+      const verifications = this.verifyClaims(claims, input.context)
+      
+      // Generate detailed fact-check report with AI if available
+      if (this.config.aiClient && verifications.some(v => v.status !== 'unclear')) {
+        const report = await this.generateFactCheckReport(input, verifications)
+        return this.createOutput(
+          report,
+          0.8,
+          { verifications, method: 'ai-verification' },
+          startTime
+        )
+      }
+
+      // Format verification results
+      const formattedReport = this.formatVerifications(verifications)
+      return this.createOutput(
+        formattedReport,
+        0.7,
+        { verifications, method: 'pattern-verification' },
+        startTime
+      )
+    } catch (error) {
+      console.error('FactCheckerAgent error:', error)
+      return this.createOutput(
+        'Unable to perform fact-checking on this content.',
+        0.3,
+        { error: error instanceof Error ? error.message : 'Unknown error' },
+        startTime
+      )
+    }
+  }
+
+  private extractClaims(question: string, context: string): Array<{ claim: string; type: 'statistic' | 'fact' | 'statement' }> {
+    const claims: Array<{ claim: string; type: 'statistic' | 'fact' | 'statement' }> = []
+    
+    // Extract statistics (numbers with % or units)
+    const statPattern = /\b(\d+(?:\.\d+)?)\s*(%|percent|years?|dollars?|USD|EUR|GBP|times|x)\b/gi
+    const statMatches = question.matchAll(statPattern)
+    for (const match of statMatches) {
+      claims.push({ claim: match[0], type: 'statistic' })
+    }
+
+    // Extract factual statements (claims with "is", "are", "was", etc.)
+    const factPattern = /\b([A-Z][^.!?]*(?:is|are|was|were|has|have|does|did|can|cannot|will|won't)[^.!?]{10,150})/g
+    const factMatches = question.matchAll(factPattern)
+    for (const match of factMatches) {
+      if (match[0].length > 15 && match[0].length < 200) {
+        claims.push({ claim: match[0].trim(), type: 'fact' })
+      }
+    }
+
+    // Extract quoted claims
+    const quotedPattern = /"([^"]{20,200})"/g
+    const quotedMatches = question.matchAll(quotedPattern)
+    for (const match of quotedMatches) {
+      claims.push({ claim: match[1], type: 'statement' })
+    }
+
+    return claims.slice(0, 5) // Limit to 5 claims
+  }
+
+  private verifyClaims(
+    claims: Array<{ claim: string; type: 'statistic' | 'fact' | 'statement' }>,
+    context: string
+  ): Array<{ claim: string; status: 'verified' | 'contradicted' | 'unclear'; evidence?: string }> {
+    const verifications: Array<{ claim: string; status: 'verified' | 'contradicted' | 'unclear'; evidence?: string }> = []
+    const lowerContext = context.toLowerCase()
+
+    for (const claim of claims) {
+      const lowerClaim = claim.claim.toLowerCase()
+      const claimWords = lowerClaim.split(/\s+/).filter(w => w.length > 3)
+      
+      // Check if claim appears in context (exact or similar)
+      const exactMatch = lowerContext.includes(lowerClaim.substring(0, Math.min(50, lowerClaim.length)))
+      
+      // Check for key terms from claim in context
+      const matchingWords = claimWords.filter(w => lowerContext.includes(w))
+      const matchRatio = matchingWords.length / Math.max(1, claimWords.length)
+      
+      // Extract surrounding context as evidence
+      let evidence: string | undefined
+      if (exactMatch || matchRatio > 0.5) {
+        const claimIndex = lowerContext.indexOf(lowerClaim.substring(0, 30))
+        if (claimIndex >= 0) {
+          const start = Math.max(0, claimIndex - 100)
+          const end = Math.min(context.length, claimIndex + lowerClaim.length + 100)
+          evidence = '...' + context.substring(start, end) + '...'
+        }
+      }
+
+      let status: 'verified' | 'contradicted' | 'unclear'
+      if (exactMatch || matchRatio > 0.7) {
+        status = 'verified'
+      } else if (matchRatio < 0.3) {
+        status = 'unclear'
+      } else {
+        // Check for contradiction keywords
+        const contradictionPattern = /\b(not|never|no|false|incorrect|wrong|disproven|refuted)\b/i
+        const hasContradiction = evidence && contradictionPattern.test(evidence)
+        status = hasContradiction ? 'contradicted' : 'unclear'
+      }
+
+      verifications.push({ claim: claim.claim, status, evidence })
+    }
+
+    return verifications
+  }
+
+  private async generateFactCheckReport(
+    input: AgentInput,
+    verifications: Array<{ claim: string; status: 'verified' | 'contradicted' | 'unclear'; evidence?: string }>
+  ): Promise<string> {
+    const verificationsText = verifications.map((v, i) => 
+      `${i + 1}. Claim: "${v.claim}"\n   Status: ${v.status}\n   ${v.evidence ? `Evidence: ${v.evidence.substring(0, 150)}...` : 'No evidence found'}`
+    ).join('\n\n')
+
+    const prompt = `Fact-check the following claims against the provided context:
+
+Claims to verify:
+${verificationsText}
+
+Context:
+${input.context.substring(0, 2000)}
+
+Provide a fact-check report that:
+1. States whether each claim is Verified, Contradicted, or Unclear
+2. Cites specific evidence from the context
+3. Explains any discrepancies
+4. Provides an overall confidence assessment
+
+Format as:
+## Fact-Check Report
+
+### Claim 1: [Claim]
+**Status:** [Verified/Contradicted/Unclear]
+**Evidence:** [Quote from context]
+**Explanation:** [Brief explanation]
+
+[Repeat for each claim]
+
+### Overall Assessment
+[Summary of findings]`
+
+    const messages = [
+      { role: 'system' as const, content: 'You are a fact-checker. Verify claims against provided evidence. Be precise and cite sources.' },
+      { role: 'user' as const, content: prompt }
+    ]
+
+    return await this.config.aiClient.generateText(messages)
+  }
+
+  private formatVerifications(
+    verifications: Array<{ claim: string; status: 'verified' | 'contradicted' | 'unclear'; evidence?: string }>
+  ): string {
+    let report = '## Fact-Check Report\n\n'
+    
+    verifications.forEach((v, i) => {
+      const emoji = v.status === 'verified' ? '✅' : v.status === 'contradicted' ? '❌' : '⚠️'
+      report += `### ${emoji} Claim ${i + 1}: ${v.claim.substring(0, 100)}${v.claim.length > 100 ? '...' : ''}\n`
+      report += `**Status:** ${v.status.toUpperCase()}\n`
+      if (v.evidence) {
+        report += `**Evidence:** ${v.evidence.substring(0, 200)}${v.evidence.length > 200 ? '...' : ''}\n`
+      } else {
+        report += `**Evidence:** Not found in context\n`
+      }
+      report += '\n'
+    })
+
+    const verifiedCount = verifications.filter(v => v.status === 'verified').length
+    const contradictedCount = verifications.filter(v => v.status === 'contradicted').length
+    const unclearCount = verifications.filter(v => v.status === 'unclear').length
+
+    report += `### Summary\n`
+    report += `- ✅ Verified: ${verifiedCount}\n`
+    report += `- ❌ Contradicted: ${contradictedCount}\n`
+    report += `- ⚠️ Unclear: ${unclearCount}\n`
+
+    return report
+  }
+}
+
+/**
  * Agent Manager - Coordinates multiple agents
  */
 export class AgentManager {
@@ -561,6 +900,67 @@ export class AgentManager {
     this.agents.set('compliance-checker', new ComplianceCheckerAgent(this.config))
     this.agents.set('key-terms', new KeyTermsAgent(this.config))
     this.agents.set('summary', new SummaryAgent(this.config))
+    this.agents.set('explainer', new ExplainerAgent(this.config))
+    this.agents.set('fact-checker', new FactCheckerAgent(this.config))
+  }
+
+  /**
+   * Automatically select relevant agents based on query intent
+   */
+  selectAgentsForQuery(question: string, context: string): AgentType[] {
+    const selected: AgentType[] = []
+    const lowerQuestion = question.toLowerCase()
+    const lowerContext = context.toLowerCase()
+
+    // Analogy Maker: Questions asking for explanations, comparisons, or "like what"
+    if (
+      /\b(explain|what is|how does|like what|similar to|compare|analogy|example)\b/i.test(question) ||
+      /\b(complex|complicated|difficult|hard to understand)\b/i.test(question)
+    ) {
+      selected.push('analogy-maker')
+    }
+
+    // Compliance Checker: Legal, policy, or compliance-related terms
+    if (
+      /\b(compliance|legal|law|regulation|policy|contract|liability|warranty|indemnif|jurisdiction|governing)\b/i.test(question) ||
+      /\b(compliance|legal|law|regulation|policy|contract|liability)\b/i.test(context)
+    ) {
+      selected.push('compliance-checker')
+    }
+
+    // Key Terms: Questions about definitions, terminology, or "what does X mean"
+    if (
+      /\b(define|definition|term|terminology|vocabulary|what does|what is|meaning of|means)\b/i.test(question) ||
+      context.split(/\s+/).length > 500 // Long documents likely have key terms
+    ) {
+      selected.push('key-terms')
+    }
+
+    // Summary: Questions asking for overview, summary, or "tell me about"
+    if (
+      /\b(summarize|summary|overview|brief|tell me about|what's this about|main points|key points)\b/i.test(question) ||
+      context.split(/\s+/).length > 1000 // Very long documents
+    ) {
+      selected.push('summary')
+    }
+
+    // Explainer: Questions asking "how" or "why" or requesting detailed explanations
+    if (
+      /\b(how|why|explain in detail|walk me through|step by step|process|mechanism|work|function)\b/i.test(question)
+    ) {
+      selected.push('explainer')
+    }
+
+    // Fact Checker: Questions with specific claims, numbers, or "is it true"
+    if (
+      /\b(is it true|fact|verify|check|confirm|accurate|correct|true or false|claim)\b/i.test(question) ||
+      /\b(\d+%|\d+ years|\d+ dollars|statistic|data point|figure)\b/i.test(question)
+    ) {
+      selected.push('fact-checker')
+    }
+
+    // Remove duplicates and return
+    return Array.from(new Set(selected))
   }
 
   /**

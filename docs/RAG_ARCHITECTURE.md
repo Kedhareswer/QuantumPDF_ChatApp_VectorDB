@@ -1,6 +1,6 @@
 # QuantumPDF RAG Architecture
 
-> **Deep dive into the Retrieval-Augmented Generation system with 3-phase processing, domain agents, and multimodal support**
+> **Deep dive into the Retrieval-Augmented Generation system with 3-phase processing, enhanced UI/UX, and multimodal support**
 > **Last Updated: November 2025 | Version 3.0.0**
 
 ---
@@ -10,7 +10,7 @@
 1. [Architecture Overview](#architecture-overview)
 2. [3-Phase Processing Pipeline](#3-phase-processing-pipeline)
 3. [Retrieval System](#retrieval-system)
-4. [Domain Agents](#domain-agents)
+4. [UI/UX Integration](#uiux-integration)
 5. [Multimodal Integration](#multimodal-integration)
 6. [Scoring & Ranking](#scoring--ranking)
 7. [Quality Metrics](#quality-metrics)
@@ -52,19 +52,17 @@
 │  └──────────────┘  └──────────────┘  └──────────────┘                   │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
-                           ┌────────┴────────┐
-                           │                 │
-                           ▼                 ▼
-              ┌─────────────────┐  ┌─────────────────┐
-              │  DOMAIN AGENTS  │  │  DIRECT ANSWER  │
-              │  (Optional)     │  │                 │
-              └─────────────────┘  └─────────────────┘
-                           │                 │
-                           └────────┬────────┘
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          FINAL RESPONSE                                  │
-│  • Answer    • Sources    • Quality Metrics    • Agent Insights         │
+│  • Answer    • Sources    • Quality Metrics    • Retrieved Chunks         │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      UI/UX ENHANCEMENT                                   │
+│  • Source Cards    • Citations    • Chunk Visualization                 │
+│  • Document Filter • Query History • Export                             │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,7 +72,6 @@
 |-----------|------|---------|
 | RAG Engine | `lib/rag-engine.ts` | Core query processing & retrieval |
 | AI Client | `lib/ai-client.ts` | Multi-provider LLM integration |
-| Domain Agents | `lib/domain-agents.ts` | Specialized analysis |
 | Chunking | `lib/advanced-chunking.ts` | Semantic text segmentation |
 | Vector DB | `lib/vector-database-client.ts` | Embedding storage & search |
 
@@ -288,195 +285,73 @@ function applyDiversityBoost(
 
 ---
 
-## Domain Agents
+## UI/UX Integration
 
-### Agent Architecture
+### Enhanced UI Features
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         AGENT MANAGER                                    │
-│  • Agent Registration    • Execution Pipeline    • Result Aggregation   │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-        ┌───────────────┬───────────┼───────────┬───────────────┐
-        ▼               ▼           ▼           ▼               ▼
-┌───────────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐
-│   Analogy     │ │Compliance │ │ Key Terms │ │  Summary  │ │ Explainer │
-│   Maker       │ │  Checker  │ │ Extractor │ │   Agent   │ │   Agent   │
-└───────────────┘ └───────────┘ └───────────┘ └───────────┘ └───────────┘
-```
+The RAG system integrates with several UI components to provide a rich user experience:
 
-### Available Agents
-
-| Agent | Purpose | Model |
-|-------|---------|-------|
-| Analogy Maker | Simplify complex concepts | API (OpenAI/Anthropic) |
-| Compliance Checker | Legal/policy analysis | API (OpenAI/Anthropic) |
-| Key Terms Extractor | Vocabulary extraction | API (OpenAI/Anthropic) |
-| Summary Agent | Concise summaries | Local (Transformers.js) or API |
-| Explainer Agent | Detailed explanations | API with Math.js integration |
-| Fact Checker | Factual verification | API (planned) |
-
-### Agent Implementation
+#### Source Cards
+Display interactive source cards with document metadata, page numbers, and similarity scores.
 
 ```typescript
-// lib/domain-agents.ts
-interface DomainAgent {
-  type: AgentType
-  run(context: AgentContext): Promise<AgentResult>
-}
-
-interface AgentContext {
-  query: string
-  chunks: RetrievedChunk[]
-  ragResult: RAGResult
-  options?: AgentOptions
-}
-
-interface AgentResult {
-  agentType: AgentType
-  output: string
-  metadata: {
-    processingTime: number
-    tokensUsed: number
-    modelUsed: string
-  }
-}
-
-// Analogy Maker Agent
-class AnalogyMakerAgent implements DomainAgent {
-  type = 'analogy-maker' as const
-  
-  async run(context: AgentContext): Promise<AgentResult> {
-    const startTime = Date.now()
-    
-    const prompt = `
-      Create 3 simple, everyday analogies to explain these concepts:
-      
-      Query: ${context.query}
-      
-      Key concepts from context:
-      ${this.extractConcepts(context.chunks)}
-      
-      Format each analogy as:
-      **[Concept]** is like **[Everyday Thing]** because [clear explanation]
-      
-      Make analogies accessible to someone without technical background.
-    `
-    
-    const output = await this.aiClient.generateText(prompt)
-    
-    return {
-      agentType: this.type,
-      output,
-      metadata: {
-        processingTime: Date.now() - startTime,
-        tokensUsed: this.estimateTokens(output),
-        modelUsed: this.aiClient.currentModel
-      }
-    }
-  }
-}
-
-// Summary Agent with Local Model Option
-class SummaryAgent implements DomainAgent {
-  type = 'summary' as const
-  
-  async run(context: AgentContext): Promise<AgentResult> {
-    const startTime = Date.now()
-    
-    if (context.options?.useLocalModels) {
-      // Use Transformers.js locally
-      const summarizer = new LocalSummarizer()
-      await summarizer.initialize()
-      
-      const combinedText = context.chunks
-        .map(c => c.content)
-        .join('\n\n')
-      
-      const summary = await summarizer.summarize(combinedText)
-      
-      return {
-        agentType: this.type,
-        output: summary,
-        metadata: {
-          processingTime: Date.now() - startTime,
-          tokensUsed: 0, // Local model, no API tokens
-          modelUsed: 'Xenova/distilbart-cnn-6-6'
-        }
-      }
-    }
-    
-    // Use API
-    const prompt = `
-      Provide a concise summary of the following content in relation to:
-      "${context.query}"
-      
-      Content:
-      ${context.chunks.map(c => c.content).join('\n\n')}
-      
-      Format:
-      - 2-3 sentence executive summary
-      - 3-5 key points as bullet points
-      - Any important caveats or limitations
-    `
-    
-    const output = await this.aiClient.generateText(prompt)
-    
-    return {
-      agentType: this.type,
-      output,
-      metadata: {
-        processingTime: Date.now() - startTime,
-        tokensUsed: this.estimateTokens(output),
-        modelUsed: this.aiClient.currentModel
-      }
-    }
-  }
-}
+// In chat-interface.tsx
+<SourceCards
+  sources={response.sources}
+  chunks={response.chunks}
+  onViewPage={handleViewPage}
+/>
 ```
 
-### Agent Manager
+#### Clickable Citations
+Inline citation badges that allow direct navigation to PDF pages.
 
 ```typescript
-class AgentManager {
-  private agents: Map<AgentType, DomainAgent> = new Map()
-  
-  constructor(aiClient: AIClient, ragEngine: RAGEngine) {
-    this.agents.set('analogy-maker', new AnalogyMakerAgent(aiClient))
-    this.agents.set('compliance-checker', new ComplianceCheckerAgent(aiClient))
-    this.agents.set('key-terms', new KeyTermsAgent(aiClient))
-    this.agents.set('summary', new SummaryAgent(aiClient))
-  }
-  
-  async runAgent(
-    agentType: AgentType,
-    context: AgentContext
-  ): Promise<AgentResult> {
-    const agent = this.agents.get(agentType)
-    if (!agent) {
-      throw new Error(`Unknown agent type: ${agentType}`)
-    }
-    return agent.run(context)
-  }
-  
-  async runMultipleAgents(
-    agentTypes: AgentType[],
-    context: AgentContext
-  ): Promise<AgentResult[]> {
-    return Promise.all(
-      agentTypes.map(type => this.runAgent(type, context))
-    )
-  }
-}
+// Citations are automatically inserted in markdown content
+// Format: [1] where 1 is the citation index
+<CitationBadge
+  index={1}
+  source="Document Name · p.5"
+  documentId="doc-123"
+  page={5}
+  onViewPage={handleViewPage}
+/>
+```
 
-// Export singleton getter
-export function getAgentManager(
-  aiClient: AIClient,
-  ragEngine: RAGEngine
-): AgentManager {
-  return new AgentManager(aiClient, ragEngine)
-}
+#### Document Filtering
+Filter queries to specific documents for scoped searches.
+
+```typescript
+// Pass documentIds to query
+await ragEngine.query(query, {
+  filters: { documentIds: selectedDocumentIds }
+})
+```
+
+#### Chunk Visualization
+Show retrieved chunks with similarity scores for transparency.
+
+```typescript
+<ChunkVisualization
+  chunks={response.chunks}
+  onViewPage={handleViewPage}
+/>
+```
+
+#### Query History
+Persistent query storage with search and re-run functionality.
+
+```typescript
+// Auto-saves queries
+const { addQueryHistory } = useQueryHistory()
+addQueryHistory(query, response.length)
+```
+
+#### Export Conversations
+Export conversations in Markdown or PDF format.
+
+```typescript
+<ExportMenu messages={messages} />
 ```
 
 ---
@@ -838,36 +713,6 @@ const defaultConfig: RAGConfig = {
 }
 ```
 
-### Agent Configuration
-
-```typescript
-interface AgentSettings {
-  'analogy-maker'?: {
-    enabled: boolean
-    maxAnalogies?: number
-  }
-  'compliance-checker'?: {
-    enabled: boolean
-    strictMode?: boolean
-  }
-  'key-terms'?: {
-    enabled: boolean
-    maxTerms?: number
-  }
-  'summary'?: {
-    enabled: boolean
-    useLocalModels?: boolean
-    maxLength?: number
-  }
-}
-
-const defaultAgentSettings: AgentSettings = {
-  'analogy-maker': { enabled: true, maxAnalogies: 3 },
-  'compliance-checker': { enabled: true, strictMode: false },
-  'key-terms': { enabled: true, maxTerms: 10 },
-  'summary': { enabled: true, useLocalModels: true, maxLength: 500 }
-}
-```
 
 ---
 
@@ -893,15 +738,31 @@ class RAGEngine {
 }
 ```
 
-### AgentManager
+### UI Components
 
 ```typescript
-class AgentManager {
-  constructor(aiClient: AIClient, ragEngine: RAGEngine)
-  
-  runAgent(type: AgentType, context: AgentContext): Promise<AgentResult>
-  runMultipleAgents(types: AgentType[], context: AgentContext): Promise<AgentResult[]>
-  getAvailableAgents(): AgentType[]
+// Source Cards
+interface SourceCardsProps {
+  sources: string[]
+  chunks?: RetrievedChunk[]
+  onViewPage?: (documentId: string, page: number) => void
+}
+
+// Document Filter
+interface DocumentFilterProps {
+  documents: Document[]
+  selectedDocumentIds: string[]
+  onSelectionChange: (ids: string[]) => void
+}
+
+// Query History
+interface QueryHistoryProps {
+  onSelectQuery: (query: string) => void
+}
+
+// Export Menu
+interface ExportMenuProps {
+  messages: Message[]
 }
 ```
 
