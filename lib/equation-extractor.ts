@@ -174,7 +174,7 @@ export class EquationExtractor {
     const extractionTime = Date.now() - startTime
 
     onProgress?.({
-      stage: "Completed equation extraction",
+      stage: "Completed regex-based equation extraction",
       processed: this.extractedEquations.length,
       total: totalPages,
     })

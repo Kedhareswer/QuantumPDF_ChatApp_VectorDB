@@ -95,7 +95,7 @@
 | Image Extraction | ✅ Complete | Extract embedded images from PDF/DOCX |
 | Image Captioning | ✅ Complete | Xenova/vit-gpt2-image-captioning |
 | Table Detection | ✅ Complete | Pattern-based table extraction |
-| Equation Extraction | ✅ Complete | LaTeX, MathML, ASCII math |
+| Equation Extraction | ✅ Complete | Regex-based LaTeX, MathML, ASCII math detection |
 | OCR Support | ⚠️ Experimental | Tesseract.js scaffold (disabled by default) |
 
 ### ✅ Multi-Format Support
@@ -345,7 +345,7 @@ npm test -- --watch
    - Image extraction from PDF/DOCX
    - AI-powered image captioning
    - Table detection and preservation
-   - Equation extraction with Math.js evaluation
+   - Regex-based equation extraction with Math.js evaluation
 
 ### Improvements
 

@@ -425,7 +425,7 @@ graph TD
     style VDB fill:#e1ffe1
 ```
 
-### Equation Extraction Flow
+### Equation Extraction Flow (Regex-based)
 
 ```mermaid
 sequenceDiagram

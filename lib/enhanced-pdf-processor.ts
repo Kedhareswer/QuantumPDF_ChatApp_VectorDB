@@ -280,7 +280,7 @@ export class EnhancedPDFProcessor {
             onProgress?.({
               stage: progress.stage,
               progress: 85 + (progress.processed / Math.max(progress.total || 1, 1)) * 5,
-              method: "Equation Extraction",
+              method: "Regex-based Equation Extraction",
               currentPage: progress.pageNumber,
               totalPages: progress.total,
             })
