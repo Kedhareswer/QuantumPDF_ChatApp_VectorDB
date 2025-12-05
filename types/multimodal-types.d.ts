@@ -70,7 +70,7 @@ export interface ExtractedEquation {
   isInline: boolean;
   context?: string; // Surrounding text
   confidence?: number; // Extraction confidence score
-  source?: 'regex' | 'mathpix' | 'ocr'; // Extraction method used
+  source?: 'regex' | 'ocr'; // Extraction method used
   extractedAt: Date;
 }
 

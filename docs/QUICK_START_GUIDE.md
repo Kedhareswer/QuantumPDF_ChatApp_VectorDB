@@ -1,7 +1,7 @@
 # QuantumPDF Quick Start Guide
 
 > **Get up and running in 5 minutes**
-> **Last Updated: November 2025 | Version 3.0.0**
+> **Last Updated: December 2025 | Version 3.1.0**
 
 ---
 
@@ -32,10 +32,6 @@ OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 # OR
 GROQ_API_KEY=gsk_...
-
-# Optional: Mathpix for professional equation OCR
-MATHPIX_APP_ID=your_app_id
-MATHPIX_APP_KEY=your_app_key
 ```
 
 ### 3. Start Development Server
@@ -86,15 +82,6 @@ Open [http://localhost:3000](http://localhost:3000)
 5. Select model
 6. Click **"Save"**
 
-### Mathpix Setup (Optional)
-
-For professional equation extraction:
-
-1. Go to Settings → **"Advanced"** tab
-2. Enter Mathpix App ID and App Key
-3. Toggle **"Enable Mathpix"**
-4. Click **"Test Connection"**
-
 ### Vector Database Setup (Optional)
 
 For cloud vector storage:
@@ -126,7 +113,6 @@ For cloud vector storage:
 | 19 AI Providers | ✅ | OpenAI, Anthropic, Groq, etc. |
 | 3-Phase RAG | ✅ | Context, Critique, Refine |
 | Enhanced UI/UX | ✅ | Source Cards, Citations, Filtering, etc. |
-| Mathpix OCR | ✅ | Professional equation extraction |
 | Image Captioning | ✅ | AI-powered image analysis |
 | Table Extraction | ✅ | Detect and parse tables |
 | Local Models | ✅ | Transformers.js for summaries |
@@ -179,8 +165,7 @@ For cloud vector storage:
 1. **Upload your first document** - Try a PDF with mixed content
 2. **Ask questions** - Test different query types
 3. **Explore UI features** - Try source cards, filtering, and chunk visualization
-4. **Configure Mathpix** - If your docs have equations
-5. **Install as PWA** - Click install button in browser
+4. **Install as PWA** - Click install button in browser
 
 ---
 

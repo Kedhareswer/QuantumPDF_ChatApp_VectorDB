@@ -1,15 +1,15 @@
 # QuantumPDF - AI Document Analysis Platform
 
-> **Advanced document analysis with 3-phase RAG, domain agents, multimodal extraction, and 19 AI providers**
-> **Version 3.0.0 | November 2025**
+> **Advanced document analysis with 3-phase RAG, guardrails, evaluation metrics, and 19+ AI providers**
+> **Version 3.1.0 | December 2025**
 
-![QuantumPDF](https://img.shields.io/badge/version-3.0.0-blue)
+![QuantumPDF](https://img.shields.io/badge/version-3.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black)
 
 ---
-NOTE: THE BELOW INFOGRAPHIC IS FOR v1.3 --> We are currently v3.0
+NOTE: THE BELOW INFOGRAPHIC IS FOR v1.3 --> We are currently v3.1
 ![flow.png](public/flow.png)
 
 ## 🌟 Features
@@ -19,50 +19,50 @@ NOTE: THE BELOW INFOGRAPHIC IS FOR v1.3 --> We are currently v3.0
 | Feature | Description |
 |---------|-------------|
 | **3-Phase RAG** | Context Analysis → Self-Critique → Refined Answer |
-| **19 AI Providers** | OpenAI, Anthropic, Groq, DeepSeek, Mistral, and more |
+| **19+ AI Providers** | OpenAI, Anthropic, Groq, DeepSeek, Mistral, and more |
+| **Guardrails System** | Input validation, rate limiting, toxicity detection, PII detection |
+| **Evaluation Metrics** | Retrieval quality, groundedness, citation coverage, latency tracking |
+| **Cross-Document Retrieval** | Fair distribution with multi-document query detection |
+| **Adaptive Hybrid Search** | Dynamic semantic/keyword weighting based on query type |
 | **Enhanced UI/UX** | Source Cards, Citations, Filtering, Chunk Visualization, History, Export |
-| **Mathpix Integration** | Professional equation OCR for LaTeX extraction |
 | **Multimodal Processing** | Images, tables, equations extracted and analyzed |
 | **Multi-Format Support** | PDF, DOCX, XLSX, CSV processing |
 | **Local AI Models** | Transformers.js for on-device summarization |
 | **PWA Support** | Install as desktop/mobile app |
 
-### AI Provider Support
+### AI Provider Support (Updated December 2025)
 
 <table>
 <tr>
 <td>
 
-**Cloud Providers**
-- ✅ OpenAI
-- ✅ Anthropic
-- ✅ Google AI
-- ✅ Groq
-- ✅ Mistral
-- ✅ DeepSeek
-- ✅ Perplexity
+**Major Providers**
+- ✅ OpenAI (GPT-5.1, GPT-4o, o3)
+- ✅ Anthropic (Claude 4.5 Sonnet/Haiku)
+- ✅ Google AI (Gemini 3 Pro, 2.5 Flash)
+- ✅ xAI (Grok 4, Grok 3)
+- ✅ Mistral (Large 3, Magistral)
+- ✅ DeepSeek (V3.2, Reasoner)
 
 </td>
 <td>
 
-**Alternative Providers**
+**Fast Inference**
+- ✅ Groq (Llama 4, GPT-OSS)
+- ✅ Fireworks (Kimi K2, Qwen 3)
+- ✅ Cerebras (Llama 3.3)
+- ✅ Perplexity (Sonar Deep Research)
+
+</td>
+<td>
+
+**Open Source & Enterprise**
 - ✅ HuggingFace
-- ✅ Fireworks
 - ✅ DeepInfra
-- ✅ XAI (Grok)
-- ✅ Cerebras
 - ✅ Replicate
 - ✅ OpenRouter
-
-</td>
-<td>
-
-**Enterprise Options**
-- ✅ Vertex AI
-- ✅ AIML
+- ✅ AIML API
 - ✅ Anyscale
-- ✅ Alibaba
-- ✅ MiniMax
 
 </td>
 </tr>
@@ -117,10 +117,6 @@ OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 GROQ_API_KEY=gsk_...
 
-# Optional: Enhanced equation extraction
-MATHPIX_APP_ID=your_app_id
-MATHPIX_APP_KEY=your_app_key
-
 # Optional: Cloud vector database
 PINECONE_API_KEY=your_key
 PINECONE_ENVIRONMENT=us-east-1
@@ -154,13 +150,6 @@ Supported formats: PDF, DOCX, DOC, XLSX, XLS, CSV, TSV
 4. **Chunk Visualization**: Expand to see all retrieved chunks
 5. **Query History**: Access previous queries from sidebar
 6. **Export**: Export conversations as Markdown or PDF
-
-### Configure Mathpix (Optional)
-
-1. Go to Settings → Advanced tab
-2. Enter Mathpix credentials
-3. Toggle "Enable Mathpix"
-4. Equation extraction now uses professional OCR
 
 ---
 
@@ -232,7 +221,6 @@ QuantumPDF_ChatApp_VectorDB/
 ├── lib/                   # Core libraries
 │   ├── ai-client.ts       # Multi-provider AI client
 │   ├── rag-engine.ts      # 3-phase RAG system
-│   ├── mathpix-processor.ts # Equation OCR
 │   ├── advanced-chunking.ts # Semantic chunking
 │   └── store.ts           # Zustand state
 ├── types/                 # TypeScript definitions
@@ -369,7 +357,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 - [OpenAI](https://openai.com) for GPT models
 - [Anthropic](https://anthropic.com) for Claude models
 - [Hugging Face](https://huggingface.co) for Transformers.js
-- [Mathpix](https://mathpix.com) for equation OCR
 - [Vercel](https://vercel.com) for Next.js
 - [shadcn/ui](https://ui.shadcn.com) for UI components
 

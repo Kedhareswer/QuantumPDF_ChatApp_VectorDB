@@ -1,7 +1,7 @@
 # QuantumPDF Optimization Guide
 
 > **Performance optimization strategies and implementation details**
-> **Last Updated: November 2025 | Version 3.0.0**
+> **Last Updated: December 2025 | Version 3.1.0**
 
 ---
 
@@ -45,34 +45,65 @@
 
 ## Embedding Optimizations
 
-### Embedding Cache
+### Embedding Cache (Enhanced in v3.1)
+
+The embedding cache now includes TTL-based expiration and improved eviction:
 
 ```typescript
 // lib/ai-client.ts
-class EmbeddingCache {
-  private cache = new Map<string, number[]>()
-  private maxSize = 10000
+interface EmbeddingCacheEntry {
+  embedding: number[]
+  timestamp: number
+  textHash: string
+}
+
+// Global cache with TTL support
+const embeddingCache = new Map<string, EmbeddingCacheEntry>()
+const EMBEDDING_CACHE_TTL = 30 * 60 * 1000  // 30 minutes
+const MAX_CACHE_SIZE = 1000
+
+function hashText(text: string): string {
+  let hash = 0
+  for (let i = 0; i < text.length; i++) {
+    const char = text.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  return hash.toString(36)
+}
+
+async generateEmbedding(text: string): Promise<number[]> {
+  // Check cache first
+  const cacheKey = `${this.config.provider}:${hashText(text.trim())}`
+  const cached = embeddingCache.get(cacheKey)
   
-  private getKey(text: string, provider: string): string {
-    // Hash text for consistent keys
-    return `${provider}:${hashText(text)}`
+  if (cached && Date.now() - cached.timestamp < EMBEDDING_CACHE_TTL) {
+    console.log(`Cache hit for embedding`)
+    return cached.embedding
   }
   
-  get(text: string, provider: string): number[] | undefined {
-    return this.cache.get(this.getKey(text, provider))
+  // Generate new embedding
+  const embedding = await this._generateEmbeddingInternal(text)
+  
+  // LRU-style eviction if cache full
+  if (embeddingCache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = embeddingCache.keys().next().value
+    if (oldestKey) embeddingCache.delete(oldestKey)
   }
   
-  set(text: string, provider: string, embedding: number[]): void {
-    const key = this.getKey(text, provider)
-    
-    // LRU eviction
-    if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value
-      this.cache.delete(firstKey)
-    }
-    
-    this.cache.set(key, embedding)
-  }
+  embeddingCache.set(cacheKey, {
+    embedding,
+    timestamp: Date.now(),
+    textHash: hashText(text.trim())
+  })
+  
+  return embedding
+}
+
+// Static methods for cache management
+static clearEmbeddingCache(): void { embeddingCache.clear() }
+static getCacheStats(): { size: number; maxSize: number } {
+  return { size: embeddingCache.size, maxSize: MAX_CACHE_SIZE }
 }
 ```
 
@@ -235,9 +266,120 @@ function preserveStructures(chunks: ContentChunk[]): ContentChunk[] {
 }
 ```
 
+### Chunk Deduplication (NEW in v3.1)
+
+```typescript
+// lib/rag-engine.ts
+// Remove near-duplicate chunks using Jaccard similarity
+private deduplicateChunks(chunks: any[]): any[] {
+  if (chunks.length <= 1) return chunks
+  
+  const SIMILARITY_THRESHOLD = 0.7 // 70% overlap = duplicate
+  const deduplicated: any[] = []
+  
+  for (const chunk of chunks) {
+    const chunkWords = new Set(
+      chunk.content.toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .split(/\s+/)
+        .filter((w: string) => w.length > 3)
+    )
+    
+    let isDuplicate = false
+    for (const existing of deduplicated) {
+      const existingWords = new Set(/* same extraction */)
+      
+      // Jaccard similarity: intersection / union
+      const intersection = new Set([...chunkWords].filter(x => existingWords.has(x)))
+      const union = new Set([...chunkWords, ...existingWords])
+      const similarity = intersection.size / union.size
+      
+      if (similarity > SIMILARITY_THRESHOLD) {
+        isDuplicate = true
+        // Keep the longer/more detailed chunk
+        if (chunk.content.length > existing.content.length) {
+          const idx = deduplicated.indexOf(existing)
+          deduplicated[idx] = chunk
+        }
+        break
+      }
+    }
+    
+    if (!isDuplicate) deduplicated.push(chunk)
+  }
+  
+  return deduplicated
+}
+```
+
+### Smart Context Truncation (NEW in v3.1)
+
+```typescript
+// Preserve sentence boundaries when truncating
+private smartTruncateChunk(content: string, maxTokens: number): string {
+  const maxChars = maxTokens * 4 // ~4 chars per token
+  if (content.length <= maxChars) return content
+  
+  const truncated = content.substring(0, maxChars)
+  
+  // Find last sentence boundary
+  const lastSentence = Math.max(
+    truncated.lastIndexOf('.'),
+    truncated.lastIndexOf('?'),
+    truncated.lastIndexOf('!')
+  )
+  
+  if (lastSentence > maxChars * 0.5) {
+    return content.substring(0, lastSentence + 1) + ' [truncated]'
+  }
+  
+  // Fallback to word boundary
+  const lastSpace = truncated.lastIndexOf(' ')
+  return content.substring(0, lastSpace) + '... [truncated]'
+}
+```
+
 ---
 
 ## RAG Query Optimizations
+
+### Adaptive Hybrid Search Weights (NEW in v3.1)
+
+```typescript
+// lib/vector-database.ts
+// Dynamically adjust semantic vs keyword weights based on query type
+private getAdaptiveHybridWeights(query: string): { semantic: number; keyword: number } {
+  // Keyword-heavy patterns: exact terms, quotes, section refs
+  const keywordPatterns = [
+    /\b(exact|specific|definition|what is)\b/i,
+    /"[^"]+"/i,  // Quoted phrases
+    /\b[A-Z]{2,}\b/,  // Acronyms
+  ]
+  
+  // Semantic-heavy patterns: conceptual questions
+  const semanticPatterns = [
+    /\b(explain|describe|summarize|overview)\b/i,
+    /\b(how|why|relationship)\b/i,
+    /\b(compare|contrast|difference)\b/i,
+  ]
+  
+  let keywordBoost = 0, semanticBoost = 0
+  
+  keywordPatterns.forEach(p => { if (p.test(query)) keywordBoost += 0.1 })
+  semanticPatterns.forEach(p => { if (p.test(query)) semanticBoost += 0.1 })
+  
+  // Short queries favor keyword, long queries favor semantic
+  const wordCount = query.split(/\s+/).length
+  if (wordCount <= 3) keywordBoost += 0.15
+  if (wordCount > 10) semanticBoost += 0.1
+  
+  // Base: 55% semantic, 45% keyword; adjust and normalize
+  let semantic = Math.max(0.3, Math.min(0.8, 0.55 + semanticBoost - keywordBoost))
+  let keyword = 1 - semantic
+  
+  return { semantic, keyword }
+}
+```
 
 ### Query Result Caching
 

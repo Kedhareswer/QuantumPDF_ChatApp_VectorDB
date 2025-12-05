@@ -1,6 +1,18 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
+interface RetrievedChunk {
+  content: string
+  source: string
+  similarity: number
+  documentId?: string
+  documentName?: string
+  page?: number
+  bbox?: any
+  level?: number
+  chunkType?: string
+}
+
 interface Message {
   id: string
   role: "user" | "assistant"
@@ -10,7 +22,7 @@ interface Message {
   metadata?: {
     responseTime?: number
     relevanceScore?: number
-    retrievedChunks?: number
+    retrievedChunks?: RetrievedChunk[]
     qualityMetrics?: {
       accuracyScore: number
       completenessScore: number
@@ -82,14 +94,6 @@ interface VectorDBConfig {
   dimension?: number
 }
 
-interface WandbConfig {
-  enabled: boolean
-  apiKey: string
-  projectName: string
-  entityName?: string
-  runName?: string
-}
-
 interface AppError {
   id: string
   type: "error" | "warning" | "info" | "success"
@@ -107,7 +111,6 @@ interface AppState {
   // Configuration
   aiConfig: AIConfig
   vectorDBConfig: VectorDBConfig
-  wandbConfig: WandbConfig
 
   // UI state
   isProcessing: boolean
@@ -128,7 +131,6 @@ interface AppState {
   clearDocuments: () => void
   setAIConfig: (config: AIConfig) => void
   setVectorDBConfig: (config: VectorDBConfig) => void
-  setWandbConfig: (config: WandbConfig) => void
   setIsProcessing: (processing: boolean) => void
   setModelStatus: (status: "loading" | "ready" | "error" | "config") => void
   setActiveTab: (tab: string) => void
@@ -148,7 +150,7 @@ export const useAppStore = create<AppState>()(
       aiConfig: {
         provider: "openai",
         apiKey: "",
-        model: "gpt-5-mini",
+        model: "gpt-4o-mini",
         baseUrl: "https://api.openai.com/v1",
         temperature: 0.7,
         maxTokens: 1000,
@@ -156,11 +158,6 @@ export const useAppStore = create<AppState>()(
       vectorDBConfig: {
         provider: "local",
         dimension: 1536,
-      },
-      wandbConfig: {
-        enabled: false,
-        apiKey: "",
-        projectName: "pdf-rag-chatbot",
       },
       isProcessing: false,
       modelStatus: "config",
@@ -207,7 +204,7 @@ export const useAppStore = create<AppState>()(
           config = {
             ...config,
             provider: "openai",
-            model: "gpt-5-mini",
+            model: "gpt-4o-mini",
             baseUrl: "https://api.openai.com/v1"
           };
         }
@@ -215,7 +212,6 @@ export const useAppStore = create<AppState>()(
         set({ aiConfig: config });
       },
       setVectorDBConfig: (config) => set({ vectorDBConfig: config }),
-      setWandbConfig: (config) => set({ wandbConfig: config }),
       setIsProcessing: (processing) => set({ isProcessing: processing }),
       setModelStatus: (status) => set({ modelStatus: status }),
       setActiveTab: (tab) => set({ activeTab: tab }),
@@ -246,7 +242,6 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         aiConfig: state.aiConfig,
         vectorDBConfig: state.vectorDBConfig,
-        wandbConfig: state.wandbConfig,
         sidebarCollapsed: state.sidebarCollapsed,
         activeTab: state.activeTab,
       }),
@@ -267,7 +262,7 @@ export const useAppStore = create<AppState>()(
               persistedState.aiConfig = {
                 ...persistedState.aiConfig,
                 provider: "openai",
-                model: "gpt-5-mini",
+                model: "gpt-4o-mini",
                 baseUrl: "https://api.openai.com/v1"
               };
             }

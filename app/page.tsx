@@ -51,7 +51,6 @@ export default function QuantumPDFChatbot() {
     documents,
     aiConfig,
     vectorDBConfig,
-    wandbConfig,
     isProcessing,
     modelStatus,
     activeTab,
@@ -187,6 +186,8 @@ export default function QuantumPDFChatbot() {
       if (options?.useContext === false) {
         const client = new AIClient(aiConfig)
         const assistantId = (Date.now() + 1).toString()
+        // Track content locally to avoid stale closure issue with messages array
+        let accumulatedContent = ""
         addMessage({
           id: assistantId,
           role: "assistant",
@@ -196,7 +197,8 @@ export default function QuantumPDFChatbot() {
         await client.generateTextStream([
           { role: "user", content }
         ], (token) => {
-          updateMessage(assistantId, { content: (messages.find(m=>m.id===assistantId)?.content || "") + token })
+          accumulatedContent += token
+          updateMessage(assistantId, { content: accumulatedContent })
         })
         return // early since streaming handled
       } else {
@@ -611,19 +613,6 @@ export default function QuantumPDFChatbot() {
       return await testDB.testConnection()
     } catch (error) {
       console.error("Vector DB test failed:", error)
-      return false
-    }
-  }
-
-  const handleTestWandb = async (config: any): Promise<boolean> => {
-    try {
-      // Simulate Wandb connection test
-      if (config.apiKey && config.projectName) {
-        return true
-      }
-      return false
-    } catch (error) {
-      console.error("Wandb test failed:", error)
       return false
     }
   }

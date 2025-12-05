@@ -6,10 +6,10 @@
 
 ## Project Overview
 
-**Version**: 3.0.0  
+**Version**: 3.1.0  
 **Status**: ✅ PRODUCTION READY  
-**Code Health**: 9.0/10  
-**Last Updated**: November 2025
+**Code Health**: 9.5/10  
+**Last Updated**: December 2025
 
 ---
 
@@ -21,9 +21,37 @@
 |---------|--------|-------------|
 | 3-Phase Processing | ✅ Complete | Context Analysis → Self-Critique → Refinement |
 | Multi-Document Support | ✅ Complete | Process 10+ documents simultaneously |
-| Diversity Algorithm | ✅ Complete | Fair representation across documents |
+| Cross-Document Retrieval | ✅ Complete | Fair distribution with multi-doc query detection |
+| Diversity Algorithm | ✅ Complete | Enhanced with 50% max per-doc limit |
 | Quality Metrics | ✅ Complete | Accuracy, completeness, clarity, confidence scores |
 | Token Budget Management | ✅ Complete | Adaptive allocation by complexity |
+| Chunk Deduplication | ✅ Complete | Jaccard similarity-based deduplication |
+| Smart Context Truncation | ✅ Complete | Sentence-boundary-aware truncation |
+| Adaptive Hybrid Search | ✅ Complete | Query-based semantic/keyword weight adjustment |
+
+### ✅ Guardrails & Safety System (NEW in v3.1)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Input Validation | ✅ Complete | Query length, injection detection, sanitization |
+| Rate Limiting | ✅ Complete | 30 req/min per session with sliding window |
+| Output Validation | ✅ Complete | Toxicity detection, hallucination indicators |
+| PII Detection | ✅ Complete | Email, phone, SSN, credit card, IP detection |
+| Document Validation | ✅ Complete | File size (50MB), content type, extension checks |
+| Groundedness Check | ✅ Complete | Verify claims against source documents |
+| Citation Enforcement | ✅ Complete | Auto-add citations to response statements |
+
+### ✅ Evaluation & Metrics System (NEW in v3.1)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Retrieval Metrics | ✅ Complete | Avg/max/min similarity, document coverage, latency |
+| Generation Metrics | ✅ Complete | Citation count/coverage, groundedness, readability |
+| Overall Scoring | ✅ Complete | Weighted composite of all quality metrics |
+| Issue Detection | ✅ Complete | Automatic identification of quality problems |
+| Trend Analysis | ✅ Complete | Improving/stable/declining trend tracking |
+| Analytics API | ✅ Complete | `getEvaluationAnalytics()` method |
+| Latency Monitoring | ✅ Complete | Budget tracking for retrieval/generation |
 
 ### ✅ AI Provider Support (19+ Providers)
 
@@ -59,17 +87,6 @@
 | Chunk Visualization | ✅ Complete | Expandable view of retrieved chunks with scores |
 | Query History | ✅ Complete | Persistent query history with search and re-run |
 | Export Conversations | ✅ Complete | Export as Markdown, PDF, or copy to clipboard |
-
-### ✅ Mathpix Integration (NEW)
-
-| Feature | Status | Description |
-|---------|--------|-------------|
-| API Integration | ✅ Complete | Full Mathpix API v3 support |
-| LaTeX Extraction | ✅ Complete | High-accuracy equation OCR |
-| MathML Output | ✅ Complete | Accessibility-friendly format |
-| Batch Processing | ✅ Complete | Process multiple pages |
-| Configuration UI | ✅ Complete | Settings in Advanced tab |
-| Fallback | ✅ Complete | Regex-based detection when API unavailable |
 
 ### ✅ Multimodal Document Processing
 
@@ -133,7 +150,7 @@
 | Query History | ✅ Complete | Persistent query storage and re-run |
 | Export Conversations | ✅ Complete | Markdown/PDF export functionality |
 | Document Library | ✅ Complete | Upload, manage, filter documents |
-| Configuration Panel | ✅ Complete | AI, Vector DB, Mathpix settings |
+| Configuration Panel | ✅ Complete | AI, Vector DB settings |
 | System Status | ✅ Complete | Health monitoring dashboard |
 | Error Handling | ✅ Complete | Toast notifications, graceful recovery |
 | Mobile Responsive | ✅ Complete | Collapsible sidebar, touch-friendly |
@@ -171,25 +188,26 @@
 
 ```
 lib/
-├── ai-client.ts              # Multi-provider AI client (19 providers)
+├── ai-client.ts              # Multi-provider AI client (19 providers) + Embedding Cache
 ├── advanced-chunking.ts      # Semantic chunking with metadata
 ├── docx-processor.ts         # Word document processing
 ├── enhanced-pdf-processor.ts # Main PDF processor with multimodal
 ├── enhanced-url-processor.ts # URL/web content processing
-├── equation-extractor.ts     # Math/equation detection + Mathpix
-├── mathpix-processor.ts      # Mathpix API integration + Math.js
+├── equation-extractor.ts     # Math/equation detection (regex)
+├── guardrails.ts             # Input/Output validation, Rate limiting, Evals (NEW)
+├── keyword-scoring.ts        # Enhanced keyword scoring with stop words (NEW)
 ├── image-captioner.ts        # Vision model captioning service
 ├── image-extractor.ts        # PDF/DOCX image extraction
 ├── local-summarizer.ts       # Transformers.js summarization
 ├── ocr-processor.ts          # Tesseract.js + PaddleOCR.js wrapper
 ├── pdf-parser.ts             # PDF.js text extraction
-├── rag-engine.ts             # Core RAG with 3-phase processing
+├── rag-engine.ts             # Core RAG with 3-phase + guardrails + evals
 ├── spreadsheet-processor.ts  # Excel/CSV processing
 ├── store.ts                  # Zustand state management
 ├── table-extractor.ts        # Table detection from text
 ├── telemetry.ts              # Performance monitoring
+├── vector-database.ts        # Vector DB with adaptive hybrid search
 ├── vector-database-client.ts # Vector DB client abstraction
-├── vector-database-types.ts  # Type definitions
 └── vision-models.ts          # Vision model configurations
 ```
 
@@ -217,7 +235,7 @@ components/
 ├── skeleton-loaders.tsx      # Loading skeletons
 ├── system-status.tsx         # Health monitoring
 ├── thinking-bubble.tsx       # Processing indicator
-├── unified-configuration.tsx # AI/VectorDB/Mathpix settings
+├── unified-configuration.tsx # AI/VectorDB settings
 ├── unified-pdf-processor.tsx # Multi-format file upload
 └── ui/                       # shadcn/ui components
 ```
@@ -244,16 +262,6 @@ interface AIConfig {
   baseUrl?: string
   temperature?: number
   maxTokens?: number
-}
-```
-
-### Mathpix Configuration (NEW)
-
-```typescript
-interface MathpixConfig {
-  appId: string
-  appKey: string
-  enabled: boolean
 }
 ```
 
@@ -300,7 +308,7 @@ npm test -- --watch
 | AI Client | ✅ | `__tests__/ai-client.test.ts` |
 | RAG Engine | ✅ | `__tests__/rag-engine.test.ts` |
 | Advanced Chunking | ✅ | `__tests__/advanced-chunking.test.ts` |
-| Mathpix Processor | 🔄 Planned | - |
+| Equation Extractor | ✅ | Regex-based extraction |
 
 ---
 
@@ -333,13 +341,7 @@ npm test -- --watch
    - Query history with persistent storage
    - Export conversations in multiple formats
 
-2. **Mathpix Integration**
-   - Professional equation OCR
-   - LaTeX, MathML, ASCII output
-   - Configuration UI in Advanced settings
-   - Graceful fallback to regex detection
-
-3. **Enhanced Multimodal Processing**
+2. **Enhanced Multimodal Processing**
    - Image extraction from PDF/DOCX
    - AI-powered image captioning
    - Table detection and preservation
@@ -362,7 +364,6 @@ npm test -- --watch
 3. **Documentation**
    - Updated all architecture diagrams
    - Added enhanced UI/UX features documentation
-   - Added Mathpix integration guide
    - Comprehensive API documentation
 
 ---
@@ -374,7 +375,6 @@ npm test -- --watch
 - [x] Multi-provider AI support (19 providers)
 - [x] 3-Phase RAG processing
 - [x] Enhanced UI/UX features (Source Cards, Citations, Filtering, Chunk Visualization, History, Export)
-- [x] Mathpix equation OCR
 - [x] Multimodal extraction (images, tables, equations)
 - [x] Local model support (Transformers.js)
 - [x] Multi-format documents (PDF, DOCX, XLSX, CSV)

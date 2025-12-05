@@ -1,7 +1,7 @@
 # QuantumPDF Architecture & Flow Diagrams
 
 > **Comprehensive visual guide to system architecture, data flows, and component interactions**
-> **Last Updated: November 2025 | Version 3.0.0**
+> **Last Updated: December 2025 | Version 3.1.0**
 
 ## Table of Contents
 - [System Overview](#system-overview)
@@ -37,9 +37,15 @@ graph TB
 
     subgraph "AI Layer"
         AI[AI Client<br/>19+ Providers]
-        EMB[Embedding Generation<br/>with Fallback]
+        EMB[Embedding Generation<br/>with Cache + Fallback]
         TEXT[Text Generation<br/>Streaming Support]
         LOCAL[Local Models<br/>Transformers.js]
+    end
+
+    subgraph "Safety Layer (NEW)"
+        GUARD[Guardrails<br/>Input/Output Validation]
+        RATE[Rate Limiting<br/>Session-based]
+        EVAL[Evaluations<br/>Quality Metrics]
     end
 
     subgraph "Storage Layer"
@@ -55,11 +61,15 @@ graph TB
     CHUNK -->|Text Chunks| RAG
     RAG -->|Generate Embeddings| AI
     AI -->|Embeddings| VDB
-    UI -->|Query| RAG
+    UI -->|Query| GUARD
+    GUARD -->|Validated Query| RAG
+    GUARD -->|Check| RATE
     RAG -->|Search| VDB
     VDB -->|Retrieved Chunks| RAG
     RAG -->|Generate Response| AI
-    AI -->|Answer| UI
+    AI -->|Answer| GUARD
+    GUARD -->|Validated Response| UI
+    RAG -->|Track Metrics| EVAL
     PWA -->|Offline Support| CACHE
     STATE -->|Persist Config| CACHE
     LOCAL -->|Summarization| AI
@@ -70,6 +80,8 @@ graph TB
     style VDB fill:#e1ffe1
     style UI_FEATURES fill:#ffe1e8
     style MULTI fill:#e1f0ff
+    style GUARD fill:#ffe4e1
+    style EVAL fill:#e8f5e9
 ```
 
 ### Technology Stack
@@ -106,7 +118,6 @@ graph LR
 
     subgraph "Local AI"
         TRANS[Transformers.js]
-        MATHPIX[Mathpix OCR]
     end
 
     subgraph "Vector DBs"
@@ -126,7 +137,6 @@ graph LR
     style REACT fill:#61dafb
     style TS fill:#3178c6,color:#fff
     style TRANS fill:#ff6f61
-    style MATHPIX fill:#6b5b95
 ```
 
 ---
@@ -280,7 +290,7 @@ sequenceDiagram
     activate MULTI
     MULTI->>MULTI: Extract Images
     MULTI->>MULTI: Extract Tables
-    MULTI->>MULTI: Extract Equations (Mathpix)
+    MULTI->>MULTI: Extract Equations (Regex)
     MULTI->>MULTI: Generate Image Captions
     MULTI-->>PDF: Multimodal Data
     deactivate MULTI
@@ -401,9 +411,7 @@ graph TD
     
     subgraph "Equation Processing"
         EQ --> REGEX[Regex Detection]
-        EQ --> MATHPIX[Mathpix OCR<br/>Professional Math OCR]
         REGEX --> LATEX[LaTeX Output]
-        MATHPIX --> LATEX
         LATEX --> MATHML[MathML + ASCII]
         MATHML --> RENDER[KaTeX Rendering]
     end
@@ -414,37 +422,23 @@ graph TD
     RENDER --> DOC
     
     style CAPTION fill:#e8f5e9
-    style MATHPIX fill:#e3f2fd
     style VDB fill:#e1ffe1
 ```
 
-### Mathpix Integration Flow
+### Equation Extraction Flow
 
 ```mermaid
 sequenceDiagram
     participant PDF as PDF Processor
     participant EQ as Equation Extractor
-    participant MATHPIX as Mathpix Service
     participant EVAL as Math Evaluator
 
     PDF->>EQ: Extract Equations
-    
-    alt Mathpix Enabled
-        EQ->>EQ: Render Pages as Images
-        loop For Each Page
-            EQ->>MATHPIX: Send Page Image
-            MATHPIX->>MATHPIX: OCR Processing
-            MATHPIX-->>EQ: LaTeX + MathML + Text
-        end
-    else Regex Fallback
-        EQ->>EQ: Regex Pattern Detection
-        EQ->>EQ: Extract LaTeX Patterns
-    end
-    
+    EQ->>EQ: Regex Pattern Detection
+    EQ->>EQ: Extract LaTeX Patterns
     EQ->>EVAL: Parse Expressions
     EVAL->>EVAL: math.js Evaluation
     EVAL-->>EQ: Simplified Results
-    
     EQ-->>PDF: ExtractedEquation[]
 ```
 
@@ -570,7 +564,6 @@ interface AppState {
   aiConfig: AIConfig           // AI provider configuration
   vectorDBConfig: VectorDBConfig // Vector DB configuration
   wandbConfig: WandbConfig     // W&B configuration (optional)
-  mathpixConfig: MathpixConfig // Mathpix API configuration
 
 
   // UI State (Persisted)
@@ -587,7 +580,6 @@ interface AppState {
   clearDocuments: () => void
   setAIConfig: (config: AIConfig) => void
   setVectorDBConfig: (config: VectorDBConfig) => void
-  setMathpixConfig: (config: MathpixConfig) => void
   // ... more actions
 }
 ```
@@ -607,7 +599,6 @@ graph LR
         DOCS[Documents<br/>Session Only]
         AI[AI Config<br/>Persisted]
         VDB[Vector DB Config<br/>Persisted]
-        MATHPIX[Mathpix Config<br/>Persisted]
         UI[UI Preferences<br/>Persisted]
     end
 
@@ -622,12 +613,10 @@ graph LR
     STATE --> DOCS
     STATE --> AI
     STATE --> VDB
-    STATE --> MATHPIX
     STATE --> UI
 
     AI --> PERSIST
     VDB --> PERSIST
-    MATHPIX --> PERSIST
     UI --> PERSIST
     PERSIST --> LOCAL
 
@@ -635,13 +624,11 @@ graph LR
     LIB -->|useAppStore| DOCS
     CFG -->|useAppStore| AI
     CFG -->|useAppStore| VDB
-    CFG -->|useAppStore| MATHPIX
     APP -->|useAppStore| UI
 
     style STATE fill:#fff9c4
     style PERSIST fill:#e8f5e9
     style LOCAL fill:#f3e5f5
-    style MATHPIX fill:#e3f2fd
     style UI_FEATURES fill:#fce4ec
 ```
 
@@ -668,7 +655,7 @@ graph TB
         CHAT[ChatInterface<br/>Message Display + Input]
         DOCS[DocumentLibrary<br/>Document Management]
         UPLOAD[UnifiedPDFProcessor<br/>Multi-Format Upload]
-        CONFIG[UnifiedConfiguration<br/>AI, VectorDB & Mathpix Settings]
+        CONFIG[UnifiedConfiguration<br/>AI & VectorDB Settings]
         STATUS[SystemStatus<br/>Health Monitoring]
     end
 
@@ -779,7 +766,6 @@ graph TB
     subgraph "API Calls"
         AI_API[AI Provider API<br/>Text Only]
         VDB_API[Vector DB API<br/>Optional]
-        MATHPIX_API[Mathpix API<br/>Equation Images Only]
     end
 
     subgraph "No Server Storage"
@@ -795,11 +781,9 @@ graph TB
     EMBED --> STORE
 
     STORE -.->|Optional| VDB_API
-    PARSE -.->|Equation Images| MATHPIX_API
 
     AI_API -.->|No Data Retention| NO_SERVER
     VDB_API -.->|User Controlled| NO_SERVER
-    MATHPIX_API -.->|Processing Only| NO_SERVER
 
     style UPLOAD fill:#e8f5e9
     style PARSE fill:#e8f5e9
@@ -820,7 +804,7 @@ This document provides comprehensive visual representations of:
 2. **Core Components** - RAG engine, AI client, enhanced UI components
 3. **Data Flows** - Document processing, query handling with 3-phase RAG
 4. **Enhanced UI/UX Features** - Source cards, citations, filtering, chunk visualization, history, export
-5. **Multimodal Processing** - Images, tables, equations with Mathpix
+5. **Multimodal Processing** - Images, tables, equations (regex-based)
 6. **Processing Pipelines** - PDF extraction, chunking, multi-format support
 7. **State Management** - Zustand store with configuration persistence
 8. **Performance** - Caching strategies and optimizations
@@ -830,6 +814,6 @@ These diagrams serve as a visual guide to understanding the complex interactions
 
 ---
 
-**Last Updated**: November 2025
-**Version**: 3.0.0
-**New Features**: Enhanced UI/UX Features, Mathpix Integration, Multimodal Processing
+**Last Updated**: December 2025
+**Version**: 3.1.0
+**New Features**: Enhanced UI/UX Features, Guardrails, Evaluation Metrics, December 2025 AI Models

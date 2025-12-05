@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
-import { Zap, Database, Eye, EyeOff, Check, X, ExternalLink, Info, AlertTriangle, Settings, Loader2, Globe, Cpu, Sparkles, Brain, Search } from "lucide-react"
+import { Zap, Database, Eye, EyeOff, Check, X, ExternalLink, Info, AlertTriangle, Loader2, Globe, Cpu, Brain, Search } from "lucide-react"
 import { useAppStore } from "@/lib/store"
 import { 
   ConfigurationTestingSkeleton, 
@@ -18,14 +18,25 @@ import {
   VectorDatabaseLoadingSkeleton 
 } from "@/components/skeleton-loaders"
 
+// Updated: December 2025 - Latest models from official provider documentation
 const AI_PROVIDERS = {
   // Major Providers
   openai: {
     name: "OpenAI",
-    description: "GPT-5 family, GPT-4o Omni, and o-series reasoning models",
+    description: "GPT-5 family, GPT-4o, and o-series reasoning models (Dec 2025)",
     category: "Major",
-    models: ["gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-4o", "o3-2025-04-16", "gpt-4.1", "gpt-realtime-preview"],
-    defaultModel: "gpt-5-mini",
+    models: [
+      "gpt-5.1",           // Latest flagship (Dec 2025)
+      "gpt-5-pro",         // Pro tier
+      "gpt-5-mini",        // Efficient model
+      "gpt-5-nano",        // Smallest model
+      "gpt-4o",            // GPT-4 Omni multimodal
+      "gpt-4o-mini",       // Cost-effective GPT-4o
+      "o3-2025-04-16",     // Reasoning model
+      "o1",                // Original reasoning
+      "gpt-4-turbo"        // Legacy but stable
+    ],
+    defaultModel: "gpt-4o-mini",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.openai.com/v1",
@@ -36,16 +47,17 @@ const AI_PROVIDERS = {
   },
   anthropic: {
     name: "Anthropic",
-    description: "Claude 3.5/3.7 models with extended thinking and safety focus",
+    description: "Claude 4.5 Sonnet/Haiku - frontier models with extended thinking (Dec 2025)",
     category: "Major",
     models: [
-      "claude-3-5-sonnet-20241022",
-      "claude-3-5-haiku-latest",
-      "claude-3-sonnet-20250219",
-      "claude-3-7-sonnet-latest",
-      "claude-opus-4-0"
+      "claude-sonnet-4-5-20250514",   // Claude 4.5 Sonnet (latest frontier)
+      "claude-haiku-4-5-20250514",    // Claude 4.5 Haiku (fast + intelligent)
+      "claude-sonnet-4-20250514",     // Claude 4 Sonnet
+      "claude-3-5-sonnet-20241022",   // Claude 3.5 Sonnet (stable)
+      "claude-3-5-haiku-20241022",    // Claude 3.5 Haiku
+      "claude-3-opus-20240229"        // Claude 3 Opus (legacy)
     ],
-    defaultModel: "claude-3-5-sonnet-20241022",
+    defaultModel: "claude-sonnet-4-5-20250514",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.anthropic.com",
@@ -53,28 +65,46 @@ const AI_PROVIDERS = {
     supportsEmbeddings: false,
     icon: "🧠",
     pricing: "Pay-per-token",
-    features: ["Chat completion", "Function calling", "Vision", "Large context"]
+    features: ["Chat completion", "Function calling", "Vision", "Large context", "Extended thinking"]
   },
   googleai: {
     name: "Google AI",
-    description: "Gemini 2.5 family with multimodal capabilities",
+    description: "Gemini 3 Pro & 2.5 family with multimodal capabilities (Dec 2025)",
     category: "Major",
-    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash-image", "gemini-2.5-flash-preview-09-2025"],
+    models: [
+      "gemini-3-pro",            // Latest flagship (Dec 2025)
+      "gemini-3-pro-preview",    // Preview version
+      "gemini-2.5-pro",          // Stable pro model
+      "gemini-2.5-flash",        // Best price-performance
+      "gemini-2.5-flash-lite",   // Lightweight version
+      "gemini-2.0-flash",        // Previous generation
+      "gemini-embedding-001"     // Text embeddings
+    ],
     defaultModel: "gemini-2.5-flash",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    signupUrl: "https://makersuite.google.com/app/apikey",
+    signupUrl: "https://aistudio.google.com/apikey",
     supportsEmbeddings: true,
     icon: "⚡",
     pricing: "Pay-per-token",
-    features: ["Chat completion", "Embeddings", "Vision", "Multimodal"]
+    features: ["Chat completion", "Embeddings", "Vision", "Multimodal", "Live API"]
   },
   groq: {
     name: "Groq",
-    description: "Ultra-fast inference with specialized hardware",
+    description: "Ultra-fast inference - Llama 4, GPT-OSS, Qwen 3 (Dec 2025)",
     category: "Fast",
-    models: ["llama-3.3-70b-versatile", "mixtral-8x22b", "deepseek-r1-distill-llama-70b", "gemma2-27b-it", "qwen2.5-32b"],
+    models: [
+      "llama-3.3-70b-versatile",           // Production - Llama 3.3
+      "llama-3.1-8b-instant",              // Production - Fast
+      "meta-llama/llama-guard-4-12b",      // Production - Safety
+      "openai/gpt-oss-120b",               // Production - GPT OSS large
+      "openai/gpt-oss-20b",                // Production - GPT OSS small
+      "meta-llama/llama-4-maverick-17b-128e-instruct",  // Preview - Llama 4
+      "meta-llama/llama-4-scout-17b-16e-instruct",      // Preview - Llama 4 Scout
+      "moonshotai/kimi-k2-instruct-0905",  // Preview - Kimi K2
+      "qwen/qwen3-32b"                     // Preview - Qwen 3
+    ],
     defaultModel: "llama-3.3-70b-versatile",
     apiKeyRequired: true,
     baseUrlRequired: false,
@@ -82,53 +112,65 @@ const AI_PROVIDERS = {
     signupUrl: "https://console.groq.com/keys",
     supportsEmbeddings: false,
     icon: "",
-    features: ["Ultra-fast inference", "Open source models", "Low latency"]
+    features: ["Ultra-fast inference", "Llama 4 preview", "GPT-OSS models", "Low latency"]
   },
   fireworks: {
     name: "Fireworks AI",
-    description: "Fast inference platform with competitive pricing",
+    description: "Fast inference - DeepSeek V3.1, Kimi K2, Qwen 3 (Dec 2025)",
     category: "Commercial",
-    models: ["fireworks/kimi-k2-instruct-0905", "llama-v3p3-70b-instruct", "deepseek-v3", "qwen2p5-72b-instruct", "llama-v3p1-8b-instruct"],
-    defaultModel: "fireworks/kimi-k2-instruct-0905",
+    models: [
+      "accounts/fireworks/models/kimi-k2-instruct-0905",    // Top performer
+      "accounts/fireworks/models/deepseek-v3p1",            // DeepSeek V3.1
+      "accounts/fireworks/models/qwen3-235b-a22b",          // Qwen 3 large
+      "accounts/fireworks/models/qwen3-32b",                // Qwen 3 medium
+      "accounts/fireworks/models/llama-v3p3-70b-instruct",  // Llama 3.3
+      "accounts/fireworks/models/gpt-oss-120b",             // GPT-OSS large
+      "accounts/fireworks/models/gpt-oss-20b",              // GPT-OSS small
+      "accounts/fireworks/models/glm-4p6"                   // GLM 4.6
+    ],
+    defaultModel: "accounts/fireworks/models/llama-v3p3-70b-instruct",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.fireworks.ai/inference/v1",
     signupUrl: "https://fireworks.ai/",
-    supportsEmbeddings: false,
+    supportsEmbeddings: true,
     icon: "",
-    features: ["Fast inference", "Multiple models", "Competitive pricing"]
+    features: ["Fast inference", "DeepSeek V3.1", "Qwen 3", "Competitive pricing"]
   },
   mistral: {
     name: "Mistral AI",
-    description: "Advanced open-source and commercial LLMs with reasoning capabilities",
+    description: "Mistral Large 3, Medium 3.1, Magistral reasoning models (Dec 2025)",
     category: "Commercial",
     models: [
-      "mistral-large-latest",
-      "mistral-medium-latest", 
-      "mistral-small-latest",
-      "magistral-medium-latest",
-      "magistral-small-latest",
-      "pixtral-large-latest",
-      "ministral-8b-latest",
-      "ministral-3b-latest",
-      "devstral-medium-latest",
-      "devstral-small-latest",
-      "codestral-latest",
-      "voxtral-small-latest",
-      "voxtral-mini-latest",
-      "open-mistral-nemo",
-      "pixtral-12b-2409",
-      "mistral-ocr-latest",
-      "mistral-moderation-latest"
+      // Generalist models
+      "mistral-large-2512",      // Mistral Large 3 (Dec 2025)
+      "mistral-medium-2508",     // Mistral Medium 3.1 (Aug 2025)
+      "mistral-small-2506",      // Mistral Small 3.2 (Jun 2025)
+      // Ministral family
+      "ministral-3-14b-2512",    // Ministral 3 14B
+      "ministral-3-8b-2512",     // Ministral 3 8B
+      "ministral-3-3b-2512",     // Ministral 3 3B
+      // Reasoning models
+      "magistral-medium-2509",   // Magistral Medium 1.2
+      "magistral-small-2509",    // Magistral Small 1.2
+      // Specialist models
+      "codestral-2508",          // Coding specialist
+      "devstral-medium-2507",    // SWE specialist
+      "devstral-small-2507",     // SWE small
+      "voxtral-small-2507",      // Audio input
+      "voxtral-mini-2507",       // Audio mini
+      "mistral-ocr-2505",        // OCR specialist
+      "pixtral-large-latest",    // Vision model
+      "mistral-embed"            // Embeddings
     ],
-    defaultModel: "mistral-large-latest",
+    defaultModel: "mistral-large-2512",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.mistral.ai/v1",
     signupUrl: "https://console.mistral.ai/",
     supportsEmbeddings: true,
     icon: "",
-    features: ["Function calling", "Vision capabilities", "Audio input", "Code generation", "Reasoning models", "Multimodal"]
+    features: ["Mistral Large 3", "Magistral reasoning", "Vision", "Audio", "OCR", "Coding"]
   },
   cerebras: {
     name: "Cerebras",
@@ -214,17 +256,23 @@ const AI_PROVIDERS = {
   },
   perplexity: {
     name: "Perplexity",
-    description: "Search-augmented language models",
+    description: "Sonar search-augmented models with reasoning (Dec 2025)",
     category: "Specialized",
-    models: ["llama-3.1-sonar-small-128k-online", "llama-3.1-sonar-large-128k-online"],
-    defaultModel: "llama-3.1-sonar-small-128k-online",
+    models: [
+      "sonar",                  // Base search model
+      "sonar-pro",              // Advanced search (2x results)
+      "sonar-reasoning",        // Reasoning with search
+      "sonar-reasoning-pro",    // Pro reasoning
+      "sonar-deep-research"     // Deep research agent
+    ],
+    defaultModel: "sonar",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.perplexity.ai",
     signupUrl: "https://www.perplexity.ai/settings/api",
     supportsEmbeddings: false,
     icon: "",
-    features: ["Search-augmented", "Real-time data", "Online information"]
+    features: ["Search-augmented", "Real-time data", "Deep research", "Reasoning"]
   },
 
   // Additional providers
@@ -283,6 +331,46 @@ const AI_PROVIDERS = {
     icon: "",
     features: ["Scalable infrastructure", "Ray ecosystem", "Enterprise ready"]
   },
+  deepseek: {
+    name: "DeepSeek",
+    description: "DeepSeek V3.2-Speciale & V3.1 with advanced reasoning (Dec 2025)",
+    category: "Specialized",
+    models: [
+      "deepseek-chat",                // DeepSeek V3.2 (current default)
+      "deepseek-reasoner",            // Reasoning model
+      "deepseek-v3.1",                // Open source V3.1
+      "deepseek-coder"                // Coding specialist
+    ],
+    defaultModel: "deepseek-chat",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.deepseek.com",
+    signupUrl: "https://platform.deepseek.com/",
+    supportsEmbeddings: false,
+    icon: "🔬",
+    pricing: "Pay-per-token",
+    features: ["V3.2-Speciale", "Reasoning", "Coding", "Cost effective"]
+  },
+  xai: {
+    name: "xAI (Grok)",
+    description: "Grok 4 & Grok 3 models with agentic capabilities (Dec 2025)",
+    category: "Major",
+    models: [
+      "grok-4-0709",             // Latest Grok 4 (Jul 2025)
+      "grok-3-latest",           // Grok 3 stable
+      "grok-3-mini",             // Smaller Grok 3
+      "grok-vision"              // Vision model
+    ],
+    defaultModel: "grok-3-latest",
+    apiKeyRequired: true,
+    baseUrlRequired: false,
+    defaultBaseUrl: "https://api.x.ai/v1",
+    signupUrl: "https://console.x.ai/",
+    supportsEmbeddings: false,
+    icon: "🚀",
+    pricing: "Pay-per-token",
+    features: ["Grok 4", "Agentic tools", "Live search", "Vision"]
+  },
 }
 
 const VECTOR_DB_PROVIDERS = {
@@ -328,23 +416,14 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
   const [showApiKeys, setShowApiKeys] = useState({
     ai: false,
     vectordb: false,
-    mathpix: false,
   })
 
   const [testingStatus, setTestingStatus] = useState({
     ai: "idle" as "idle" | "testing" | "success" | "error",
     vectordb: "idle" as "idle" | "testing" | "success" | "error",
-    mathpix: "idle" as "idle" | "testing" | "success" | "error",
   })
 
   const [selectedCategory, setSelectedCategory] = useState("Major")
-  
-  // Mathpix configuration state
-  const [mathpixConfig, setMathpixConfig] = useState({
-    appId: '',
-    appKey: '',
-    enabled: false,
-  })
 
   const handleAIProviderChange = (provider: keyof typeof AI_PROVIDERS) => {
     const providerInfo = AI_PROVIDERS[provider]
@@ -493,12 +572,12 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
   return (
     <div className="space-y-6">
       <div className="flex items-center space-x-2">
-        <Settings className="w-5 h-5" />
+        <Cpu className="w-5 h-5" />
         <h2 className="text-lg font-bold">SYSTEM CONFIGURATION</h2>
       </div>
 
       <Tabs defaultValue="ai" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 gap-2 p-1 bg-white border-2 border-black rounded-lg">
+        <TabsList className="grid w-full grid-cols-2 gap-2 p-1 bg-white border-2 border-black rounded-lg">
           <TabsTrigger 
             value="ai"
             className="data-[state=active]:bg-black data-[state=active]:text-white data-[state=active]:font-medium 
@@ -516,15 +595,6 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
           >
             <Database className="w-4 h-4 mr-1" />
             <span className="text-sm truncate">Vector DB</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="advanced"
-            className="data-[state=active]:bg-black data-[state=active]:text-white data-[state=active]:font-medium 
-                       bg-white text-black border border-black hover:bg-black hover:text-white 
-                       transition-colors duration-200 rounded-md flex items-center justify-center py-2 px-1 whitespace-nowrap"
-          >
-            <Settings className="w-4 h-4 mr-1" />
-            <span className="text-sm truncate">Advanced</span>
           </TabsTrigger>
         </TabsList>
 
@@ -904,227 +974,6 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* Advanced Configuration - Mathpix */}
-        <TabsContent value="advanced">
-          <div className="space-y-4">
-            {/* Mathpix Configuration */}
-            <Card className="border-2 border-black shadow-none">
-              <CardHeader className="border-b border-black">
-                <CardTitle className="text-sm flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    <span>MATHPIX EQUATION OCR</span>
-                  </div>
-                  {mathpixConfig.enabled && mathpixConfig.appId && mathpixConfig.appKey && (
-                    <Badge variant="outline" className="text-xs border-green-500 text-green-600">
-                      Configured
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                <Alert className="border-blue-200 bg-blue-50">
-                  <Info className="w-4 h-4 text-blue-600" />
-                  <AlertDescription className="text-xs text-blue-800">
-                    <p className="mb-2">
-                      <strong>Mathpix</strong> provides professional-grade equation OCR for extracting
-                      mathematical formulas from PDF documents with high accuracy.
-                    </p>
-                    <p className="mb-2">
-                      Without Mathpix, equations are detected using regex patterns (less accurate for complex math).
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        asChild
-                        className="h-6 text-xs border-blue-500 text-blue-500 hover:bg-blue-500 hover:text-white"
-                      >
-                        <a href="https://mathpix.com/" target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="w-3 h-3 mr-1" />
-                          Get Mathpix API Keys
-                        </a>
-                      </Button>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">App ID</Label>
-                    <Input
-                      type="text"
-                      value={mathpixConfig.appId}
-                      onChange={(e) => setMathpixConfig(prev => ({ ...prev, appId: e.target.value }))}
-                      placeholder="your-mathpix-app-id"
-                      className="border-2 border-black"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">App Key</Label>
-                    <div className="relative">
-                      <Input
-                        type={showApiKeys.mathpix ? "text" : "password"}
-                        value={mathpixConfig.appKey}
-                        onChange={(e) => setMathpixConfig(prev => ({ ...prev, appKey: e.target.value }))}
-                        placeholder="Enter your Mathpix app key"
-                        className="border-2 border-black pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowApiKeys((prev) => ({ ...prev, mathpix: !prev.mathpix }))}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1"
-                      >
-                        {showApiKeys.mathpix ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between py-2">
-                    <div className="space-y-0.5">
-                      <Label className="text-sm font-medium">Enable Mathpix OCR</Label>
-                      <p className="text-xs text-gray-500">Use Mathpix for equation extraction in PDF processing</p>
-                    </div>
-                    <Button
-                      variant={mathpixConfig.enabled ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => {
-                        const newEnabled = !mathpixConfig.enabled
-                        setMathpixConfig(prev => ({ ...prev, enabled: newEnabled }))
-                        
-                        // Configure the Mathpix processor if enabling
-                        if (newEnabled && mathpixConfig.appId && mathpixConfig.appKey) {
-                          import('@/lib/mathpix-processor').then(({ configureMathpix }) => {
-                            try {
-                              configureMathpix({
-                                appId: mathpixConfig.appId,
-                                appKey: mathpixConfig.appKey,
-                              })
-                              addError({
-                                type: 'success',
-                                title: 'Mathpix Configured',
-                                message: 'Mathpix equation OCR is now active for PDF processing',
-                              })
-                            } catch (err) {
-                              addError({
-                                type: 'error',
-                                title: 'Mathpix Configuration Failed',
-                                message: err instanceof Error ? err.message : 'Unknown error',
-                              })
-                            }
-                          })
-                        }
-                      }}
-                      disabled={!mathpixConfig.appId || !mathpixConfig.appKey}
-                      className={mathpixConfig.enabled ? "bg-green-600 hover:bg-green-700" : ""}
-                    >
-                      {mathpixConfig.enabled ? (
-                        <>
-                          <Check className="w-4 h-4 mr-1" />
-                          Enabled
-                        </>
-                      ) : (
-                        "Enable"
-                      )}
-                    </Button>
-                  </div>
-
-                  {/* Test Button */}
-                  <Button
-                    onClick={async () => {
-                      if (!mathpixConfig.appId || !mathpixConfig.appKey) {
-                        addError({
-                          type: 'error',
-                          title: 'Configuration Required',
-                          message: 'Please enter both App ID and App Key',
-                        })
-                        return
-                      }
-
-                      setTestingStatus(prev => ({ ...prev, mathpix: 'testing' }))
-
-                      try {
-                        const { configureMathpix, getMathpixProcessor } = await import('@/lib/mathpix-processor')
-                        configureMathpix({
-                          appId: mathpixConfig.appId,
-                          appKey: mathpixConfig.appKey,
-                        })
-                        
-                        const processor = getMathpixProcessor()
-                        if (processor.isReady()) {
-                          setTestingStatus(prev => ({ ...prev, mathpix: 'success' }))
-                          setMathpixConfig(prev => ({ ...prev, enabled: true }))
-                          addError({
-                            type: 'success',
-                            title: 'Mathpix Connected',
-                            message: 'API credentials are valid. Mathpix is ready for use.',
-                          })
-                        } else {
-                          throw new Error('Processor not ready')
-                        }
-                      } catch (err) {
-                        setTestingStatus(prev => ({ ...prev, mathpix: 'error' }))
-                        addError({
-                          type: 'error',
-                          title: 'Mathpix Test Failed',
-                          message: err instanceof Error ? err.message : 'Failed to configure Mathpix',
-                        })
-                      }
-                    }}
-                    disabled={!mathpixConfig.appId || !mathpixConfig.appKey || testingStatus.mathpix === 'testing'}
-                    className="w-full border-2 border-black bg-white text-black hover:bg-black hover:text-white"
-                  >
-                    {testingStatus.mathpix === 'testing' ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Testing...
-                      </>
-                    ) : (
-                      <>
-                        {getStatusIcon(testingStatus.mathpix)}
-                        <span className="ml-2">Test Mathpix Connection</span>
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                {/* Features */}
-                <div className="pt-4 border-t border-gray-200">
-                  <Label className="text-sm font-medium mb-2 block">Mathpix Features:</Label>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center gap-1 text-gray-600">
-                      <Check className="w-3 h-3 text-green-500" />
-                      LaTeX output
-                    </div>
-                    <div className="flex items-center gap-1 text-gray-600">
-                      <Check className="w-3 h-3 text-green-500" />
-                      MathML support
-                    </div>
-                    <div className="flex items-center gap-1 text-gray-600">
-                      <Check className="w-3 h-3 text-green-500" />
-                      ASCII math
-                    </div>
-                    <div className="flex items-center gap-1 text-gray-600">
-                      <Check className="w-3 h-3 text-green-500" />
-                      High accuracy
-                    </div>
-                    <div className="flex items-center gap-1 text-gray-600">
-                      <Check className="w-3 h-3 text-green-500" />
-                      Complex equations
-                    </div>
-                    <div className="flex items-center gap-1 text-gray-600">
-                      <Check className="w-3 h-3 text-green-500" />
-                      Handwritten math
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-          </div>
         </TabsContent>
       </Tabs>
     </div>

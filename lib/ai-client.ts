@@ -34,6 +34,33 @@ interface ChatMessage {
   content: string
 }
 
+/**
+ * Embedding cache entry with TTL support
+ */
+interface EmbeddingCacheEntry {
+  embedding: number[]
+  timestamp: number
+  textHash: string
+}
+
+/**
+ * Simple hash function for cache keys
+ */
+function hashText(text: string): string {
+  let hash = 0
+  for (let i = 0; i < text.length; i++) {
+    const char = text.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  return hash.toString(36)
+}
+
+// Global embedding cache (persists across AIClient instances)
+const embeddingCache = new Map<string, EmbeddingCacheEntry>()
+const EMBEDDING_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+const MAX_CACHE_SIZE = 1000 // Maximum cached embeddings
+
 export class AIClient {
   private config: AIConfig
 
@@ -41,29 +68,31 @@ export class AIClient {
     this.config = config
   }
 
+  /**
+   * Get cached embedding or generate new one
+   */
   async generateEmbedding(text: string): Promise<number[]> {
     try {
       if (!text || typeof text !== 'string' || text.trim().length === 0) {
         throw new Error("Invalid text input for embedding generation")
-    }
-
-      switch (this.config.provider) {
-        case "huggingface":
-          return await this.generateHuggingFaceEmbedding(text)
-        case "openai":
-          return await this.generateOpenAIEmbedding(text)
-        case "aiml":
-          return await this.generateAIMLEmbedding(text)
-        case "googleai":
-          return await this.generateGoogleAIEmbedding(text)
-        case "fireworks":
-          return await this.generateFireworksEmbedding(text)
-        case "deepinfra":
-          return await this.generateDeepInfraEmbedding(text)
-        default:
-          console.warn(`Embedding generation not supported for provider: ${this.config.provider}, using fallback`)
-          return this.generateFallbackEmbedding(text)
       }
+
+      // Check cache first
+      const cacheKey = `${this.config.provider}:${hashText(text.trim())}`
+      const cached = embeddingCache.get(cacheKey)
+      
+      if (cached && Date.now() - cached.timestamp < EMBEDDING_CACHE_TTL) {
+        console.log(`AIClient: Using cached embedding for text (${text.substring(0, 30)}...)`)
+        return cached.embedding
+      }
+
+      // Generate new embedding
+      const embedding = await this._generateEmbeddingInternal(text)
+      
+      // Cache the result
+      this.cacheEmbedding(cacheKey, embedding, text.trim())
+      
+      return embedding
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       console.error(`Error generating embedding for provider ${this.config.provider}:`, {
@@ -72,6 +101,61 @@ export class AIClient {
         textPreview: text?.substring(0, 50) || ''
       })
       return this.generateFallbackEmbedding(text)
+    }
+  }
+
+  /**
+   * Cache an embedding with LRU-style eviction
+   */
+  private cacheEmbedding(key: string, embedding: number[], text: string): void {
+    // Evict old entries if cache is full
+    if (embeddingCache.size >= MAX_CACHE_SIZE) {
+      const oldestKey = embeddingCache.keys().next().value
+      if (oldestKey) embeddingCache.delete(oldestKey)
+    }
+    
+    embeddingCache.set(key, {
+      embedding,
+      timestamp: Date.now(),
+      textHash: hashText(text)
+    })
+  }
+
+  /**
+   * Clear the embedding cache
+   */
+  static clearEmbeddingCache(): void {
+    embeddingCache.clear()
+    console.log("AIClient: Embedding cache cleared")
+  }
+
+  /**
+   * Get cache statistics
+   */
+  static getCacheStats(): { size: number; maxSize: number } {
+    return { size: embeddingCache.size, maxSize: MAX_CACHE_SIZE }
+  }
+
+  /**
+   * Internal embedding generation (actual API calls)
+   */
+  private async _generateEmbeddingInternal(text: string): Promise<number[]> {
+    switch (this.config.provider) {
+      case "huggingface":
+        return await this.generateHuggingFaceEmbedding(text)
+      case "openai":
+        return await this.generateOpenAIEmbedding(text)
+      case "aiml":
+        return await this.generateAIMLEmbedding(text)
+      case "googleai":
+        return await this.generateGoogleAIEmbedding(text)
+      case "fireworks":
+        return await this.generateFireworksEmbedding(text)
+      case "deepinfra":
+        return await this.generateDeepInfraEmbedding(text)
+      default:
+        console.warn(`Embedding generation not supported for provider: ${this.config.provider}, using fallback`)
+        return this.generateFallbackEmbedding(text)
     }
   }
 
@@ -1125,7 +1209,7 @@ export class AIClient {
 
     if (isEmbeddingModel) {
       console.warn(`AIML model '${textModel}' is for embeddings, switching to text generation model`)
-      textModel = "gpt-5-mini" // Default text generation model
+      textModel = "gpt-4o-mini" // Default text generation model
     }
 
     const response = await fetch(`${baseUrl}/chat/completions`, {

@@ -132,7 +132,6 @@ export function StructuredData() {
       'Conversation export (Markdown, PDF, clipboard)',
       'Vector-based semantic search with hybrid scoring',
       'Conversational document interface',
-      'Mathpix integration for equation extraction',
       'Multimodal processing (images, tables, equations)',
       'Secure document processing with privacy-first architecture'
     ],

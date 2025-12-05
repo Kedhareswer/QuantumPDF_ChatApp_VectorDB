@@ -78,8 +78,8 @@ export class VisionModelService {
     }
 
     try {
-      // Latest stable OpenAI vision model as of November 2025
-      const model = this.config.model || 'gpt-4o'  // GPT-4 Omni (multimodal), replaces gpt-4-vision-preview
+      // Latest stable OpenAI vision model as of December 2025
+      const model = this.config.model || 'gpt-4o'  // GPT-4 Omni (multimodal) - also supports gpt-5.1 with vision
       const defaultPrompt = 'Describe this image in detail. Include any text, charts, diagrams, or notable elements.'
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -154,8 +154,8 @@ export class VisionModelService {
     }
 
     try {
-      // Latest stable Anthropic vision model as of November 2025
-      const model = this.config.model || 'claude-3-5-sonnet-20241022'  // Claude 3.5 Sonnet (latest stable)
+      // Latest stable Anthropic vision model as of December 2025
+      const model = this.config.model || 'claude-sonnet-4-5-20250514'  // Claude 4.5 Sonnet (latest frontier with vision)
       const defaultPrompt = 'Describe this image in detail. Include any text, charts, diagrams, or notable elements.'
 
       // Extract base64 data from data URL

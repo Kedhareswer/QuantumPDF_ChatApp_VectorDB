@@ -1,22 +1,18 @@
 'use client';
 
 import type { ExtractedEquation } from "@/types/multimodal-types"
-import { getMathpixProcessor, type MathpixResult } from "./mathpix-processor"
 
 export interface EquationExtractionOptions {
   maxEquations?: number
   detectInline?: boolean
   detectBlock?: boolean
   preserveFormatting?: boolean
-  useMathpix?: boolean // Enable professional OCR when available
-  mathpixPageImages?: Map<number, HTMLCanvasElement> // Page canvases for Mathpix
 }
 
 export interface EquationExtractionResult {
   equations: ExtractedEquation[]
   totalFound: number
   extractionTime: number
-  mathpixUsed?: boolean
 }
 
 export interface EquationExtractionProgress {
@@ -28,13 +24,11 @@ export interface EquationExtractionProgress {
 
 /**
  * Equation Extractor for PDF and text documents
- * Detects and extracts mathematical equations
- * Supports both regex-based detection and Mathpix professional OCR
+ * Detects and extracts mathematical equations using regex-based pattern detection
  */
 export class EquationExtractor {
   private extractedEquations: ExtractedEquation[] = []
   private equationCounter = 0
-  private mathpixProcessor = getMathpixProcessor()
 
   // Common LaTeX/math patterns
   private readonly mathPatterns = [
@@ -120,8 +114,7 @@ export class EquationExtractor {
   }
 
   /**
-   * Extract equations from PDF pages
-   * Uses Mathpix for professional OCR when configured and enabled
+   * Extract equations from PDF pages using regex-based pattern detection
    */
   async extractFromPDF(
     pdf: any, // PDFDocumentProxy
@@ -138,29 +131,11 @@ export class EquationExtractor {
       detectInline: options.detectInline ?? this.defaultOptions.detectInline ?? true,
       detectBlock: options.detectBlock ?? this.defaultOptions.detectBlock ?? true,
       preserveFormatting: options.preserveFormatting ?? this.defaultOptions.preserveFormatting ?? true,
-      useMathpix: options.useMathpix ?? false,
-      mathpixPageImages: options.mathpixPageImages,
     }
 
     const totalPages = pdf.numPages
-    let mathpixUsed = false
 
-    // Use Mathpix if configured and enabled
-    if (mergedOptions.useMathpix && this.mathpixProcessor.isReady()) {
-      console.log('📐 Using Mathpix for professional equation OCR')
-      mathpixUsed = true
-      
-      const mathpixResults = await this.extractWithMathpix(
-        pdf,
-        documentId,
-        mergedOptions,
-        onProgress,
-      )
-      
-      this.extractedEquations.push(...mathpixResults)
-    }
-
-    // Always do text-based extraction as fallback/supplement
+    // Text-based extraction using regex patterns
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
       if (this.extractedEquations.length >= mergedOptions.maxEquations) {
         break
@@ -168,7 +143,7 @@ export class EquationExtractor {
 
       try {
         onProgress?.({
-          stage: mathpixUsed ? "Supplementing with text analysis" : "Extracting equations",
+          stage: "Extracting equations",
           pageNumber: pageNum,
           processed: this.extractedEquations.length,
           total: totalPages,
@@ -185,7 +160,7 @@ export class EquationExtractor {
           mergedOptions,
         )
 
-        // Add text-based equations that weren't found by Mathpix
+        // Add equations that aren't duplicates
         for (const eq of pageEquations.equations) {
           if (!this.isDuplicateEquation(eq)) {
             this.extractedEquations.push(eq)
@@ -208,99 +183,6 @@ export class EquationExtractor {
       equations: this.extractedEquations,
       totalFound: this.extractedEquations.length,
       extractionTime,
-      mathpixUsed,
-    }
-  }
-
-  /**
-   * Extract equations using Mathpix professional OCR
-   */
-  private async extractWithMathpix(
-    pdf: any,
-    documentId: string,
-    options: any,
-    onProgress?: (progress: EquationExtractionProgress) => void,
-  ): Promise<ExtractedEquation[]> {
-    const equations: ExtractedEquation[] = []
-    const totalPages = Math.min(pdf.numPages, 10) // Limit to first 10 pages for Mathpix (API costs)
-
-    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-      if (equations.length >= options.maxEquations) break
-
-      onProgress?.({
-        stage: "Mathpix OCR processing",
-        pageNumber: pageNum,
-        processed: equations.length,
-        total: totalPages,
-      })
-
-      try {
-        // Get page canvas (either from provided map or render it)
-        let canvas: HTMLCanvasElement
-
-        if (options.mathpixPageImages?.has(pageNum)) {
-          canvas = options.mathpixPageImages.get(pageNum)!
-        } else {
-          // Render page to canvas
-          const page = await pdf.getPage(pageNum)
-          const viewport = page.getViewport({ scale: 2.0 }) // High res for better OCR
-          
-          canvas = document.createElement('canvas')
-          canvas.width = viewport.width
-          canvas.height = viewport.height
-          
-          const ctx = canvas.getContext('2d')
-          if (!ctx) continue
-          
-          await page.render({
-            canvasContext: ctx,
-            viewport,
-          }).promise
-        }
-
-        // Extract with Mathpix
-        const result = await this.mathpixProcessor.extractFromPDFPage(
-          canvas,
-          pageNum,
-          {
-            formats: ['latex', 'text', 'mathml'],
-            confidenceThreshold: 0.6,
-            maxEquations: options.maxEquations - equations.length,
-          }
-        )
-
-        if (result.success && result.equations.length > 0) {
-          for (const mathpixEq of result.equations) {
-            equations.push(this.convertMathpixResult(mathpixEq, documentId, pageNum))
-          }
-        }
-      } catch (error) {
-        console.error(`Mathpix extraction failed for page ${pageNum}:`, error)
-      }
-    }
-
-    return equations
-  }
-
-  /**
-   * Convert Mathpix result to ExtractedEquation format
-   */
-  private convertMathpixResult(
-    result: MathpixResult,
-    documentId: string,
-    pageNumber: number,
-  ): ExtractedEquation {
-    return {
-      id: `${documentId}_mathpix_${pageNumber}_${++this.equationCounter}`,
-      documentId,
-      pageNumber,
-      latex: result.latex,
-      mathml: result.mathml,
-      description: result.text || this.latexToPlainText(result.latex),
-      isInline: !result.latex?.includes('\\begin{') && !result.latex?.includes('\\['),
-      confidence: result.confidence,
-      extractedAt: new Date(),
-      source: 'mathpix',
     }
   }
 

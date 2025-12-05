@@ -1,4 +1,5 @@
 import { getEmbeddingDimension, createZeroVector, DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
+import { calculateKeywordScore, enhancedKeywordSimilarity } from "./keyword-scoring"
 
 interface VectorDBConfig {
   provider: "pinecone" | "weaviate" | "local"
@@ -198,7 +199,7 @@ class PineconeDatabase extends VectorDatabase {
         const keywordFilteredResults = allResults
           .map((match: any) => {
             const content = match.metadata?.content || ""
-            const keywordScore = this.calculateKeywordScore(query, content)
+            const keywordScore = calculateKeywordScore(query, content)
             
             return {
               id: match.id,
@@ -233,16 +234,19 @@ class PineconeDatabase extends VectorDatabase {
         const pineconeResults = await this.index.query(searchParams)
         const allResults = pineconeResults.matches || []
 
+        // Calculate adaptive hybrid weights based on query characteristics
+        const weights = this.getAdaptiveHybridWeights(query)
+        
         // Calculate hybrid scores
         const hybridResults = allResults
           .map((match: any) => {
             const content = match.metadata?.content || ""
             const semanticScore = embedding.length > 0 ? (match.score || 0) : 0
-            const keywordScore = this.calculateKeywordScore(query, content)
+            const keywordScore = calculateKeywordScore(query, content)
             
-            // Combine scores (weighted average)
+            // Combine scores with adaptive weights
             const hybridScore = embedding.length > 0 
-              ? (semanticScore * 0.6 + keywordScore * 0.4) // 60% semantic, 40% keyword
+              ? (semanticScore * weights.semantic + keywordScore * weights.keyword)
               : keywordScore // If no embedding, use only keyword score
 
             return {
@@ -273,61 +277,65 @@ class PineconeDatabase extends VectorDatabase {
     }
   }
 
-  // Helper method for keyword scoring in Pinecone
-  private calculateKeywordScore(query: string, content: string): number {
-    if (!content || !query) return 0
-
-    // Normalize text
-    const normalizeText = (text: string) => {
-      return text
-        .toLowerCase()
-        .replace(/[^\w\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-    }
-
-    const normalizedQuery = normalizeText(query)
-    const normalizedContent = normalizeText(content)
+  /**
+   * Get adaptive hybrid search weights based on query characteristics
+   * - Technical/exact queries → higher keyword weight
+   * - Conceptual/semantic queries → higher semantic weight
+   */
+  private getAdaptiveHybridWeights(query: string): { semantic: number; keyword: number } {
+    const queryLower = query.toLowerCase()
     
-    const queryWords = normalizedQuery.split(/\s+/).filter(word => word.length > 0)
-    const contentWords = normalizedContent.split(/\s+/)
+    // Patterns that suggest keyword-heavy search
+    const keywordPatterns = [
+      /\b(exact|specific|definition|meaning|what is)\b/i,
+      /\b(article|section|clause|paragraph|page)\s*\d+/i,
+      /\b\d+\.?\d*\s*(%|percent)/i,
+      /"[^"]+"/i, // Quoted phrases
+      /\b[A-Z]{2,}\b/, // Acronyms
+    ]
     
-    if (queryWords.length === 0) return 0
-
-    let exactMatches = 0
-    let partialMatches = 0
+    // Patterns that suggest semantic-heavy search  
+    const semanticPatterns = [
+      /\b(explain|describe|summarize|overview|concept)\b/i,
+      /\b(how|why|what happens|relationship)\b/i,
+      /\b(compare|contrast|difference|similar)\b/i,
+      /\b(main|key|important|significant)\b/i,
+    ]
     
-    for (const queryWord of queryWords) {
-      if (contentWords.includes(queryWord)) {
-        exactMatches++
-      } else {
-        const partialMatch = contentWords.some(contentWord => 
-          contentWord.includes(queryWord) || queryWord.includes(contentWord)
-        )
-        if (partialMatch) {
-          partialMatches++
-        }
-      }
+    let keywordBoost = 0
+    let semanticBoost = 0
+    
+    for (const pattern of keywordPatterns) {
+      if (pattern.test(query)) keywordBoost += 0.1
     }
-
-    const exactScore = exactMatches / queryWords.length
-    const partialScore = (partialMatches / queryWords.length) * 0.5
-    let finalScore = exactScore + partialScore
-
-    // Boost single word matches
-    if (queryWords.length === 1 && exactMatches > 0) {
-      finalScore = Math.min(1.0, finalScore * 2)
+    
+    for (const pattern of semanticPatterns) {
+      if (pattern.test(queryLower)) semanticBoost += 0.1
     }
-
-    // Frequency bonus
-    if (exactMatches > 0) {
-      const queryText = queryWords.join(' ')
-      const occurrences = (normalizedContent.match(new RegExp(queryText, 'g')) || []).length
-      const frequencyBonus = Math.min(0.3, occurrences * 0.1)
-      finalScore += frequencyBonus
-    }
-
-    return Math.min(1.0, finalScore)
+    
+    // Short queries (1-3 words) benefit more from keyword matching
+    const wordCount = query.split(/\s+/).length
+    if (wordCount <= 3) keywordBoost += 0.15
+    
+    // Very long queries benefit from semantic understanding
+    if (wordCount > 10) semanticBoost += 0.1
+    
+    // Calculate final weights (base: 55% semantic, 45% keyword)
+    let semanticWeight = 0.55 + semanticBoost - keywordBoost
+    let keywordWeight = 0.45 + keywordBoost - semanticBoost
+    
+    // Clamp weights
+    semanticWeight = Math.max(0.3, Math.min(0.8, semanticWeight))
+    keywordWeight = Math.max(0.2, Math.min(0.7, keywordWeight))
+    
+    // Normalize to sum to 1
+    const total = semanticWeight + keywordWeight
+    semanticWeight /= total
+    keywordWeight /= total
+    
+    console.log(`Adaptive weights for "${query.substring(0, 30)}...": semantic=${semanticWeight.toFixed(2)}, keyword=${keywordWeight.toFixed(2)}`)
+    
+    return { semantic: semanticWeight, keyword: keywordWeight }
   }
 
   async deleteDocument(documentId: string): Promise<void> {
@@ -511,7 +519,7 @@ class WeaviateDatabase extends VectorDatabase {
           finalScore = Math.max(0.5, finalScore) // Semantic results should have decent scores
         } else if (options.mode === "keyword") {
           // For keyword search, calculate actual keyword relevance
-          finalScore = this.calculateKeywordScore(query, item.content)
+          finalScore = calculateKeywordScore(query, item.content)
         } else if (options.mode === "hybrid") {
           // For hybrid, this is already a combined score from Weaviate
           finalScore = Math.max(0.3, finalScore) // Ensure hybrid results have reasonable scores
@@ -584,62 +592,6 @@ class WeaviateDatabase extends VectorDatabase {
     }
   }
 
-  // Helper method for keyword scoring in Weaviate
-  private calculateKeywordScore(query: string, content: string): number {
-    if (!content || !query) return 0
-
-    // Normalize text
-    const normalizeText = (text: string) => {
-      return text
-        .toLowerCase()
-        .replace(/[^\w\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-    }
-
-    const normalizedQuery = normalizeText(query)
-    const normalizedContent = normalizeText(content)
-    
-    const queryWords = normalizedQuery.split(/\s+/).filter(word => word.length > 0)
-    const contentWords = normalizedContent.split(/\s+/)
-    
-    if (queryWords.length === 0) return 0
-
-    let exactMatches = 0
-    let partialMatches = 0
-    
-    for (const queryWord of queryWords) {
-      if (contentWords.includes(queryWord)) {
-        exactMatches++
-      } else {
-        const partialMatch = contentWords.some(contentWord => 
-          contentWord.includes(queryWord) || queryWord.includes(contentWord)
-        )
-        if (partialMatch) {
-          partialMatches++
-        }
-      }
-    }
-
-    const exactScore = exactMatches / queryWords.length
-    const partialScore = (partialMatches / queryWords.length) * 0.5
-    let finalScore = exactScore + partialScore
-
-    // Boost single word matches
-    if (queryWords.length === 1 && exactMatches > 0) {
-      finalScore = Math.min(1.0, finalScore * 2)
-    }
-
-    // Frequency bonus
-    if (exactMatches > 0) {
-      const queryText = queryWords.join(' ')
-      const occurrences = (normalizedContent.match(new RegExp(queryText, 'g')) || []).length
-      const frequencyBonus = Math.min(0.3, occurrences * 0.1)
-      finalScore += frequencyBonus
-    }
-
-    return Math.min(1.0, finalScore)
-  }
 }
 
 
@@ -683,9 +635,9 @@ class LocalVectorDatabase extends VectorDatabase {
         }
       } else if (options.mode === "keyword") {
         // Pure keyword search - doesn't require embeddings
-        score = this.enhancedKeywordSimilarity(query, doc.content)
+        score = enhancedKeywordSimilarity(query, doc.content)
       } else if (options.mode === "hybrid") {
-        // Hybrid search - combine both with fallback
+        // Hybrid search - combine both with adaptive weights
         let semanticScore = 0
         let keywordScore = 0
 
@@ -695,11 +647,14 @@ class LocalVectorDatabase extends VectorDatabase {
         }
 
         // Always do keyword search
-        keywordScore = this.enhancedKeywordSimilarity(query, doc.content)
+        keywordScore = enhancedKeywordSimilarity(query, doc.content)
 
-        // If both available, average them; otherwise use what's available
+        // Get adaptive weights based on query type
+        const weights = this.getAdaptiveHybridWeights(query)
+        
+        // Combine with adaptive weights; fallback if only one available
         if (semanticScore > 0 && keywordScore > 0) {
-          score = (semanticScore + keywordScore) / 2
+          score = semanticScore * weights.semantic + keywordScore * weights.keyword
         } else if (semanticScore > 0) {
           score = semanticScore
         } else {
@@ -750,68 +705,50 @@ class LocalVectorDatabase extends VectorDatabase {
     return dotProduct / (magnitudeA * magnitudeB)
   }
 
-  private enhancedKeywordSimilarity(query: string, content: string): number {
-    // Normalize text: lowercase, remove punctuation, handle contractions
-    const normalizeText = (text: string) => {
-      return text
-        .toLowerCase()
-        .replace(/[^\w\s]/g, ' ') // Replace punctuation with spaces
-        .replace(/\s+/g, ' ') // Collapse multiple spaces
-        .trim()
-    }
-
-    const normalizedQuery = normalizeText(query)
-    const normalizedContent = normalizeText(content)
+  /**
+   * Get adaptive hybrid search weights based on query characteristics
+   */
+  private getAdaptiveHybridWeights(query: string): { semantic: number; keyword: number } {
+    // Patterns that suggest keyword-heavy search
+    const keywordPatterns = [
+      /\b(exact|specific|definition|meaning|what is)\b/i,
+      /\b(article|section|clause|paragraph|page)\s*\d+/i,
+      /\b\d+\.?\d*\s*(%|percent)/i,
+      /"[^"]+"/i,
+      /\b[A-Z]{2,}\b/,
+    ]
     
-    const queryWords = normalizedQuery.split(/\s+/).filter(word => word.length > 0)
-    const contentWords = normalizedContent.split(/\s+/)
+    // Patterns that suggest semantic-heavy search  
+    const semanticPatterns = [
+      /\b(explain|describe|summarize|overview|concept)\b/i,
+      /\b(how|why|what happens|relationship)\b/i,
+      /\b(compare|contrast|difference|similar)\b/i,
+      /\b(main|key|important|significant)\b/i,
+    ]
     
-    if (queryWords.length === 0) return 0
-
-    // Count exact matches
-    let exactMatches = 0
-    let partialMatches = 0
+    let keywordBoost = 0
+    let semanticBoost = 0
     
-    for (const queryWord of queryWords) {
-      // Check for exact matches
-      if (contentWords.includes(queryWord)) {
-        exactMatches++
-      } else {
-        // Check for partial matches (substring matching)
-        const partialMatch = contentWords.some(contentWord => 
-          contentWord.includes(queryWord) || queryWord.includes(contentWord)
-        )
-        if (partialMatch) {
-          partialMatches++
-        }
-      }
+    for (const pattern of keywordPatterns) {
+      if (pattern.test(query)) keywordBoost += 0.1
     }
-
-    // Calculate score with higher weight for exact matches
-    const exactScore = exactMatches / queryWords.length
-    const partialScore = (partialMatches / queryWords.length) * 0.5 // Partial matches worth 50%
     
-    let finalScore = exactScore + partialScore
-
-    // Boost score for short queries (single words should have higher chance of matching)
-    if (queryWords.length === 1 && exactMatches > 0) {
-      finalScore = Math.min(1.0, finalScore * 2) // Double score for single word exact matches
+    for (const pattern of semanticPatterns) {
+      if (pattern.test(query.toLowerCase())) semanticBoost += 0.1
     }
-
-    // Add frequency bonus - more occurrences = higher score
-    if (exactMatches > 0) {
-      const queryText = queryWords.join(' ')
-      const occurrences = (normalizedContent.match(new RegExp(queryText, 'g')) || []).length
-      const frequencyBonus = Math.min(0.3, occurrences * 0.1) // Max 30% bonus
-      finalScore += frequencyBonus
-    }
-
-    return Math.min(1.0, finalScore) // Cap at 1.0
-  }
-
-  // Legacy method for backward compatibility
-  private keywordSimilarity(query: string, content: string): number {
-    return this.enhancedKeywordSimilarity(query, content)
+    
+    const wordCount = query.split(/\s+/).length
+    if (wordCount <= 3) keywordBoost += 0.15
+    if (wordCount > 10) semanticBoost += 0.1
+    
+    let semanticWeight = 0.55 + semanticBoost - keywordBoost
+    let keywordWeight = 0.45 + keywordBoost - semanticBoost
+    
+    semanticWeight = Math.max(0.3, Math.min(0.8, semanticWeight))
+    keywordWeight = Math.max(0.2, Math.min(0.7, keywordWeight))
+    
+    const total = semanticWeight + keywordWeight
+    return { semantic: semanticWeight / total, keyword: keywordWeight / total }
   }
 }
 

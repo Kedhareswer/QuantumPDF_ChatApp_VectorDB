@@ -1,7 +1,7 @@
 # QuantumPDF PWA
 
 > **Progressive Web App capabilities for QuantumPDF**
-> **Last Updated: November 2025 | Version 3.0.0**
+> **Last Updated: December 2025 | Version 3.1.0**
 
 ---
 

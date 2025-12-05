@@ -1,7 +1,7 @@
 # QuantumPDF Implementation Guide
 
 > **Complete guide to implementing and extending QuantumPDF features**
-> **Last Updated: November 2025 | Version 3.0.0**
+> **Last Updated: December 2025 | Version 3.1.0**
 
 ---
 
@@ -11,12 +11,13 @@
 2. [Core Components](#core-components)
 3. [AI Provider Configuration](#ai-provider-configuration)
 4. [RAG Engine Implementation](#rag-engine-implementation)
-5. [Enhanced UI/UX Features](#enhanced-uiux-features)
-6. [Mathpix Integration](#mathpix-integration)
-7. [Multimodal Processing](#multimodal-processing)
-8. [Vector Database Integration](#vector-database-integration)
-9. [State Management](#state-management)
-10. [Error Handling](#error-handling)
+5. [Guardrails & Safety](#guardrails--safety)
+6. [Evaluation Metrics](#evaluation-metrics)
+7. [Enhanced UI/UX Features](#enhanced-uiux-features)
+8. [Multimodal Processing](#multimodal-processing)
+9. [Vector Database Integration](#vector-database-integration)
+10. [State Management](#state-management)
+11. [Error Handling](#error-handling)
 
 ---
 
@@ -57,10 +58,6 @@ ANTHROPIC_API_KEY=sk-ant-...
 GROQ_API_KEY=gsk_...
 HUGGINGFACE_API_KEY=hf_...
 
-# Optional: Mathpix (for professional equation OCR)
-MATHPIX_APP_ID=your_app_id
-MATHPIX_APP_KEY=your_app_key
-
 # Optional: Vector Database
 PINECONE_API_KEY=your_key
 PINECONE_ENVIRONMENT=us-east-1
@@ -97,7 +94,6 @@ components/
 lib/
 ├── ai-client.ts          # Multi-provider AI client
 ├── rag-engine.ts         # Core RAG with 3-phase processing
-├── mathpix-processor.ts  # Mathpix API + Math.js
 ├── store.ts              # Zustand state management
 └── vector-database-client.ts  # Vector DB abstraction
 ```
@@ -271,6 +267,110 @@ const refinedAnswer = await refineAnswer(contextAnalysis, critique)
 
 ---
 
+## Guardrails & Safety
+
+The guardrails system (`lib/guardrails.ts`) provides comprehensive safety checks.
+
+### Input Validation
+
+```typescript
+import { Guardrails } from '@/lib/guardrails'
+
+// Validate user query
+const validation = Guardrails.validateQueryInput(query)
+if (!validation.isValid) {
+  return { error: validation.errors.join('. ') }
+}
+const sanitizedQuery = validation.sanitizedInput || query
+```
+
+### Rate Limiting
+
+```typescript
+import { checkRateLimit } from '@/lib/guardrails'
+
+// Check rate limit (30 requests/minute per session)
+const result = checkRateLimit(sessionId, { windowMs: 60000, maxRequests: 30 })
+if (!result.allowed) {
+  return { error: `Rate limit exceeded. Retry in ${result.retryAfterMs}ms` }
+}
+```
+
+### Output Validation
+
+```typescript
+// Validate LLM response
+const outputValidation = Guardrails.validateOutput(response, context, chunks)
+if (outputValidation.toxicityScore > 0.5) {
+  console.warn('High toxicity detected')
+}
+```
+
+### PII Detection
+
+```typescript
+// Check for sensitive data in documents
+const docValidation = Guardrails.validateDocument(content, fileName, fileSize)
+if (docValidation.metadata.hasPII) {
+  console.warn('Document contains PII')
+}
+```
+
+---
+
+## Evaluation Metrics
+
+Track quality metrics for continuous improvement.
+
+### Query Evaluation
+
+```typescript
+import { createQueryEvaluation, storeEvaluation } from '@/lib/guardrails'
+
+const evaluation = createQueryEvaluation(
+  queryId,
+  question,
+  chunks,          // Retrieved chunks
+  response,        // Generated response
+  groundednessScore,
+  totalDocuments,
+  retrievalLatencyMs,
+  generationLatencyMs
+)
+
+storeEvaluation(evaluation)
+```
+
+### Analytics
+
+```typescript
+import { Evaluations } from '@/lib/guardrails'
+
+const analytics = Evaluations.getEvaluationAnalytics()
+// {
+//   totalQueries: 100,
+//   avgOverallScore: 0.76,
+//   avgGroundedness: 0.85,
+//   avgCitationCoverage: 0.72,
+//   issueBreakdown: { "Low citation coverage": 15 },
+//   recentTrend: "improving"
+// }
+```
+
+### Latency Monitoring
+
+```typescript
+import { Evaluations } from '@/lib/guardrails'
+
+const budget = { retrievalMs: 2000, generationMs: 30000, totalMs: 35000 }
+const check = Evaluations.checkLatencyBudget('retrieval', elapsedMs, budget)
+if (!check.withinBudget) {
+  console.warn(`Retrieval exceeded budget by ${check.overageMs}ms`)
+}
+```
+
+---
+
 ## Enhanced UI/UX Features
 
 ### Source Cards
@@ -372,121 +472,6 @@ import { ExportMenu } from '@/components/export-menu'
 
 ---
 
-## Mathpix Integration
-
-### Configuration
-
-```typescript
-// In unified-configuration.tsx
-interface MathpixConfig {
-  appId: string
-  appKey: string
-  enabled: boolean
-}
-
-// Store in Zustand
-const useMathpixConfig = create((set) => ({
-  mathpixConfig: {
-    appId: '',
-    appKey: '',
-    enabled: false
-  },
-  setMathpixConfig: (config) => set({ mathpixConfig: config })
-}))
-```
-
-### Using Mathpix Processor
-
-```typescript
-import { MathpixProcessor, MathpixConfig } from '@/lib/mathpix-processor'
-
-// Initialize
-const mathpixConfig: MathpixConfig = {
-  appId: process.env.MATHPIX_APP_ID,
-  appKey: process.env.MATHPIX_APP_KEY
-}
-
-const processor = new MathpixProcessor({ mathpixConfig })
-
-// Process PDF page images
-const result = await processor.processImages(documentId, {
-  mathpixConfig,
-  mathpixPageImages: [
-    { page: 1, dataUrl: 'data:image/png;base64,...' },
-    { page: 2, dataUrl: 'data:image/png;base64,...' }
-  ],
-  maxEquations: 50,
-  detectInline: true,
-  detectBlock: true
-}, (progress) => {
-  console.log(`Processing page ${progress.pageNumber}`)
-})
-
-// Result structure
-interface MathpixExtractionResult {
-  equations: ExtractedEquation[]
-  totalFound: number
-  extractionTime: number
-}
-
-interface ExtractedEquation {
-  id: string
-  documentId: string
-  pageNumber?: number
-  latex: string
-  mathml?: string
-  ascii?: string
-  description?: string
-  isInline: boolean
-  confidence?: number
-  extractedAt: Date
-}
-```
-
-### Math Expression Evaluation
-
-```typescript
-import { MathEvaluator } from '@/lib/mathpix-processor'
-
-const evaluator = new MathEvaluator()
-
-// Set variables
-evaluator.setVariable('x', 5)
-evaluator.setVariable('y', 10)
-
-// Evaluate expressions
-const result = evaluator.evaluate('x^2 + y')  // Returns 35
-
-// Simplify expressions
-const simplified = evaluator.simplify('2*x + 3*x')  // Returns '5*x'
-
-// LaTeX to expression conversion happens automatically
-// \frac{x}{y} → (x)/(y)
-// \sqrt{x} → sqrt(x)
-// \sin(x) → sin(x)
-```
-
-### Fallback to Regex Detection
-
-```typescript
-// equation-extractor.ts automatically falls back
-async function extractEquations(document, options) {
-  if (options.useMathpix && options.mathpixConfig?.appId) {
-    // Try Mathpix first
-    try {
-      return await mathpixProcessor.processImages(...)
-    } catch (error) {
-      console.warn('Mathpix failed, falling back to regex')
-    }
-  }
-  
-  // Fallback to regex-based detection
-  return regexBasedExtraction(document.content)
-}
-```
-
----
-
 ## Multimodal Processing
 
 ### Image Extraction
@@ -563,12 +548,7 @@ const processor = new EnhancedPDFProcessor({
   extractImages: true,
   extractTables: true,
   extractEquations: true,
-  generateCaptions: true,
-  useMathpix: true,
-  mathpixConfig: {
-    appId: '...',
-    appKey: '...'
-  }
+  generateCaptions: true
 })
 
 const result = await processor.process(pdfFile, (progress) => {
@@ -653,9 +633,6 @@ interface AppState {
   aiProvider: AIProvider
   aiConfig: AIConfig
   
-  // Mathpix State (NEW)
-  mathpixConfig: MathpixConfig
-  
   // Chat State
   messages: ChatMessage[]
   isStreaming: boolean
@@ -668,7 +645,6 @@ interface AppState {
   addDocument: (doc: ProcessedDocument) => void
   removeDocument: (id: string) => void
   setAIProvider: (provider: AIProvider) => void
-  setMathpixConfig: (config: MathpixConfig) => void
   addMessage: (message: ChatMessage) => void
 }
 ```
@@ -756,15 +732,8 @@ async function generateWithFallback(prompt: string) {
   }
 }
 
-// Mathpix Fallback
+// Equation Extraction (Regex-based)
 async function extractEquations(doc: ProcessedDocument) {
-  if (mathpixConfig.enabled) {
-    try {
-      return await mathpixProcessor.process(doc)
-    } catch {
-      // Fall back to regex
-    }
-  }
   return regexExtractor.extract(doc.content)
 }
 ```
@@ -858,8 +827,6 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 OPENAI_API_KEY=sk-...
 
 # Optional services
-MATHPIX_APP_ID=...
-MATHPIX_APP_KEY=...
 PINECONE_API_KEY=...
 ```
 
@@ -881,6 +848,6 @@ CMD ["npm", "start"]
 
 ---
 
-**Generated**: November 2025  
-**Project**: QuantumPDF ChatApp v3.0.0  
-**Latest Updates**: Enhanced UI/UX features (Source Cards, Citations, Filtering, Chunk Visualization, Query History, Export)
+**Generated**: December 2025  
+**Project**: QuantumPDF ChatApp v3.1.0  
+**Latest Updates**: Enhanced UI/UX features, Guardrails, Evaluation Metrics, December 2025 AI models

@@ -125,8 +125,6 @@ export default function manifest(): MetadataRoute.Manifest {
       }
     ],
     related_applications: [],
-    prefer_related_applications: false,
-    iarc_rating_id: '',
-    edge_side_panel: {}
+    prefer_related_applications: false
   }
 }

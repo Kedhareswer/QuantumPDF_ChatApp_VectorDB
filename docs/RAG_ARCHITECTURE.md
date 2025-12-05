@@ -1,7 +1,7 @@
 # QuantumPDF RAG Architecture
 
-> **Deep dive into the Retrieval-Augmented Generation system with 3-phase processing, enhanced UI/UX, and multimodal support**
-> **Last Updated: November 2025 | Version 3.0.0**
+> **Deep dive into the Retrieval-Augmented Generation system with 3-phase processing, guardrails, evaluation metrics, and multimodal support**
+> **Last Updated: December 2025 | Version 3.1.0**
 
 ---
 
@@ -29,17 +29,30 @@
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
+│                     INPUT GUARDRAILS (NEW)                               │
+│  • Input Validation  • Rate Limiting  • Injection Detection             │
+│  • Query Sanitization  • Session Tracking                               │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
 │                        QUERY PREPROCESSING                               │
-│  • Query expansion    • Intent detection    • Entity extraction         │
+│  • Query expansion    • Intent detection    • Multi-doc detection       │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         RETRIEVAL ENGINE                                 │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                   │
-│  │   Embedding  │  │   Vector     │  │   Diversity  │                   │
-│  │   Generation │──│   Search     │──│   Boosting   │                   │
+│  │   Embedding  │  │   Adaptive   │  │   Cross-Doc  │                   │
+│  │   + Cache    │──│   Hybrid     │──│   Diversity  │                   │
 │  └──────────────┘  └──────────────┘  └──────────────┘                   │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     CHUNK OPTIMIZATION (NEW)                             │
+│  • Deduplication (Jaccard)  • Smart Truncation  • Token Budget          │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -54,8 +67,21 @@
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
+│                    OUTPUT GUARDRAILS (NEW)                               │
+│  • Groundedness Check  • Citation Enforcement  • Toxicity Detection     │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     EVALUATION & METRICS (NEW)                           │
+│  • Retrieval Metrics  • Generation Metrics  • Quality Scoring           │
+│  • Latency Tracking   • Issue Detection     • Trend Analysis            │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
 │                          FINAL RESPONSE                                  │
-│  • Answer    • Sources    • Quality Metrics    • Retrieved Chunks         │
+│  • Answer    • Sources    • Quality Metrics    • Retrieved Chunks       │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -70,10 +96,12 @@
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| RAG Engine | `lib/rag-engine.ts` | Core query processing & retrieval |
-| AI Client | `lib/ai-client.ts` | Multi-provider LLM integration |
-| Chunking | `lib/advanced-chunking.ts` | Semantic text segmentation |
-| Vector DB | `lib/vector-database-client.ts` | Embedding storage & search |
+| RAG Engine | `lib/rag-engine.ts` | Core query processing, retrieval, guardrails integration |
+| AI Client | `lib/ai-client.ts` | Multi-provider LLM integration + Embedding Cache |
+| Guardrails | `lib/guardrails.ts` | Input/output validation, rate limiting, evaluations |
+| Keyword Scoring | `lib/keyword-scoring.ts` | Enhanced keyword matching with stop words |
+| Chunking | `lib/advanced-chunking.ts` | Semantic text segmentation + deduplication |
+| Vector DB | `lib/vector-database.ts` | Embedding storage, adaptive hybrid search |
 
 ---
 
@@ -370,11 +398,11 @@ Export conversations in Markdown or PDF format.
         ▼                           ▼                           ▼
 ┌───────────────┐           ┌───────────────┐           ┌───────────────┐
 │  TEXT         │           │  IMAGES       │           │  EQUATIONS    │
-│  EXTRACTION   │           │  EXTRACTION   │           │  EXTRACTION   │
+│  EXTRACTION   │           │               │           │               │
 │               │           │               │           │               │
-│  PDF.js       │           │  Image        │           │  Mathpix API  │
-│  Mammoth.js   │           │  Extractor    │           │  Regex        │
-│  SheetJS      │           │               │           │  Fallback     │
+│  PDF.js       │           │  Image        │           │  Regex        │
+│  Mammoth.js   │           │  Extractor    │           │  Fallback     │
+│  SheetJS      │           │               │           │               │
 └───────────────┘           └───────────────┘           └───────────────┘
         │                           │                           │
         │                           ▼                           │
@@ -457,27 +485,12 @@ interface ExtractedEquation {
   extractedAt: Date
 }
 
-// With Mathpix integration
+// Regex-based equation extraction
 async function extractEquations(
   document: ProcessedDocument,
   options: EquationExtractionOptions
 ): Promise<ExtractedEquation[]> {
-  if (options.useMathpix && options.mathpixConfig?.appId) {
-    try {
-      const processor = new MathpixProcessor({
-        mathpixConfig: options.mathpixConfig
-      })
-      
-      return await processor.processImages(
-        document.id,
-        { mathpixPageImages: options.mathpixPageImages }
-      )
-    } catch (error) {
-      console.warn('Mathpix failed, using regex fallback')
-    }
-  }
-  
-  // Regex-based fallback
+  // Regex-based pattern detection for LaTeX equations
   return extractWithRegex(document.content)
 }
 ```

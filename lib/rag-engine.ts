@@ -65,6 +65,14 @@ import { PDFParser } from "./pdf-parser"
 import type { TextChunk } from "./advanced-chunking"
 import { DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
 import { getTelemetry } from "./telemetry"
+import { 
+  Guardrails, 
+  Evaluations, 
+  createQueryEvaluation, 
+  storeEvaluation,
+  checkRateLimit,
+  type QueryEvaluation 
+} from "./guardrails"
 
 interface Document {
   id: string
@@ -810,7 +818,8 @@ export class RAGEngine {
       } else {
         // Fallback to single strategy with diversity algorithm
         console.log("Using single retrieval strategy with diversity algorithm")
-        finalChunks = this.applyEnhancedDiversityAlgorithm(allChunks, documentMetrics, topK, filters?.minSimilarity ?? minSimilarityThreshold)
+        const isMultiDoc = question ? this.isMultiDocumentQuery(question) : false
+        finalChunks = this.applyEnhancedDiversityAlgorithm(allChunks, documentMetrics, topK, filters?.minSimilarity ?? minSimilarityThreshold, isMultiDoc)
       }
 
       // Step 2: Re-ranking (if enabled)
@@ -1033,23 +1042,102 @@ export class RAGEngine {
     addToRRF(keywordRanked, 'keyword')
     addToRRF(importanceRanked, 'importance')
 
-    // Sort by RRF score and return top K
-    const rrfResults = Array.from(chunkMap.values())
+    // Sort by RRF score
+    const sortedByRRF = Array.from(chunkMap.values())
       .sort((a, b) => b.rrfScore - a.rrfScore)
-      .slice(0, topK)
       .map(entry => ({
         ...entry.chunk,
         rrfScore: entry.rrfScore,
         rrfRanks: entry.ranks
       }))
 
+    // Apply cross-document diversity to RRF results
+    const isMultiDoc = this.isMultiDocumentQuery(question)
+    const rrfResults = this.applyCrossDocumentDiversity(sortedByRRF, topK, isMultiDoc)
+
     console.log(`RRF: Combined ${chunkMap.size} unique chunks from 4 strategies, returning top ${rrfResults.length}`)
     if (rrfResults.length > 0) {
-      console.log(`Best RRF score: ${rrfResults[0].rrfScore.toFixed(4)}`)
-      console.log(`Best chunk ranks - Semantic: ${rrfResults[0].rrfRanks?.semantic}, Exact: ${rrfResults[0].rrfRanks?.exactMatch}, Keyword: ${rrfResults[0].rrfRanks?.keyword}`)
+      console.log(`Best RRF score: ${rrfResults[0].rrfScore?.toFixed(4) || 'N/A'}`)
+      // Log document distribution
+      const docCounts = new Map<string, number>()
+      rrfResults.forEach(r => docCounts.set(r.documentName, (docCounts.get(r.documentName) || 0) + 1))
+      console.log(`Document distribution: ${Array.from(docCounts.entries()).map(([n, c]) => `${n}:${c}`).join(', ')}`)
     }
 
     return rrfResults
+  }
+
+  /**
+   * Apply cross-document diversity to ranked results
+   * Ensures fair representation from multiple documents
+   */
+  private applyCrossDocumentDiversity<T extends { documentId: string; documentName: string; source: string }>(
+    rankedChunks: T[],
+    topK: number,
+    isMultiDocQuery: boolean
+  ): T[] {
+    if (rankedChunks.length <= topK) return rankedChunks
+    
+    // Count unique documents
+    const uniqueDocs = new Set(rankedChunks.map(c => c.documentId))
+    const numDocs = uniqueDocs.size
+    
+    if (numDocs <= 1) {
+      return rankedChunks.slice(0, topK)
+    }
+
+    // Calculate distribution limits
+    const maxPerDoc = isMultiDocQuery 
+      ? Math.max(2, Math.ceil(topK / numDocs) + 1) // Strict: near-equal distribution
+      : Math.ceil(topK * 0.5) // Relaxed: max 50% from any single doc
+    
+    const minPerDoc = isMultiDocQuery && numDocs <= topK ? 1 : 0
+
+    console.log(`Cross-doc diversity: ${numDocs} docs, max ${maxPerDoc}/doc, multiDoc: ${isMultiDocQuery}`)
+
+    const selected: T[] = []
+    const docCounts = new Map<string, number>()
+    const usedSources = new Set<string>()
+
+    // First pass: ensure minimum per document
+    if (minPerDoc > 0) {
+      for (const docId of uniqueDocs) {
+        const docChunk = rankedChunks.find(c => 
+          c.documentId === docId && !usedSources.has(c.source)
+        )
+        if (docChunk && selected.length < topK) {
+          selected.push(docChunk)
+          usedSources.add(docChunk.source)
+          docCounts.set(docId, 1)
+        }
+      }
+    }
+
+    // Second pass: fill remaining slots with diversity constraint
+    for (const chunk of rankedChunks) {
+      if (selected.length >= topK) break
+      if (usedSources.has(chunk.source)) continue
+      
+      const count = docCounts.get(chunk.documentId) || 0
+      if (count < maxPerDoc) {
+        selected.push(chunk)
+        usedSources.add(chunk.source)
+        docCounts.set(chunk.documentId, count + 1)
+      }
+    }
+
+    // If still need more, relax constraints
+    if (selected.length < topK) {
+      for (const chunk of rankedChunks) {
+        if (selected.length >= topK) break
+        if (!usedSources.has(chunk.source)) {
+          selected.push(chunk)
+          usedSources.add(chunk.source)
+        }
+      }
+    }
+
+    return selected
   }
 
   /**
@@ -1177,9 +1265,18 @@ export class RAGEngine {
       .sort((a, b) => b.rrfScore - a.rrfScore)
       .map(item => item.chunk)
     
-    console.log(`Multi-Query RRF: Combined ${allEmbeddings.length} query variations, top chunk RRF score: ${finalRankedChunks[0]?.similarity?.toFixed(4) || 'N/A'}`)
+    // Apply cross-document diversity
+    const isMultiDoc = this.isMultiDocumentQuery(question)
+    const diverseResults = this.applyCrossDocumentDiversity(finalRankedChunks, topK, isMultiDoc)
     
-    return finalRankedChunks.slice(0, topK)
+    console.log(`Multi-Query RRF: Combined ${allEmbeddings.length} query variations, top chunk RRF score: ${diverseResults[0]?.similarity?.toFixed(4) || 'N/A'}`)
+    
+    // Log document distribution
+    const docCounts = new Map<string, number>()
+    diverseResults.forEach(r => docCounts.set(r.documentName, (docCounts.get(r.documentName) || 0) + 1))
+    console.log(`Document distribution: ${Array.from(docCounts.entries()).map(([n, c]) => `${n}:${c}`).join(', ')}`)
+    
+    return diverseResults
   }
 
   /**
@@ -1353,9 +1450,12 @@ export class RAGEngine {
     tokenBudget?: number,
     complexityLevel?: 'simple' | 'normal' | 'complex',
     filters?: RAGFilterOptions,
-    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    sessionId?: string // For rate limiting
   }): Promise<EnhancedQueryResponse> {
-    console.log("Enhanced RAG query started:", question);
+    const queryStartTime = Date.now()
+    const queryId = `query_${queryStartTime}_${Math.random().toString(36).substring(7)}`
+    console.log(`Enhanced RAG query started [${queryId}]:`, question);
 
     // Initialize processing options
     const showThinking = options?.showThinking ?? false
@@ -1385,6 +1485,32 @@ export class RAGEngine {
     };
 
     try {
+      // ==================== GUARDRAILS: Input Validation ====================
+      const inputValidation = Guardrails.validateQueryInput(question)
+      if (!inputValidation.isValid) {
+        console.warn(`[${queryId}] Input validation failed:`, inputValidation.errors)
+        return {
+          ...defaultResponse,
+          answer: `Invalid input: ${inputValidation.errors.join('. ')}`,
+        }
+      }
+      if (inputValidation.warnings.length > 0) {
+        console.warn(`[${queryId}] Input warnings:`, inputValidation.warnings)
+      }
+      const sanitizedQuestion = inputValidation.sanitizedInput || question
+
+      // ==================== GUARDRAILS: Rate Limiting ====================
+      const sessionId = options?.sessionId || 'default'
+      const rateLimitResult = checkRateLimit(sessionId, { windowMs: 60000, maxRequests: 30 })
+      if (!rateLimitResult.allowed) {
+        console.warn(`[${queryId}] Rate limit exceeded for session: ${sessionId}`)
+        return {
+          ...defaultResponse,
+          answer: `Rate limit exceeded. Please wait ${Math.ceil((rateLimitResult.retryAfterMs || 0) / 1000)} seconds before trying again.`,
+        }
+      }
+      console.log(`[${queryId}] Rate limit: ${rateLimitResult.remaining} requests remaining`)
+
       // Validate system state
       if (!this.isInitialized || !this.aiClient) {
         return {
@@ -1393,8 +1519,8 @@ export class RAGEngine {
         };
       }
 
-      // Validate input
-      if (!question || typeof question !== "string" || question.trim().length === 0) {
+      // Validate input (basic check)
+      if (!sanitizedQuestion || sanitizedQuestion.trim().length === 0) {
         return {
           ...defaultResponse,
           answer: "Please provide a valid question.",
@@ -1426,25 +1552,81 @@ export class RAGEngine {
     filters?: RAGFilterOptions,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
   ): Promise<EnhancedQueryResponse> {
+    const processStartTime = Date.now()
+    const queryId = `eval_${processStartTime}`
     
     // Phase-based token allocation
     const tokenAllocation = this.calculateTokenAllocation(tokenBudget, complexityLevel)
     
-    // Phase 1: Context Analysis and Initial Response (with conversation history)
+    // ==================== PHASE 1: Retrieval ====================
+    const retrievalStartTime = Date.now()
     const phase1Result = await this.phase1_ContextAnalysis(question, tokenAllocation.context, filters, conversationHistory)
+    const retrievalLatencyMs = Date.now() - retrievalStartTime
     
-    // Phase 2: Self-Critique and Validation (only for normal/complex queries)
+    // ==================== PHASE 2: Self-Critique ====================
     const phase2Result = complexityLevel === 'simple' 
       ? null 
       : await this.phase2_SelfCritique(phase1Result, tokenAllocation.critique)
     
-    // Phase 3: Refinement and Final Response
+    // ==================== PHASE 3: Generation ====================
+    const generationStartTime = Date.now()
     const phase3Result = await this.phase3_Refinement(
       phase1Result, 
       phase2Result, 
       tokenAllocation.refinement,
       showThinking
     )
+    const generationLatencyMs = Date.now() - generationStartTime
+
+    // ==================== GUARDRAILS: Output Validation ====================
+    const outputValidation = Guardrails.validateOutput(
+      phase3Result.answer,
+      phase1Result.context || '',
+      phase1Result.relevantChunks || []
+    )
+    
+    if (!outputValidation.isValid) {
+      console.warn(`[${queryId}] Output validation issues:`, outputValidation.issues)
+    }
+    
+    if (outputValidation.toxicityScore > 0.5) {
+      console.warn(`[${queryId}] High toxicity score: ${outputValidation.toxicityScore}`)
+      // In production, you might want to filter or flag the response
+    }
+
+    // ==================== EVALUATION: Track Metrics ====================
+    try {
+      const chunks = phase1Result.relevantChunks || []
+      const evaluation = createQueryEvaluation(
+        queryId,
+        question,
+        chunks.map((c: any) => ({
+          similarity: c.similarity || 0,
+          documentId: c.documentId || '',
+          documentName: c.documentName || c.source || '',
+          content: c.content || '',
+          source: c.source || ''
+        })),
+        phase3Result.answer,
+        phase3Result.groundednessScore || phase1Result.groundednessScore || 0.5,
+        this.documents.length,
+        retrievalLatencyMs,
+        generationLatencyMs
+      )
+      
+      storeEvaluation(evaluation)
+      
+      // Log evaluation summary
+      console.log(`[${queryId}] Evaluation: overall=${(evaluation.overallScore * 100).toFixed(1)}%, ` +
+        `retrieval=${retrievalLatencyMs}ms, generation=${generationLatencyMs}ms, ` +
+        `groundedness=${(evaluation.generation.groundednessScore * 100).toFixed(1)}%`)
+      
+      if (evaluation.issues.length > 0) {
+        console.warn(`[${queryId}] Evaluation issues:`, evaluation.issues)
+      }
+    } catch (evalError) {
+      console.error('Failed to create evaluation:', evalError)
+    }
 
     return phase3Result
   }
@@ -1595,9 +1777,9 @@ export class RAGEngine {
           relevantChunks = keywordChunks
         }
         
-        // Strategy 2: Try semantic search with lower threshold
+        // Strategy 2: Try semantic search with MUCH lower threshold
         if (relevantChunks.length === 0) {
-          console.log("Attempting semantic search with lower threshold...")
+          console.log("Attempting semantic search with very low threshold (0.005)...")
           const lowThresholdChunks = this.findRelevantChunks(
             questionEmbedding,
             adjustedChunkLimit * 2, // Get more chunks
@@ -1606,7 +1788,7 @@ export class RAGEngine {
             useRRF,
             useReranking,
             alternativeEmbeddings,
-            0.3 // Lower similarity threshold
+            0.005 // Very low threshold to catch anything remotely relevant
           )
           if (lowThresholdChunks.length > 0) {
             console.log(`Low-threshold search found ${lowThresholdChunks.length} chunks`)
@@ -1900,42 +2082,78 @@ Applied improvements based on critical review to ensure accuracy and clarity.
   /**
    * Detect if a question is vague (lacks specificity)
    * Returns score 0-1, where 0 = clear/specific, 1 = very vague
+   * 
+   * IMPORTANT: Normal question words like "what", "explain", "describe" are NOT vague by themselves.
+   * A question is vague only if it lacks specific context or subject matter.
    */
   private detectVagueness(question: string): number {
     if (!question || question.trim().length < 3) return 1.0
     
     const questionLower = question.toLowerCase().trim()
+    const words = questionLower.split(/\s+/)
     let vaguenessScore = 0
     
-    // Very short questions are vague
-    if (questionLower.length < 10) vaguenessScore += 0.3
-    if (questionLower.length < 5) vaguenessScore += 0.4
+    // Very short questions are potentially vague
+    if (words.length <= 2) vaguenessScore += 0.3
+    if (words.length === 1) vaguenessScore += 0.4
     
-    // Single word questions
-    if (questionLower.split(/\s+/).length === 1) vaguenessScore += 0.5
+    // Count meaningful content words (not stop words, not question words)
+    const stopWords = new Set([
+      'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+      'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used',
+      'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into',
+      'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under',
+      'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why',
+      'how', 'all', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no',
+      'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just',
+      'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am',
+      'tell', 'me', 'about', 'explain', 'describe', 'give', 'show', 'please', 'i'
+    ])
     
-    // Vague question patterns
-    const vaguePatterns = [
-      /\b(what|tell me|explain|describe|about)\b/i, // Generic question words
-      /\b(this|that|it|these|those)\b/i, // Pronouns without context
-      /\b(things|stuff|information|details)\b/i, // Vague nouns
-      /\?$.*\?$/i, // Multiple question marks
+    const contentWords = words.filter(w => w.length > 2 && !stopWords.has(w))
+    
+    // Questions with no meaningful content words are vague
+    if (contentWords.length === 0) {
+      vaguenessScore += 0.6
+    } else if (contentWords.length === 1) {
+      vaguenessScore += 0.2
+    }
+    
+    // Truly vague patterns - pronouns without clear antecedent
+    const trulyVaguePatterns = [
+      /^(what|how|why)\s+(is|are|was|were)?\s*(it|this|that)\s*\?*$/i, // "What is it?", "What is this?"
+      /^(tell|explain|describe)\s+(me\s+)?(about\s+)?(it|this|that)\s*\?*$/i, // "Tell me about it"
+      /^(what|how)\s*\?*$/i, // Just "what?" or "how?"
+      /^(yes|no|ok|okay|sure|maybe|perhaps)\s*\?*$/i, // Non-questions
     ]
     
-    let vaguePatternMatches = 0
-    for (const pattern of vaguePatterns) {
-      if (pattern.test(questionLower)) vaguePatternMatches++
+    for (const pattern of trulyVaguePatterns) {
+      if (pattern.test(questionLower)) {
+        vaguenessScore += 0.4
+        break
+      }
     }
-    vaguenessScore += vaguePatternMatches * 0.15
     
-    // Lack of specific terms (numbers, names, dates, technical terms)
-    const specificTerms = questionLower.match(/\b\d+[A-Z]?|\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+|\b\d{4}|\d+%|\$\d+/g)
-    if (!specificTerms || specificTerms.length === 0) vaguenessScore += 0.2
+    // Check for specific indicators that make a question clear (REDUCES vagueness)
+    const specificityIndicators = [
+      /\b(article|section|chapter|clause|rule|paragraph|page)\s+\d+/i, // Document references
+      /\b\d+\.?\d*\s*(%|percent|percentage)/i, // Percentages
+      /\b\d{4}\b/, // Years
+      /\b(first|second|third|last|main|primary|key|important)\b/i, // Ordinals and importance
+      /\b(definition|meaning|purpose|requirement|process|step|method)\b/i, // Specific query types
+      /\b(compare|difference|between|versus|vs\.?)\b/i, // Comparison questions
+      /\b(list|enumerate|summarize|outline)\b/i, // Action requests
+      /"[^"]+"/i, // Quoted terms
+    ]
     
-    // Questions that are just "what" or "how" without context
-    if (/^(what|how|why|when|where|who)\s*\?*$/i.test(questionLower)) vaguenessScore += 0.4
+    for (const pattern of specificityIndicators) {
+      if (pattern.test(questionLower)) {
+        vaguenessScore -= 0.15
+      }
+    }
     
-    return Math.min(1.0, vaguenessScore)
+    return Math.max(0, Math.min(1.0, vaguenessScore))
   }
 
   /**
@@ -2026,29 +2244,61 @@ Only output the expanded query and alternatives, nothing else.`
 
   /**
    * Fallback keyword search when semantic search fails
+   * Uses improved keyword extraction and lower thresholds for vague queries
    */
   private fallbackKeywordSearch(
     question: string,
     alternativeQueries: string[],
     limit: number
   ): Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> {
-    console.log("Performing fallback keyword search...")
+    console.log("Performing enhanced fallback keyword search...")
+    
+    // Comprehensive stop words list
+    const stopWords = new Set([
+      'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+      'may', 'might', 'must', 'shall', 'can', 'need', 'to', 'of', 'in', 'for',
+      'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during',
+      'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further',
+      'then', 'once', 'here', 'there', 'all', 'each', 'few', 'more', 'most',
+      'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
+      'than', 'too', 'very', 'just', 'and', 'or', 'but', 'if', 'because', 'until',
+      'while', 'although', 'though', 'after', 'before', 'when', 'where', 'why',
+      'how', 'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those',
+      'am', 'tell', 'me', 'about', 'explain', 'describe', 'give', 'show', 'please',
+      'i', 'you', 'he', 'she', 'it', 'we', 'they', 'my', 'your', 'his', 'her',
+      'its', 'our', 'their', 'any', 'every', 'many', 'much', 'both', 'either',
+      'neither', 'also', 'even', 'still', 'already', 'yet', 'ever', 'never'
+    ])
     
     // Extract keywords from question and alternatives
     const allQueries = [question, ...alternativeQueries]
     const keywords = new Set<string>()
+    const keywordWeights = new Map<string, number>()
     
     for (const query of allQueries) {
-      // Extract meaningful words (length > 2, not stop words)
+      // Extract meaningful words
       const words = query.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
         .split(/\s+/)
-        .filter(w => w.length > 2 && !/^(the|and|or|but|for|with|from|this|that|what|how|why|when|where|who)/.test(w))
+        .filter(w => w.length > 2 && !stopWords.has(w))
       
-      words.forEach(w => keywords.add(w))
+      words.forEach(w => {
+        keywords.add(w)
+        // Weight words that appear in multiple queries higher
+        keywordWeights.set(w, (keywordWeights.get(w) || 0) + 1)
+      })
+      
+      // Also extract potential n-grams (2-word phrases)
+      for (let i = 0; i < words.length - 1; i++) {
+        const bigram = `${words[i]} ${words[i + 1]}`
+        keywords.add(bigram)
+        keywordWeights.set(bigram, (keywordWeights.get(bigram) || 0) + 1.5) // Bigrams get extra weight
+      }
     }
     
     const keywordArray = Array.from(keywords)
-    console.log(`Searching for keywords: ${keywordArray.join(', ')}`)
+    console.log(`Searching for ${keywordArray.length} keywords/phrases: ${keywordArray.slice(0, 10).join(', ')}${keywordArray.length > 10 ? '...' : ''}`)
     
     const results: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> = []
     
@@ -2061,21 +2311,29 @@ Only output the expanded query and alternatives, nothing else.`
         const chunkContent = typeof chunk === 'string' ? chunk : chunk.content || ''
         const chunkLower = chunkContent.toLowerCase()
         
-        // Count keyword matches
+        // Count weighted keyword matches
+        let weightedMatchScore = 0
         let matchCount = 0
+        
         for (const keyword of keywordArray) {
           if (chunkLower.includes(keyword)) {
             matchCount++
+            const weight = keywordWeights.get(keyword) || 1
+            // Count occurrences for frequency bonus
+            const occurrences = (chunkLower.match(new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length
+            weightedMatchScore += weight * Math.min(1 + Math.log10(occurrences + 1), 2)
           }
         }
         
-        // Calculate relevance score based on keyword matches
+        // Calculate relevance score based on weighted keyword matches
         if (matchCount > 0) {
-          const relevanceScore = matchCount / keywordArray.length
+          const maxPossibleScore = Array.from(keywordWeights.values()).reduce((a, b) => a + b, 0) * 2
+          const normalizedScore = weightedMatchScore / Math.max(maxPossibleScore, 1)
           const keywordRelevance = this.calculateKeywordRelevance(question, chunkContent)
-          const combinedScore = (relevanceScore * 0.6 + keywordRelevance * 0.4)
+          const combinedScore = Math.max(normalizedScore, keywordRelevance, matchCount / keywordArray.length)
           
-          if (combinedScore > 0.2) { // Lower threshold for keyword search
+          // Very low threshold - any match is worth considering
+          if (combinedScore > 0.05 || matchCount >= 2) {
             const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
             let sourceString = `${doc.name || "Unknown Document"} (chunk ${i + 1})`
             if (chunkMetadata?.page !== undefined) {
@@ -2088,7 +2346,8 @@ Only output the expanded query and alternatives, nothing else.`
               similarity: combinedScore,
               documentId: doc.id,
               documentName: doc.name || "Unknown",
-              semanticImportance: 0.5,
+              semanticImportance: matchCount >= 3 ? 0.7 : 0.5,
+              matchCount, // Include for debugging
               ...(chunkMetadata || {})
             })
           }
@@ -2098,6 +2357,7 @@ Only output the expanded query and alternatives, nothing else.`
     
     // Sort by relevance and return top results
     results.sort((a, b) => b.similarity - a.similarity)
+    console.log(`Fallback keyword search found ${results.length} results, returning top ${limit}`)
     return results.slice(0, limit)
   }
 
@@ -2285,21 +2545,123 @@ Only output the expanded query and alternatives, nothing else.`
     return limits[questionType as keyof typeof limits] || 5
   }
 
+  /**
+   * Optimize chunks for token budget with deduplication and smart truncation
+   */
   private optimizeChunksForTokens(chunks: any[], tokenBudget: number) {
+    // Step 1: Deduplicate chunks (remove near-duplicates)
+    const deduplicatedChunks = this.deduplicateChunks(chunks)
+    console.log(`Deduplication: ${chunks.length} -> ${deduplicatedChunks.length} chunks`)
+    
     let totalTokens = 0
     const optimizedChunks = []
     
-    for (const chunk of chunks) {
+    // Step 2: Add chunks within budget
+    for (const chunk of deduplicatedChunks) {
       const chunkTokens = this.estimateTokens(chunk.content)
+      
       if (totalTokens + chunkTokens <= tokenBudget) {
         optimizedChunks.push(chunk)
         totalTokens += chunkTokens
-      } else {
-        break
+      } else if (totalTokens + chunkTokens <= tokenBudget * 1.1 && optimizedChunks.length < 3) {
+        // Allow slight overflow for critical chunks (first 3)
+        optimizedChunks.push(chunk)
+        totalTokens += chunkTokens
+      } else if (tokenBudget - totalTokens > 100) {
+        // Try to fit a truncated version if we have space
+        const availableTokens = tokenBudget - totalTokens
+        const truncatedContent = this.smartTruncateChunk(chunk.content, availableTokens)
+        if (truncatedContent.length > 100) {
+          optimizedChunks.push({ ...chunk, content: truncatedContent, truncated: true })
+          break
+        }
       }
     }
     
+    console.log(`Token budget: ${tokenBudget}, used: ${totalTokens}, chunks: ${optimizedChunks.length}`)
     return optimizedChunks
+  }
+
+  /**
+   * Deduplicate chunks by removing near-duplicates
+   * Uses Jaccard similarity to detect overlap
+   */
+  private deduplicateChunks(chunks: any[]): any[] {
+    if (chunks.length <= 1) return chunks
+    
+    const SIMILARITY_THRESHOLD = 0.7 // 70% similarity = duplicate
+    const deduplicated: any[] = []
+    
+    for (const chunk of chunks) {
+      const chunkWords = new Set(
+        chunk.content.toLowerCase()
+          .replace(/[^\w\s]/g, '')
+          .split(/\s+/)
+          .filter((w: string) => w.length > 3)
+      )
+      
+      // Check if this chunk is too similar to any already selected chunk
+      let isDuplicate = false
+      for (const existing of deduplicated) {
+        const existingWords = new Set(
+          existing.content.toLowerCase()
+            .replace(/[^\w\s]/g, '')
+            .split(/\s+/)
+            .filter((w: string) => w.length > 3)
+        )
+        
+        // Calculate Jaccard similarity
+        const intersection = new Set([...chunkWords].filter(x => existingWords.has(x)))
+        const union = new Set([...chunkWords, ...existingWords])
+        const similarity = intersection.size / union.size
+        
+        if (similarity > SIMILARITY_THRESHOLD) {
+          isDuplicate = true
+          // Keep the longer/more detailed chunk
+          if (chunk.content.length > existing.content.length) {
+            const idx = deduplicated.indexOf(existing)
+            deduplicated[idx] = chunk
+          }
+          break
+        }
+      }
+      
+      if (!isDuplicate) {
+        deduplicated.push(chunk)
+      }
+    }
+    
+    return deduplicated
+  }
+
+  /**
+   * Smart truncation that preserves sentence boundaries
+   */
+  private smartTruncateChunk(content: string, maxTokens: number): string {
+    const estimatedCharsPerToken = 4
+    const maxChars = maxTokens * estimatedCharsPerToken
+    
+    if (content.length <= maxChars) return content
+    
+    // Find the last sentence boundary before the limit
+    const truncated = content.substring(0, maxChars)
+    const lastSentence = truncated.lastIndexOf('.')
+    const lastQuestion = truncated.lastIndexOf('?')
+    const lastExclaim = truncated.lastIndexOf('!')
+    
+    const bestBoundary = Math.max(lastSentence, lastQuestion, lastExclaim)
+    
+    if (bestBoundary > maxChars * 0.5) {
+      return content.substring(0, bestBoundary + 1) + ' [truncated]'
+    }
+    
+    // Fallback to word boundary
+    const lastSpace = truncated.lastIndexOf(' ')
+    if (lastSpace > maxChars * 0.7) {
+      return content.substring(0, lastSpace) + '... [truncated]'
+    }
+    
+    return truncated + '... [truncated]'
   }
 
   private createEnhancedSystemPrompt(questionType: string): string {
@@ -2814,6 +3176,20 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
     return Array.isArray(this.documents) ? this.documents : []
   }
 
+  /**
+   * Get evaluation analytics for the RAG system
+   */
+  getEvaluationAnalytics() {
+    return Evaluations.getEvaluationAnalytics()
+  }
+
+  /**
+   * Clear evaluation history
+   */
+  clearEvaluationHistory() {
+    Evaluations.clearEvaluationHistory()
+  }
+
   removeDocument(documentId: string) {
     try {
       if (!documentId || typeof documentId !== "string") {
@@ -3118,13 +3494,32 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
     return Math.min(3.0, importance) // Increased max from 2.5 to 3.0 for boosted content
   }
 
+  /**
+   * Detect if query is asking about multiple documents
+   */
+  private isMultiDocumentQuery(question: string): boolean {
+    const multiDocPatterns = [
+      /\b(all|every|each|both)\s+(documents?|files?|pdfs?)\b/i,
+      /\b(summarize|compare|contrast|overview|across)\s+.*(documents?|files?|all)\b/i,
+      /\b(documents?|files?)\s+.*(compare|contrast|summarize|overview)\b/i,
+      /\bwhat\s+(do|does|are|is)\s+(the|all|these)\s+(documents?|files?)\b/i,
+      /\b(between|among|across)\s+(the\s+)?(documents?|files?)\b/i,
+      /\b(everything|all\s+information)\b/i,
+      /\bgive\s+me\s+.*(overview|summary)\b/i,
+      /\bmain\s+(points?|topics?|themes?)\b/i,
+    ]
+    
+    return multiDocPatterns.some(pattern => pattern.test(question))
+  }
+
   private applyEnhancedDiversityAlgorithm(
     allChunks: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number }>,
     documentMetrics: Map<string, { avgSimilarity: number; chunkCount: number; bestSimilarity: number }>,
     topK: number,
-    minSimilarity: number
+    minSimilarity: number,
+    isMultiDocQuery: boolean = false
   ) {
-    console.log("Applying Enhanced Multi-Document Diversity Algorithm")
+    console.log(`Applying Enhanced Multi-Document Diversity Algorithm (multiDoc: ${isMultiDocQuery})`)
 
     // Calculate composite scores: similarity * semantic importance with diminishing returns
     const rankedChunks = allChunks
@@ -3142,9 +3537,23 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       return this.getFallbackDiverseChunks(allChunks, documentMetrics, topK)
     }
 
-    // Calculate fair distribution targets
+    // Calculate fair distribution targets based on query type
     const numDocs = documentMetrics.size
-    const baseChunksPerDoc = Math.floor(topK / numDocs)
+    
+    // For multi-document queries, enforce stricter fairness
+    let baseChunksPerDoc: number
+    let maxChunksPerDoc: number
+    
+    if (isMultiDocQuery && numDocs > 1) {
+      // Ensure minimum representation from each document
+      baseChunksPerDoc = Math.max(2, Math.floor(topK / numDocs))
+      maxChunksPerDoc = Math.max(3, Math.ceil(topK / numDocs) + 1) // Much stricter: ~equal distribution
+      console.log(`Multi-document query detected: Enforcing fair distribution (${baseChunksPerDoc}-${maxChunksPerDoc} per doc)`)
+    } else {
+      baseChunksPerDoc = Math.floor(topK / numDocs)
+      maxChunksPerDoc = Math.min(topK, Math.ceil(topK * 0.5)) // Reduced from 70% to 50% max
+    }
+    
     const extraChunks = topK % numDocs
 
     // Sort documents by their best similarity to prioritize most relevant docs
@@ -3158,8 +3567,6 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       documentTargets.set(docId, target)
     })
 
-    const maxChunksPerDoc = Math.min(topK, Math.ceil(topK * 0.7)) // Allow up to 70% from best doc
-
     console.log(`Diversity parameters - Base per doc: ${baseChunksPerDoc}, Max per doc: ${maxChunksPerDoc}, Target total: ${topK}`)
 
     // Phase 1: Greedy selection with diversity constraints
@@ -3170,15 +3577,26 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
     console.log("Phase 1: Greedy diverse selection")
 
     // First pass: ensure every document gets at least one chunk if available
-    for (const [docId] of sortedDocs) {
-      const docChunks = rankedChunks.filter(chunk => chunk.documentId === docId && !usedSources.has(chunk.source))
-      if (docChunks.length > 0 && selectedChunks.length < topK) {
-        selectedChunks.push(docChunks[0])
-        usedSources.add(docChunks[0].source)
-        documentChunkCounts.set(docId, 1)
+    // For multi-doc queries, get minimum 2 chunks from each document first
+    const minChunksFirstPass = isMultiDocQuery ? Math.min(2, baseChunksPerDoc) : 1
+    
+    for (let pass = 0; pass < minChunksFirstPass; pass++) {
+      for (const [docId] of sortedDocs) {
+        const currentCount = documentChunkCounts.get(docId) || 0
+        if (currentCount > pass) continue // Already has enough for this pass
+        
+        const docChunks = rankedChunks.filter(chunk => 
+          chunk.documentId === docId && !usedSources.has(chunk.source)
+        )
+        
+        if (docChunks.length > 0 && selectedChunks.length < topK) {
+          selectedChunks.push(docChunks[0])
+          usedSources.add(docChunks[0].source)
+          documentChunkCounts.set(docId, currentCount + 1)
 
-        const docName = docChunks[0].documentName
-        console.log(`  Initial chunk from ${docName} (similarity: ${docChunks[0].similarity.toFixed(3)}, score: ${docChunks[0].compositeScore.toFixed(3)})`)
+          const docName = docChunks[0].documentName
+          console.log(`  Pass ${pass + 1}: chunk from ${docName} (similarity: ${docChunks[0].similarity.toFixed(3)}, score: ${docChunks[0].compositeScore.toFixed(3)})`)
+        }
       }
     }
 
