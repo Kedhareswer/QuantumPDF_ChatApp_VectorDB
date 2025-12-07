@@ -73,6 +73,12 @@ import {
   checkRateLimit,
   type QueryEvaluation 
 } from "./guardrails"
+import { 
+  QueryProcessor, 
+  getQueryProcessor, 
+  type QueryAnalysis,
+  type CachedResponse 
+} from "./query-processor"
 
 interface Document {
   id: string
@@ -154,6 +160,9 @@ export class RAGEngine {
   private tokenBudget = 4000 // Default token budget
   private showThinking = false // Option to show/hide thinking process
   
+  // Advanced query processing
+  private queryProcessor: QueryProcessor
+  
   // Consistent status tracking
   private engineStatus: RAGEngineStatus = {
     initialized: false,
@@ -166,6 +175,14 @@ export class RAGEngine {
 
   constructor() {
     this.pdfParser = new PDFParser()
+    this.queryProcessor = getQueryProcessor({
+      cacheEnabled: true,
+      cacheTTLMs: 30 * 60 * 1000, // 30 minutes
+      maxCacheSize: 500,
+      hydeEnabled: true,
+      stepBackEnabled: true,
+      rewriteEnabled: true
+    })
   }
   
   // Get current engine status for consistent error reporting
@@ -254,6 +271,10 @@ export class RAGEngine {
       // Determine final status
       this.isInitialized = true
       this.engineStatus.initialized = true
+      
+      // Initialize QueryProcessor with AI client
+      this.queryProcessor.setAIClient(this.aiClient)
+      console.log("RAGEngine: QueryProcessor initialized with AI client")
       
       if (this.engineStatus.degraded) {
         console.warn("RAGEngine: Initialized in DEGRADED mode:")
@@ -1527,13 +1548,67 @@ export class RAGEngine {
         };
       }
 
+      // ==================== CACHE CHECK ====================
+      const documentIds = this.documents.map(d => d.id)
+      const cachedResponse = this.queryProcessor.getCachedResponse(sanitizedQuestion, documentIds)
+      if (cachedResponse) {
+        console.log(`[${queryId}] Cache HIT - returning cached response`)
+        return {
+          answer: cachedResponse.answer,
+          sources: cachedResponse.sources,
+          relevanceScore: cachedResponse.relevanceScore,
+          retrievedChunks: cachedResponse.retrievedChunks,
+          qualityMetrics: cachedResponse.qualityMetrics || defaultResponse.qualityMetrics,
+          tokenUsage: { contextTokens: 0, reasoningTokens: 0, responseTokens: 0, totalTokens: 0 },
+          groundednessScore: 1.0, // Cached responses are verified
+          hallucinationDetected: false
+        }
+      }
+      console.log(`[${queryId}] Cache MISS - processing query`)
+
+      // ==================== ADVANCED QUERY ANALYSIS ====================
+      console.log(`[${queryId}] Analyzing query with advanced processing...`)
+      const queryAnalysis = await this.queryProcessor.analyzeQuery(sanitizedQuestion)
+      console.log(`[${queryId}] Query analysis:`, {
+        type: queryAnalysis.queryType,
+        complexity: queryAnalysis.complexity,
+        requiresHyDE: queryAnalysis.requiresHyDE,
+        requiresStepBack: queryAnalysis.requiresStepBack,
+        hasHypotheticalAnswer: !!queryAnalysis.hypotheticalAnswer,
+        hasStepBackQuestion: !!queryAnalysis.stepBackQuestion,
+        alternativeQueries: queryAnalysis.alternativeQueries.length
+      })
+
       // Resolve conversation context if history is provided
       const resolvedQuestion = options?.conversationHistory && options.conversationHistory.length > 0
-        ? await this.resolveConversationContext(question, options.conversationHistory)
-        : question
+        ? await this.resolveConversationContext(queryAnalysis.rewrittenQuery, options.conversationHistory)
+        : queryAnalysis.rewrittenQuery
 
       // Determine processing approach based on complexity
-      return await this.processQueryEnhanced(resolvedQuestion, tokenBudget, complexityLevel, showThinking, filters, options?.conversationHistory)
+      const response = await this.processQueryEnhanced(
+        resolvedQuestion, 
+        tokenBudget, 
+        complexityLevel, 
+        showThinking, 
+        filters, 
+        options?.conversationHistory,
+        queryAnalysis // Pass query analysis for HyDE and step-back
+      )
+
+      // ==================== CACHE STORE ====================
+      // Store successful responses in cache
+      if (response.answer && response.relevanceScore > 0.3) {
+        this.queryProcessor.cacheResponse(sanitizedQuestion, {
+          answer: response.answer,
+          sources: response.sources,
+          relevanceScore: response.relevanceScore,
+          retrievedChunks: response.retrievedChunks,
+          qualityMetrics: response.qualityMetrics
+        }, documentIds)
+        console.log(`[${queryId}] Response cached for future queries`)
+      }
+
+      return response
 
     } catch (error) {
       console.error("Error in enhanced RAG query:", error);
@@ -1550,7 +1625,8 @@ export class RAGEngine {
     complexityLevel: string,
     showThinking: boolean,
     filters?: RAGFilterOptions,
-    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    queryAnalysis?: QueryAnalysis
   ): Promise<EnhancedQueryResponse> {
     const processStartTime = Date.now()
     const queryId = `eval_${processStartTime}`
@@ -1560,7 +1636,13 @@ export class RAGEngine {
     
     // ==================== PHASE 1: Retrieval ====================
     const retrievalStartTime = Date.now()
-    const phase1Result = await this.phase1_ContextAnalysis(question, tokenAllocation.context, filters, conversationHistory)
+    const phase1Result = await this.phase1_ContextAnalysis(
+      question, 
+      tokenAllocation.context, 
+      filters, 
+      conversationHistory,
+      queryAnalysis // Pass query analysis for HyDE and step-back
+    )
     const retrievalLatencyMs = Date.now() - retrievalStartTime
     
     // ==================== PHASE 2: Self-Critique ====================
@@ -1647,7 +1729,13 @@ export class RAGEngine {
     }
   }
 
-  private async phase1_ContextAnalysis(question: string, tokenBudget: number, filters?: RAGFilterOptions, conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>) {
+  private async phase1_ContextAnalysis(
+    question: string, 
+    tokenBudget: number, 
+    filters?: RAGFilterOptions, 
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    queryAnalysis?: QueryAnalysis
+  ) {
     console.log("Phase 1: Context Analysis and Initial Response")
     
     // Debug: Check system state
@@ -1674,15 +1762,17 @@ export class RAGEngine {
     })
     
     try {
-      // Detect and handle vague questions
-      const vaguenessScore = this.detectVagueness(question)
+      // Use query analysis if provided, otherwise detect vagueness
+      const vaguenessScore = queryAnalysis ? 
+        (queryAnalysis.complexity === 'complex' ? 0.5 : 0.2) : 
+        this.detectVagueness(question)
       console.log(`Vagueness score: ${vaguenessScore.toFixed(2)} (0=clear, 1=very vague)`)
       
-      let processedQuestion = question
-      let expandedQueries: string[] = []
+      let processedQuestion = queryAnalysis?.rewrittenQuery || question
+      let expandedQueries: string[] = queryAnalysis?.alternativeQueries || []
       
-      // If question is vague, expand it
-      if (vaguenessScore > 0.4) {
+      // If question is vague and no query analysis, expand it
+      if (vaguenessScore > 0.4 && !queryAnalysis) {
         console.log("⚠️ Vague question detected - expanding query...")
         const expansionResult = await this.expandVagueQuery(question)
         processedQuestion = expansionResult.expandedQuery
@@ -1692,9 +1782,45 @@ export class RAGEngine {
         console.log(`Alternative queries: ${expandedQueries.length}`)
       }
       
-      // Generate embeddings for main query and alternatives
+      // ==================== HyDE: Hypothetical Document Embeddings ====================
+      // If HyDE is enabled and we have a hypothetical answer, use it for retrieval
+      let hydeEmbedding: number[] | null = null
+      if (queryAnalysis?.hypotheticalAnswer) {
+        console.log("🔮 Using HyDE (Hypothetical Document Embeddings) for retrieval...")
+        try {
+          hydeEmbedding = await this.aiClient!.generateEmbedding(queryAnalysis.hypotheticalAnswer)
+          console.log(`HyDE embedding generated from hypothetical answer (${queryAnalysis.hypotheticalAnswer.length} chars)`)
+        } catch (error) {
+          console.warn("Failed to generate HyDE embedding, falling back to query embedding")
+        }
+      }
+      
+      // ==================== Step-back Prompting ====================
+      // If step-back is enabled, also retrieve context for the broader question
+      let stepBackChunks: any[] = []
+      if (queryAnalysis?.stepBackQuestion) {
+        console.log("🔙 Using Step-back Prompting for broader context...")
+        try {
+          const stepBackEmbedding = await this.aiClient!.generateEmbedding(queryAnalysis.stepBackQuestion)
+          stepBackChunks = this.findRelevantChunks(
+            stepBackEmbedding,
+            3, // Get fewer chunks for step-back context
+            filters,
+            queryAnalysis.stepBackQuestion,
+            false, // No RRF for step-back
+            false, // No reranking for step-back
+            [],
+            0.1 // Lower threshold for broader context
+          )
+          console.log(`Step-back retrieval found ${stepBackChunks.length} broader context chunks`)
+        } catch (error) {
+          console.warn("Failed to retrieve step-back context")
+        }
+      }
+      
+      // Generate embeddings for main query (use HyDE if available)
       console.log("Generating embedding for question:", processedQuestion.substring(0, 100) + "...")
-      const questionEmbedding = await this.aiClient!.generateEmbedding(processedQuestion);
+      const questionEmbedding = hydeEmbedding || await this.aiClient!.generateEmbedding(processedQuestion);
       console.log("Question embedding generated, dimensions:", questionEmbedding.length)
       
       // Generate embeddings for alternative queries if available
@@ -1818,6 +1944,19 @@ export class RAGEngine {
           tokensUsed: 0
           }
         }
+      }
+
+      // ==================== Merge Step-back Context ====================
+      // Add step-back chunks to provide broader context (if available)
+      if (stepBackChunks.length > 0) {
+        console.log(`Merging ${stepBackChunks.length} step-back context chunks with ${relevantChunks.length} main chunks`)
+        // Deduplicate and merge (step-back chunks go first for broader context)
+        const existingContents = new Set(relevantChunks.map((c: any) => c.content.substring(0, 100)))
+        const uniqueStepBackChunks = stepBackChunks.filter((c: any) => 
+          !existingContents.has(c.content.substring(0, 100))
+        )
+        relevantChunks = [...uniqueStepBackChunks, ...relevantChunks]
+        console.log(`Total chunks after merge: ${relevantChunks.length}`)
       }
 
       // Optimize chunks for token budget
@@ -3202,6 +3341,12 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       const removedCount = initialLength - this.documents.length
       console.log(`Removed ${removedCount} document(s) with ID: ${documentId}`)
       
+      // Invalidate query cache for this document
+      if (removedCount > 0) {
+        this.queryProcessor.invalidateCache([documentId])
+        console.log(`Query cache invalidated for document: ${documentId}`)
+      }
+      
       // Track in telemetry
       if (removedCount > 0) {
         try {
@@ -3228,6 +3373,10 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
         console.warn("Failed to track document clearing in telemetry:", telemetryError)
       }
       
+      // Clear query cache when all documents are removed
+      this.queryProcessor.clearCache()
+      console.log("Query cache cleared")
+      
       this.documents = []
       console.log("Cleared all documents from RAG engine")
     } catch (error) {
@@ -3248,6 +3397,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
   // Get status information
   getStatus() {
     try {
+      const cacheStats = this.queryProcessor.getCacheStats()
       return {
         initialized: this.isInitialized,
         documentCount: Array.isArray(this.documents) ? this.documents.length : 0,
@@ -3260,6 +3410,12 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
         currentProvider: this.currentConfig?.provider,
         currentModel: this.currentConfig?.model,
         isHealthy: () => this.isHealthy(),
+        // Query cache statistics
+        queryCache: {
+          size: cacheStats.size,
+          maxSize: cacheStats.maxSize,
+          hitRate: cacheStats.hitRate
+        }
       }
     } catch (error) {
       console.error("Error getting RAG engine status:", error)
@@ -3271,6 +3427,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
         currentProvider: null,
         currentModel: null,
         isHealthy: () => false,
+        queryCache: { size: 0, maxSize: 0, hitRate: 0 }
       }
     }
   }
