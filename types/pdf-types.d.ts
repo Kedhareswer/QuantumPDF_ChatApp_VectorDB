@@ -10,7 +10,7 @@ declare module "pdfjs-dist" {
   export interface PDFDocumentProxy {
     numPages: number;
     getPage(pageNumber: number): Promise<PDFPageProxy>;
-    getMetadata(): Promise<{ info: Record<string, any>; metadata: any }>;
+    getMetadata(): Promise<{ info: Record<string, unknown>; metadata: unknown }>;
   }
 
   export interface PDFPageProxy {
@@ -43,7 +43,7 @@ declare module "pdfjs-dist" {
       height: number;
       hasEOL?: boolean;
     }>;
-    styles: Record<string, any>;
+    styles: Record<string, unknown>;
   }
 
   export function getDocument(data: Uint8Array | { url: string }): PDFDocumentLoadingTask;
@@ -54,12 +54,12 @@ declare module "pdfjs-dist" {
   }
 
   export interface PDFOperatorList {
-    fnArray: any[];
-    argsArray: any[];
+    fnArray: unknown[];
+    argsArray: unknown[];
   }
 }
 
 declare module "pdfjs-dist/build/pdf.worker.entry" {
-  const workerEntry: any;
+  const workerEntry: unknown;
   export default workerEntry;
 }

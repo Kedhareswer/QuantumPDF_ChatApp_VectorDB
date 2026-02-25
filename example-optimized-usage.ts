@@ -1,10 +1,9 @@
 // example-optimized-usage.ts - Example showing how to use all optimizations
 
-import { RAGEngine } from './lib/rag-engine'
-import { RAGConfigManager, DEFAULT_RAG_CONFIG } from './lib/rag-config'
 import { CacheManager } from './lib/cache-system'
-import { createRateLimiter } from './lib/rate-limiter'
 import { EnhancedDiversityAlgorithm } from './lib/diversity-algorithm'
+import { DEFAULT_RAG_CONFIG, RAGConfigManager } from './lib/rag-config'
+import { RAGEngine } from './lib/rag-engine'
 import { getTelemetry } from './lib/telemetry'
 
 /**
@@ -111,12 +110,6 @@ async function highPerformanceExample() {
   })
 
   // Initialize rate limiter
-  const rateLimiter = createRateLimiter({
-    algorithm: config.rateLimiting.algorithm,
-    tokensPerInterval: config.rateLimiting.tokensPerInterval,
-    intervalMs: config.rateLimiting.intervalMs,
-    maxBurst: config.rateLimiting.maxBurst,
-  })
 
   console.log('✅ Configured for high performance')
   console.log('Cache stats:', cacheManager.getAllStats())
@@ -128,58 +121,6 @@ async function highPerformanceExample() {
 async function costOptimizedExample() {
   console.log('=== Cost-Optimized Configuration ===\n')
 
-  const configManager = new RAGConfigManager({
-    // Maximum caching to minimize API calls
-    cache: {
-      embedding: {
-        enabled: true,
-        maxSize: 100000, // Very large cache
-        ttl: 14400000, // 4 hours
-      },
-      query: {
-        enabled: true,
-        maxSize: 10000,
-        ttl: 1800000, // 30 minutes
-      },
-    },
-
-    // Batch processing to reduce calls
-    embeddings: {
-      cacheEnabled: true,
-      batchSize: 100, // Large batches
-      batchDelay: 200, // Slower but more efficient
-    },
-
-    // Aggressive rate limiting to avoid overage fees
-    rateLimiting: {
-      enabled: true,
-      algorithm: 'adaptive',
-      tokensPerInterval: 100,
-      intervalMs: 60000,
-      maxBurst: 120,
-      adaptiveBackoff: {
-        enabled: true,
-        initialDelay: 200,
-        maxDelay: 10000,
-        multiplier: 2,
-      },
-    },
-
-    // Simple diversity (less processing)
-    diversity: {
-      algorithm: 'basic',
-    },
-
-    // Lower token budgets
-    query: {
-      tokenBudget: {
-        default: 3000,
-        simple: { context: 70, critique: 0, refinement: 30 },
-        normal: { context: 50, critique: 25, refinement: 25 },
-        complex: { context: 40, critique: 30, refinement: 30 },
-      },
-    },
-  })
 
   console.log('✅ Configured for cost optimization')
   console.log('Expected savings: 80-90% on embedding costs')
@@ -191,55 +132,6 @@ async function costOptimizedExample() {
 async function qualityFirstExample() {
   console.log('=== Quality-First Configuration ===\n')
 
-  const configManager = new RAGConfigManager({
-    // Enhanced diversity for best results
-    diversity: {
-      enabled: true,
-      algorithm: 'enhanced', // Multi-stage selection
-      enhanced: {
-        baseChunksPerDoc: 'weighted',
-        maxChunksPerDoc: 60, // Less single-doc dominance
-        similarityWeight: 0.5, // Balance with other factors
-        importanceWeight: 0.3,
-        temporalWeight: 0.1, // Consider time spread
-        positionWeight: 0.05, // Consider document position
-        topicWeight: 0.05, // Consider topic diversity
-        similarityExponent: 0.8,
-        importanceExponent: 0.6,
-      },
-      mmr: {
-        lambda: 0.6, // More diversity
-        iterations: 5, // More iterations
-      },
-    },
-
-    // Always use complex 3-phase processing
-    query: {
-      tokenBudget: {
-        default: 8000, // Large budget for quality
-        simple: { context: 40, critique: 30, refinement: 30 }, // Even simple gets critique
-        normal: { context: 35, critique: 35, refinement: 30 },
-        complex: { context: 30, critique: 40, refinement: 30 },
-      },
-      confidenceThresholds: {
-        earlyTermination: 0.95, // Rarely skip phases
-        rerank: 0.6,
-        fallback: 0.4,
-      },
-    },
-
-    // Comprehensive validation
-    validation: {
-      enabled: true,
-      strictMode: true,
-      checks: {
-        embeddingDimensions: true,
-        embeddingValues: true,
-        documentStructure: true,
-        metadataCompleteness: true,
-      },
-    },
-  })
 
   console.log('✅ Configured for maximum quality')
 }
@@ -391,7 +283,7 @@ async function circuitBreakerExample() {
         return 'Success'
       })
       console.log(`Request ${i + 1}: ✅ Success`)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.log(`Request ${i + 1}: ❌ ${error.message}`)
     }
 
@@ -404,38 +296,10 @@ async function circuitBreakerExample() {
   }
 }
 
-/**
- * Main execution
- */
-async function main() {
-  console.log('🚀 QuantumPDF Optimization Examples\n')
-  console.log('=' .repeat(60) + '\n')
-
-  try {
-    // Run all examples
-    // await basicOptimizedExample()
-    // await highPerformanceExample()
-    // await costOptimizedExample()
-    // await qualityFirstExample()
-    await diversityExample()
-    // await telemetryExample()
-    // await circuitBreakerExample()
-
-    console.log('\n✅ All examples completed successfully!')
-  } catch (error) {
-    console.error('\n❌ Error running examples:', error)
-  }
-}
 
 // Uncomment to run
 // main()
 
 export {
-  basicOptimizedExample,
-  highPerformanceExample,
-  costOptimizedExample,
-  qualityFirstExample,
-  diversityExample,
-  telemetryExample,
-  circuitBreakerExample,
+    basicOptimizedExample, circuitBreakerExample, costOptimizedExample, diversityExample, highPerformanceExample, qualityFirstExample, telemetryExample
 }

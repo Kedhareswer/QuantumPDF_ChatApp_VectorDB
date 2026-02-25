@@ -1,6 +1,6 @@
 'use client';
 
-import type { ExtractedEquation } from "@/types/multimodal-types"
+import type { ExtractedEquation } from "@/types/multimodal-types";
 
 export interface EquationExtractionOptions {
   maxEquations?: number
@@ -91,7 +91,6 @@ export class EquationExtractor {
         i,
         documentId,
         pageNumber,
-        mergedOptions,
       )
 
       // Detect symbolic equations
@@ -100,7 +99,6 @@ export class EquationExtractor {
         i,
         documentId,
         pageNumber,
-        mergedOptions,
       )
 
       this.extractedEquations.push(...latexEquations, ...symbolicEquations)
@@ -117,7 +115,7 @@ export class EquationExtractor {
    * Extract equations from PDF pages using regex-based pattern detection
    */
   async extractFromPDF(
-    pdf: any, // PDFDocumentProxy
+    pdf: unknown, // PDFDocumentProxy
     documentId: string,
     options: EquationExtractionOptions = {},
     onProgress?: (progress: EquationExtractionProgress) => void,
@@ -151,7 +149,7 @@ export class EquationExtractor {
 
         const page = await pdf.getPage(pageNum)
         const textContent = await page.getTextContent()
-        const pageText = textContent.items.map((item: any) => item.str).join(' ')
+        const pageText = textContent.items.map((item: unknown) => item.str).join(' ')
 
         const pageEquations = await this.extractFromText(
           pageText,
@@ -205,7 +203,6 @@ export class EquationExtractor {
     lineNumber: number,
     documentId: string,
     pageNumber?: number,
-    options?: Partial<EquationExtractionOptions>,
   ): ExtractedEquation[] {
     const equations: ExtractedEquation[] = []
 
@@ -249,7 +246,6 @@ export class EquationExtractor {
     lineNumber: number,
     documentId: string,
     pageNumber?: number,
-    options?: Partial<EquationExtractionOptions>,
   ): ExtractedEquation[] {
     const equations: ExtractedEquation[] = []
 

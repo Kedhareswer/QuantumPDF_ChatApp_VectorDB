@@ -6,7 +6,7 @@
 import { AIClient } from './ai-client'
 
 // PDF.js will be dynamically imported only in browser context to avoid server-side DOMMatrix issues
-let pdfjsLib: any = null
+let pdfjsLib: unknown = null
 
 async function getPdfjs() {
   if (typeof window === 'undefined') {
@@ -43,7 +43,7 @@ export interface ProcessedContent {
   chunks: Array<{
     id: string
     content: string
-    metadata: Record<string, any>
+    metadata: Record<string, unknown>
   }>
   error?: string
 }
@@ -78,7 +78,7 @@ export class EnhancedURLProcessor {
 
     if (this.config.aiConfig) {
       this.aiClient = new AIClient({
-        provider: this.config.aiConfig.provider as any,
+        provider: this.config.aiConfig.provider as unknown,
         apiKey: this.config.aiConfig.apiKey,
         model: this.config.aiConfig.model,
         baseUrl: this.config.aiConfig.baseUrl
@@ -207,7 +207,7 @@ export class EnhancedURLProcessor {
       // Extract text using PDF.js
       let extractedText = ''
       let pageCount = 0
-      let pdfMetadata: any = {}
+      let pdfMetadata: unknown = {}
 
       try {
         const pdfjs = await getPdfjs()
@@ -260,8 +260,8 @@ export class EnhancedURLProcessor {
             const page = await pdf.getPage(i)
             const textContent = await page.getTextContent()
             const pageText = textContent.items
-              .filter((item: any) => 'str' in item)
-              .map((item: any) => item.str)
+              .filter((item: unknown) => 'str' in item)
+              .map((item: unknown) => item.str)
               .join(' ')
             
             if (pageText.trim()) {
@@ -425,7 +425,7 @@ For full content analysis of image-based PDFs:
     return ''
   }
 
-  private parseArxivXML(xml: string): any {
+  private parseArxivXML(xml: string): unknown {
     const entry = xml.split('<entry>')[1]?.split('</entry>')[0]
     if (!entry) return {}
 
@@ -444,7 +444,7 @@ For full content analysis of image-based PDFs:
     }
   }
 
-  private combineArxivContent(metadata: any, abstractContent: string): string {
+  private combineArxivContent(metadata: unknown, abstractContent: string): string {
     let content = ''
     
     if (metadata.title) {
@@ -473,7 +473,7 @@ For full content analysis of image-based PDFs:
     return content
   }
 
-  private createContentChunks(content: string, url: string, metadata: any): Array<{ id: string; content: string; metadata: Record<string, any> }> {
+  private createContentChunks(content: string, url: string, metadata: unknown): Array<{ id: string; content: string; metadata: Record<string, unknown> }> {
     const chunks = []
     const chunkSize = this.config.chunkSize!
     const overlap = this.config.chunkOverlap!

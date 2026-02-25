@@ -21,7 +21,7 @@ export interface VectorDocument {
     chunkIndex: number;
     documentId: string;
     timestamp: Date;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -29,12 +29,12 @@ export interface SearchResult {
   id: string;
   content: string;
   score: number;
-  metadata: any;
+  metadata: unknown;
 }
 
 export interface SearchOptions {
   mode: "semantic" | "keyword" | "hybrid";
-  filters?: Record<string, any>;
+  filters?: Record<string, unknown>;
   limit?: number;
   threshold?: number;
 }

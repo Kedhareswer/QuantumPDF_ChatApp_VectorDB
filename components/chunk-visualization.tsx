@@ -1,12 +1,12 @@
 "use client"
 
-import React, { useState } from "react"
-import { Layers, ChevronDown, ChevronUp, FileText, Target } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { ChevronDown, ChevronUp, FileText, Layers, Target } from "lucide-react"
+import { useState } from "react"
 
 interface RetrievedChunk {
   content: string

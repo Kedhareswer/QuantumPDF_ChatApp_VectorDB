@@ -1,17 +1,17 @@
 "use client"
 
-import React, { useState } from "react"
-import { Download, FileText, File, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
+import { Copy, Download, File, FileText } from "lucide-react"
+import { useState } from "react"
 
 interface Message {
   id: string

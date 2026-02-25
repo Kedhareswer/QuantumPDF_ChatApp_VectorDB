@@ -1,12 +1,26 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs"
+
+export const runtime = "nodejs"
+
+function normalizePageText(items: Array<{ str?: string; hasEOL?: boolean }>): string {
+  let pageText = ""
+  for (const item of items) {
+    const fragment = typeof item.str === "string" ? item.str : ""
+    if (!fragment) continue
+    pageText += fragment
+    pageText += item.hasEOL ? "\n" : " "
+  }
+  return pageText.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " ").trim()
+}
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
   try {
     const formData = await request.formData()
-    const file = formData.get("pdf") as File
+    const file = formData.get("pdf")
 
-    if (!file) {
+    if (!(file instanceof File)) {
       return NextResponse.json({ success: false, error: "No PDF file provided" }, { status: 400 })
     }
 
@@ -18,112 +32,94 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "File size exceeds 50MB limit" }, { status: 400 })
     }
 
-    // Read the PDF file
     const buffer = await file.arrayBuffer()
     const uint8Array = new Uint8Array(buffer)
 
-    // Basic PDF text extraction attempt
-    let extractedText = ""
+    const loadingTask = getDocument({
+      data: uint8Array,
+      disableWorker: true,
+      isEvalSupported: false,
+      useSystemFonts: true,
+      stopAtErrors: false,
+      verbosity: 0,
+    })
+    const pdf = await loadingTask.promise
 
+    const pageTexts: string[] = []
+    let failedPages = 0
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      try {
+        const page = await pdf.getPage(pageNum)
+        const textContent = await page.getTextContent()
+        const normalized = normalizePageText(textContent.items as Array<{ str?: string; hasEOL?: boolean }>)
+        if (normalized) {
+          pageTexts.push(normalized)
+        }
+      } catch (pageError) {
+        failedPages++
+        console.warn(`Failed to extract page ${pageNum}:`, pageError)
+      }
+    }
+
+    const extractedText = pageTexts.join("\n\n").trim()
+
+    let info: Record<string, unknown> = {}
+    let metadataRaw: unknown
     try {
-      // Convert buffer to string and look for text patterns
-      const pdfString = new TextDecoder("latin1").decode(uint8Array)
-
-      // Extract text between common PDF text markers
-      const textMatches = pdfString.match(/\$\$([^)]+)\$\$/g) || []
-      // Replace /s flag with [\s\S] to match any character including newlines
-      const streamMatches = pdfString.match(/stream\s*([\s\S]*?)\s*endstream/g) || []
-
-      // Process parentheses-enclosed text (common in PDFs)
-      const parenthesesText = textMatches
-        .map((match) => match.slice(1, -1)) // Remove parentheses
-        .filter((text) => text.length > 2 && /[a-zA-Z]/.test(text)) // Filter meaningful text
-        .join(" ")
-
-      // Process stream content
-      const streamText = streamMatches
-        .map((match) => match.replace(/stream\s*|\s*endstream/g, ""))
-        .join(" ")
-        .replace(/[^\x20-\x7E]/g, " ") // Keep only printable ASCII
-        .replace(/\s+/g, " ")
-        .trim()
-
-      extractedText = [parenthesesText, streamText]
-        .filter((text) => text.length > 10)
-        .join("\n\n")
-        .trim()
-    } catch (extractionError) {
-      console.warn("Basic extraction failed:", extractionError)
+      const metadata = await pdf.getMetadata()
+      info = (metadata.info as Record<string, unknown>) || {}
+      metadataRaw = metadata.metadata
+    } catch {
+      // Metadata extraction is optional
     }
 
-    // If no meaningful text was extracted, provide a structured response
-    if (!extractedText || extractedText.length < 50) {
-      extractedText = `# Server-Side PDF Processing Result
+    await pdf.destroy()
 
-## Document: ${file.name}
-
-### File Information
-- **Filename**: ${file.name}
-- **Size**: ${(file.size / 1024 / 1024).toFixed(2)} MB
-- **Processing Date**: ${new Date().toLocaleString()}
-- **Processing Method**: Server-side extraction
-- **Buffer Size**: ${buffer.byteLength} bytes
-
-### Processing Summary
-This document was processed using server-side PDF extraction capabilities. The server successfully received and analyzed the PDF file structure.
-
-### Extraction Results
-The PDF appears to be image-based or uses complex formatting that requires specialized processing tools.
-
-### Recommended Next Steps:
-1. **Use Text-Based PDFs**: If possible, obtain a text-based version of this document
-2. **Manual Text Entry**: Copy and paste the content manually using the text input option
-3. **OCR Tools**: Use external OCR software like Adobe Acrobat or online OCR services
-4. **Format Conversion**: Convert the PDF to Word or plain text format using online converters
-
-### Technical Details
-The server-side processor examined the PDF binary structure and extracted available metadata. For production use, this would integrate with libraries such as:
-
-#### Recommended Libraries:
-- **pdf-parse**: For basic text extraction from text-based PDFs
-- **pdf2pic**: For converting PDF pages to images for OCR processing  
-- **node-poppler**: For advanced PDF manipulation and text extraction
-- **tesseract.js**: For OCR processing of image-based content
-- **pdf-lib**: For PDF creation and modification
-
-### File Analysis
-- **File Type**: ${file.type}
-- **File Size**: ${file.size} bytes
-- **Processing Time**: ${Date.now() - startTime} ms
-- **Status**: Processed successfully (limited text extraction)
-
-This server-side processing provides a foundation for more advanced PDF text extraction capabilities.`
+    if (!extractedText) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No extractable text found. The PDF may be scanned/image-based.",
+          metadata: {
+            title: String(info.Title || file.name),
+            author: String(info.Author || ""),
+            subject: String(info.Subject || ""),
+            creator: String(info.Creator || ""),
+            producer: String(info.Producer || ""),
+            pages: pdf.numPages,
+            fileSize: file.size,
+            processingMethod: "pdfjs-dist-server",
+            extractionQuality: "none",
+            successfulPages: Math.max(0, pdf.numPages - failedPages),
+            failedPages,
+            hasMetadata: !!metadataRaw,
+          },
+          processingTime: Date.now() - startTime,
+        },
+        { status: 422 },
+      )
     }
-
-    const metadata = {
-      title: file.name,
-      author: "Server Processor",
-      subject: "Server-side extracted content",
-      creator: "PDF RAG System",
-      producer: "Server-side PDF Processor",
-      creationDate: new Date(),
-      modificationDate: new Date(),
-      pages: 1, // Estimated
-      fileSize: file.size,
-      processingMethod: "Server-side",
-      extractionQuality: extractedText.length > 200 ? "medium" : "low",
-      language: "English",
-      successfulPages: extractedText.length > 200 ? 1 : 0,
-      failedPages: extractedText.length > 200 ? 0 : 1,
-    }
-
-    const processingTime = Date.now() - startTime
 
     return NextResponse.json({
       success: true,
       text: extractedText,
-      metadata,
-      processingTime,
+      metadata: {
+        title: String(info.Title || file.name),
+        author: String(info.Author || ""),
+        subject: String(info.Subject || ""),
+        creator: String(info.Creator || ""),
+        producer: String(info.Producer || ""),
+        creationDate: typeof info.CreationDate === "string" ? info.CreationDate : undefined,
+        modificationDate: typeof info.ModDate === "string" ? info.ModDate : undefined,
+        pages: pdf.numPages,
+        fileSize: file.size,
+        processingMethod: "pdfjs-dist-server",
+        extractionQuality: extractedText.length > 500 ? "high" : "medium",
+        successfulPages: Math.max(0, pdf.numPages - failedPages),
+        failedPages,
+        hasMetadata: !!metadataRaw,
+      },
+      processingTime: Date.now() - startTime,
     })
   } catch (error) {
     console.error("Server PDF processing error:", error)

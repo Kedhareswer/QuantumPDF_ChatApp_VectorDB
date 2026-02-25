@@ -28,10 +28,10 @@ export interface LocalSummarizerResult {
 }
 
 // Cache for the loaded pipeline to avoid re-loading
-let summarizationPipeline: any = null
-let textGenerationPipeline: any = null
-let pipelineLoadingPromise: Promise<any> | null = null
-let generationLoadingPromise: Promise<any> | null = null
+let summarizationPipeline: unknown = null
+let textGenerationPipeline: unknown = null
+let pipelineLoadingPromise: Promise<unknown> | null = null
+let generationLoadingPromise: Promise<unknown> | null = null
 
 /**
  * Local Summarizer using Transformers.js
@@ -48,7 +48,7 @@ export class LocalSummarizer {
   /**
    * Load the summarization model (lazy loaded on first use)
    */
-  private async loadPipeline(): Promise<any> {
+  private async loadPipeline(): Promise<unknown> {
     if (summarizationPipeline) {
       return summarizationPipeline
     }
@@ -64,7 +64,7 @@ export class LocalSummarizer {
       try {
         console.log(`LocalSummarizer: Loading model ${this.modelName}...`)
         const { pipeline } = await import('@xenova/transformers')
-        const typedPipeline = pipeline as any
+        const typedPipeline = pipeline as unknown
         
         summarizationPipeline = await typedPipeline('summarization', this.modelName, {
           quantized: true, // Use quantized model for faster loading
@@ -87,7 +87,7 @@ export class LocalSummarizer {
   /**
    * Load the text generation model for explanations
    */
-  private async loadGenerationPipeline(): Promise<any> {
+  private async loadGenerationPipeline(): Promise<unknown> {
     if (textGenerationPipeline) {
       return textGenerationPipeline
     }
@@ -100,7 +100,7 @@ export class LocalSummarizer {
       try {
         console.log('LocalSummarizer: Loading text generation model...')
         const { pipeline } = await import('@xenova/transformers')
-        const typedPipeline = pipeline as any
+        const typedPipeline = pipeline as unknown
         
         // Use a small, fast text generation model
         textGenerationPipeline = await typedPipeline('text-generation', 'Xenova/distilgpt2', {

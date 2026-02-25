@@ -5,7 +5,7 @@
  * These agents run after core RAG retrieval to provide domain-specific analysis
  */
 
-import { getLocalSummarizer } from './local-summarizer'
+import { getLocalSummarizer } from './local-summarizer';
 
 export type AgentType = 
   | 'analogy-maker' 
@@ -24,20 +24,20 @@ export interface AgentInput {
     similarity: number
     chunkType?: string
   }>
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface AgentOutput {
   agentType: AgentType
   result: string
   confidence: number
-  details?: Record<string, any>
+  details?: Record<string, unknown>
   processingTime: number
 }
 
 export interface AgentConfig {
   enabled: boolean
-  aiClient?: any // AIClient instance for LLM-powered agents
+  aiClient?: unknown // AIClient instance for LLM-powered agents
   useLocalModels?: boolean
 }
 
@@ -55,7 +55,7 @@ abstract class BaseAgent {
 
   abstract process(input: AgentInput): Promise<AgentOutput>
 
-  protected createOutput(result: string, confidence: number, details?: Record<string, any>, startTime?: number): AgentOutput {
+  protected createOutput(result: string, confidence: number, details?: Record<string, unknown>, startTime?: number): AgentOutput {
     return {
       agentType: this.name,
       result,
@@ -627,11 +627,15 @@ export class ExplainerAgent extends BaseAgent {
   }
 
   private async explainWithAI(input: AgentInput, processes: Array<{ step: string; order: number }>): Promise<string> {
-    const processesText = processes.map(p => `${p.order}. ${p.step}`).join('\n')
-    
+    const processSummary = processes.length > 0
+      ? processes.map(p => `${p.order}. ${p.step}`).join('\n')
+      : 'No explicit ordered steps were extracted; infer a coherent sequence from context.'
     const prompt = `Based on the following context about "${input.question}":
 
 ${input.context.substring(0, 2500)}
+
+Detected process steps:
+${processSummary}
 
 Provide a clear, step-by-step explanation that:
 1. Breaks down the process or concept into logical steps
@@ -690,7 +694,7 @@ export class FactCheckerAgent extends BaseAgent {
 
     try {
       // Extract claims and facts from the question
-      const claims = this.extractClaims(input.question, input.context)
+      const claims = this.extractClaims(input.question)
       
       if (claims.length === 0) {
         return this.createOutput(
@@ -734,7 +738,7 @@ export class FactCheckerAgent extends BaseAgent {
     }
   }
 
-  private extractClaims(question: string, context: string): Array<{ claim: string; type: 'statistic' | 'fact' | 'statement' }> {
+  private extractClaims(question: string): Array<{ claim: string; type: 'statistic' | 'fact' | 'statement' }> {
     const claims: Array<{ claim: string; type: 'statistic' | 'fact' | 'statement' }> = []
     
     // Extract statistics (numbers with % or units)
@@ -909,8 +913,6 @@ export class AgentManager {
    */
   selectAgentsForQuery(question: string, context: string): AgentType[] {
     const selected: AgentType[] = []
-    const lowerQuestion = question.toLowerCase()
-    const lowerContext = context.toLowerCase()
 
     // Analogy Maker: Questions asking for explanations, comparisons, or "like what"
     if (

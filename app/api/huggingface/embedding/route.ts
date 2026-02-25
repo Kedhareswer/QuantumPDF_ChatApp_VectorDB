@@ -1,5 +1,5 @@
-import { type NextRequest, NextResponse } from "next/server";
 import { InferenceClient } from "@huggingface/inference";
+import { type NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
   let embeddingModel: string = "sentence-transformers/all-MiniLM-L6-v2"; // Default model
@@ -48,8 +48,8 @@ export async function POST(request: NextRequest) {
       } else {
         throw new Error("Unexpected embedding response format: array contains non-numeric elements or invalid structure");
       }
-    } else if (typeof response === 'object' && response !== null && 'embedding' in response && Array.isArray((response as any).embedding)) {
-      embedding = (response as any).embedding as number[];
+    } else if (typeof response === 'object' && response !== null && 'embedding' in response && Array.isArray((response as unknown).embedding)) {
+      embedding = (response as unknown).embedding as number[];
     } else {
       throw new Error("Unexpected embedding response format: not an array or a known object structure");
     }

@@ -175,7 +175,6 @@ export function enhancedKeywordSimilarity(query: string, content: string): numbe
     queryTerms.push(...originalTerms)
   }
 
-  let totalScore = 0
   let matchedTerms = 0
 
   for (const term of queryTerms) {
@@ -185,14 +184,6 @@ export function enhancedKeywordSimilarity(query: string, content: string): numbe
     // Exact term match
     if (contentTerms.has(term)) {
       matchedTerms++
-      // Count frequency with safe regex
-      try {
-        const regex = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi')
-        const frequency = (contentLower.match(regex) || []).length
-        totalScore += Math.min(1.5, 1 + Math.log10(frequency + 1) * 0.3)
-      } catch {
-        totalScore += 1
-      }
     }
     // Partial/stem match (for longer words only)
     else if (term.length > 4) {
@@ -201,7 +192,6 @@ export function enhancedKeywordSimilarity(query: string, content: string): numbe
       )
       if (hasPartialMatch) {
         matchedTerms += 0.5
-        totalScore += 0.5
       }
     }
   }

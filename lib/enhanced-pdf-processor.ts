@@ -1,16 +1,16 @@
 'use client';
 
-import { AdvancedChunker, type TextChunk } from "./advanced-chunking"
-import { BrowserOCRProcessor } from "./ocr-processor"
-import Papa from "papaparse"
-import * as XLSX from "xlsx"
-import type { MultimodalMetadata } from "@/types/multimodal-types"
-import { PDFImageExtractor, type PagePreviewExtractionOptions } from "./image-extractor"
-import { PDFTableExtractor } from "./table-extractor"
-import { EquationExtractor } from "./equation-extractor"
+import type { MultimodalMetadata } from "@/types/multimodal-types";
+import Papa from "papaparse";
+import * as XLSX from "xlsx";
+import { AdvancedChunker, type TextChunk } from "./advanced-chunking";
+import { EquationExtractor } from "./equation-extractor";
+import { PDFImageExtractor } from "./image-extractor";
+import { BrowserOCRProcessor } from "./ocr-processor";
+import { PDFTableExtractor } from "./table-extractor";
 
 // Import from our new client-only wrapper
-import { loadPdfJs, getPdfJs, isPdfJsLoaded } from "./pdf-client"
+import { loadPdfJs } from "./pdf-client";
 
 interface EnhancedPDFProcessorOptions {
   enableOCR?: boolean
@@ -65,12 +65,12 @@ const SUPPORTED_DOCUMENT_TYPES: Record<
 
 // Define a type for the PDF.js library to avoid TypeScript errors
 type PDFJSLib = {
-  getDocument: any;
-  GlobalWorkerOptions: any;
+  getDocument: unknown;
+  GlobalWorkerOptions: unknown;
   version: string;
-  PDFWorker: any;
-  AnnotationLayer: any;
-  renderTextLayer: any;
+  PDFWorker: unknown;
+  AnnotationLayer: unknown;
+  renderTextLayer: unknown;
 }
 
 export interface PDFProcessingResult {
@@ -172,7 +172,7 @@ export class EnhancedPDFProcessor {
   }
 
   private async extractPdfMultimodalMetadata(
-    pdf: any,
+    pdf: unknown,
     file: File,
     documentId: string,
     onProgress?: (progress: ProcessingProgress) => void,
@@ -235,7 +235,7 @@ export class EnhancedPDFProcessor {
       const allImages = [...previewExtraction.images, ...inlineExtraction.images]
 
       // Extract tables if enabled
-      let tableExtraction: { tables: any[]; totalFound: number; extractionTime: number } = { tables: [], totalFound: 0, extractionTime: 0 }
+      let tableExtraction: { tables: unknown[]; totalFound: number; extractionTime: number } = { tables: [], totalFound: 0, extractionTime: 0 }
       if (this.options.extractTables) {
         if (!this.tableExtractor) {
           this.tableExtractor = new PDFTableExtractor()
@@ -262,7 +262,7 @@ export class EnhancedPDFProcessor {
       }
 
       // Extract equations if enabled
-      let equationExtraction: { equations: any[]; totalFound: number; extractionTime: number } = { equations: [], totalFound: 0, extractionTime: 0 }
+      let equationExtraction: { equations: unknown[]; totalFound: number; extractionTime: number } = { equations: [], totalFound: 0, extractionTime: 0 }
       if (this.options.extractEquations) {
         if (!this.equationExtractor) {
           this.equationExtractor = new EquationExtractor()
@@ -600,7 +600,7 @@ export class EnhancedPDFProcessor {
       method: "Enhanced PDF.js",
     })
 
-    let metadata: any = {}
+    let metadata: unknown = {}
     try {
       const metadataResult = await pdf.getMetadata()
       metadata = metadataResult.info || {}
@@ -982,7 +982,6 @@ export class EnhancedPDFProcessor {
       }
     }
 
-    const pageCount = successfulPages + failedPages
 
     if (!fullText.trim() || successfulPages === 0) {
       warnings.push("OCR fallback completed but produced limited results. Document may require manual review.")
@@ -1032,7 +1031,7 @@ export class EnhancedPDFProcessor {
   }
 
   private async extractTextWithEnhancedMethod(
-    pdf: any,
+    pdf: unknown,
     onProgress?: (progress: ProcessingProgress) => void,
     warnings: string[] = [],
   ): Promise<{
@@ -1098,7 +1097,7 @@ export class EnhancedPDFProcessor {
   }
 
   private async extractPageTextEnhanced(
-    page: any,
+    page: unknown,
     pageNum: number
   ): Promise<{ text: string; confidence: number }> {
     try {
@@ -1124,7 +1123,7 @@ export class EnhancedPDFProcessor {
     }
   }
 
-  private formatTextContentEnhanced(textContent: any): string {
+  private formatTextContentEnhanced(textContent: unknown): string {
     if (!textContent?.items) return "";
 
     let text = "";
@@ -1185,6 +1184,8 @@ export class EnhancedPDFProcessor {
     if (text.includes("\n\n")) confidence += 5;
     if (/[.!?]/.test(text)) confidence += 5;
     if (/[A-Z][a-z]/.test(text)) confidence += 5;
+    if (itemCount > 50) confidence += 5;
+    if (itemCount < 5) confidence -= 10;
 
     if (text.length < 50) confidence -= 20;
     if (!/[a-zA-Z]/.test(text)) confidence -= 30;
@@ -1237,7 +1238,7 @@ export class EnhancedPDFProcessor {
     return bestScore > 5 ? bestMatch : "Unknown"
   }
 
-  private createDetailedFallbackContent(file: File, error: any, processingTime: number): string {
+  private createDetailedFallbackContent(file: File, error: unknown, processingTime: number): string {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
 
     return `# PDF Processing Report: ${file.name}

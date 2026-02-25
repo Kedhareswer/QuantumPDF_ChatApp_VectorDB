@@ -1,7 +1,7 @@
 'use client';
 
-import type { ExtractedImage, ImageAnalysisResult } from "@/types/multimodal-types"
-import { VisionModelService, ChartClassifier, type VisionModelConfig } from "./vision-models"
+import type { ExtractedImage, ImageAnalysisResult } from "@/types/multimodal-types";
+import { ChartClassifier, VisionModelService, type VisionModelConfig } from "./vision-models";
 
 export interface CaptioningOptions {
   provider?: 'huggingface' | 'openai' | 'anthropic' | 'transformers-js' | 'local'
@@ -89,7 +89,7 @@ export class ImageCaptioner {
     }
 
     const config: VisionModelConfig = {
-      provider: options.provider as any,
+      provider: options.provider as unknown,
       apiKey: options.apiKey,
       model: options.model,
     }
@@ -252,7 +252,7 @@ export class ImageCaptioner {
       // Initialize vision service with the new API key
       this.initializeVisionService({
         ...this.defaultOptions,
-        provider: provider as any,
+        provider: provider as unknown,
         apiKey: key,
       })
     }

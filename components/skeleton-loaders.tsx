@@ -1,8 +1,8 @@
 "use client"
 
-import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Loader2, Brain, MessageSquare, FileText, Upload, Zap } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Brain, FileText, Loader2, MessageSquare, Upload, Zap } from "lucide-react"
 
 // Enhanced Chat Message Skeleton with typing animation
 export function ChatMessageSkeleton() {

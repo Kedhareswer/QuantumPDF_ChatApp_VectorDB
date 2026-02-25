@@ -5,10 +5,13 @@
  * Usage: node scripts/create-pwa-icons.js
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const publicDir = path.join(__dirname, '..', 'public');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.join(__dirname, "..", "public");
 
 const iconSizes = [
   { size: 72, name: 'icon-72.png' },

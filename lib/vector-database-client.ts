@@ -3,7 +3,7 @@
  * Uses API routes to communicate with the server-side vector database
  */
 
-import type { SearchResult, VectorDBConfig, VectorDocument, SearchOptions } from '@/lib/vector-database-types';
+import type { SearchOptions, SearchResult, VectorDBConfig, VectorDocument } from '@/lib/vector-database-types';
 
 // Using the same config type as the server-side implementation
 export type VectorDBClientConfig = VectorDBConfig;
@@ -97,7 +97,7 @@ export class VectorDatabaseClient {
     }
   }
 
-  private async callAPI(action: string, data: any): Promise<any> {
+  private async callAPI(action: string, data: unknown): Promise<unknown> {
     const response = await fetch("/api/vector-db", {
       method: "POST",
       headers: {

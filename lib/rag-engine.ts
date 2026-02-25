@@ -9,7 +9,7 @@ export interface RAGResponse {
   sources: Array<{
     text: string
     similarity: number
-    metadata: Record<string, any>
+    metadata: Record<string, unknown>
   }>
   confidence: number
 }
@@ -42,43 +42,41 @@ interface EnhancedQueryResponse {
     responseTokens: number
     totalTokens: number
   }
+  queryAnalysis?: {
+    originalQuery: string
+    rewrittenQuery: string
+    queryType: string
+    complexity: "simple" | "moderate" | "complex"
+    requiresHyDE: boolean
+    requiresStepBack: boolean
+    alternativeQueries: string[]
+    hasHypotheticalAnswer: boolean
+    hasStepBackQuestion: boolean
+    confidence: number
+  }
   groundednessScore?: number // Score 0-1 indicating how well response is grounded in retrieved chunks
   hallucinationDetected?: boolean // Flag indicating if hallucinations were detected
 }
 
-interface ProcessingPhase {
-  name: string
-  tokenBudget: number
-  completed: boolean
-  result?: any
-}
 
-interface QualityGate {
-  name: string
-  passed: boolean
-  issues: string[]
-  confidence: number
-}
 
-import { AIClient } from "./ai-client"
-import { PDFParser } from "./pdf-parser"
 import type { TextChunk } from "./advanced-chunking"
-import { DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
-import { getTelemetry } from "./telemetry"
-import { 
-  Guardrails, 
-  Evaluations, 
-  createQueryEvaluation, 
-  storeEvaluation,
-  checkRateLimit,
-  type QueryEvaluation 
+import { AIClient } from "./ai-client"
+import {
+    Evaluations,
+    Guardrails,
+    checkRateLimit,
+    createQueryEvaluation,
+    storeEvaluation
 } from "./guardrails"
-import { 
-  QueryProcessor, 
-  getQueryProcessor, 
-  type QueryAnalysis,
-  type CachedResponse 
+import { PDFParser } from "./pdf-parser"
+import {
+    QueryProcessor,
+    getQueryProcessor,
+    type QueryAnalysis
 } from "./query-processor"
+import { getTelemetry } from "./telemetry"
+import { DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
 
 interface Document {
   id: string
@@ -87,7 +85,7 @@ interface Document {
   chunks: string[] | TextChunk[] // Support both simple strings and rich TextChunk objects
   embeddings: number[][]
   uploadedAt: Date
-  metadata?: any
+  metadata?: unknown
 }
 
 interface QueryResponse {
@@ -157,8 +155,6 @@ export class RAGEngine {
   private pdfParser: PDFParser
   private isInitialized = false
   private currentConfig: AIConfig | null = null
-  private tokenBudget = 4000 // Default token budget
-  private showThinking = false // Option to show/hide thinking process
   
   // Advanced query processing
   private queryProcessor: QueryProcessor
@@ -312,7 +308,7 @@ export class RAGEngine {
         console.log("Re-generating embeddings for existing documents...")
         for (const document of this.documents) {
           if (document.chunks && document.chunks.length > 0) {
-            const plainChunks = this.toPlainChunks(document.chunks as any)
+            const plainChunks = this.toPlainChunks(document.chunks as unknown)
             document.embeddings = await this.aiClient.generateEmbeddings(plainChunks)
           }
         }
@@ -433,7 +429,15 @@ export class RAGEngine {
     }
   }
 
-  async addDocument(document: Document) {
+  async addDocument(
+    document: Document,
+    onEmbeddingProgress?: (progress: {
+      completed: number
+      total: number
+      textPreview: string
+      documentName: string
+    }) => void,
+  ) {
     try {
       console.log("=== RAG Engine: Adding document ===")
       console.log("Document name:", document.name)
@@ -465,7 +469,7 @@ export class RAGEngine {
 
       console.log("First few chunks preview:")
       document.chunks.slice(0, 3).forEach((chunk, i) => {
-        const preview = typeof chunk === 'string' ? chunk.substring(0, 100) : (chunk as any).content?.substring(0, 100) || ''
+        const preview = typeof chunk === 'string' ? chunk.substring(0, 100) : (chunk as unknown).content?.substring(0, 100) || ''
         console.log(`  Chunk ${i}: ${preview}...`)
       })
 
@@ -490,8 +494,13 @@ export class RAGEngine {
         
         try {
           const startTime = Date.now()
-          const plainChunks = this.toPlainChunks(document.chunks as any)
-          document.embeddings = await this.aiClient.generateEmbeddings(plainChunks)
+          const plainChunks = this.toPlainChunks(document.chunks as unknown)
+          document.embeddings = await this.aiClient.generateEmbeddings(plainChunks, (progress) => {
+            onEmbeddingProgress?.({
+              ...progress,
+              documentName: document.name,
+            })
+          })
           const endTime = Date.now()
           console.log(`✅ Embeddings generated successfully in ${endTime - startTime}ms`)
           console.log("- Generated embeddings count:", document.embeddings.length)
@@ -505,6 +514,12 @@ export class RAGEngine {
       } else {
         console.log("✅ Document already has valid embeddings")
         console.log("- Embedding dimensions:", document.embeddings[0]?.length)
+        onEmbeddingProgress?.({
+          completed: document.embeddings.length,
+          total: document.chunks.length,
+          textPreview: "embeddings already available",
+          documentName: document.name,
+        })
       }
 
       // Validate embeddings
@@ -602,7 +617,7 @@ export class RAGEngine {
       semanticImportance: number;
       // Optional metadata
       page?: number;
-      bbox?: any;
+      bbox?: unknown;
       level?: number;
       chunkType?: string;
     }> = [];
@@ -740,8 +755,8 @@ export class RAGEngine {
                   const chunkContent = typeof chunk === 'string' ? chunk : chunk.content
                   const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
 
-                // Calculate exact match boost for identifiers (Article numbers, Section numbers, etc.)
-                const exactMatchBoost = question ? this.calculateExactMatchBoost(question, chunkContent || '') : 0
+                // Combine identifier-style and lexical exact matching
+                const exactMatchBoost = question ? this.calculateCombinedExactMatchBoost(question, chunkContent || '') : 0
 
                 // Hybrid scoring: Combine semantic similarity with exact match boost
                 // If exact match is found, significantly boost the score
@@ -824,6 +839,36 @@ export class RAGEngine {
         return [];
       }
 
+      const isMultiDocQuery = question ? this.isMultiDocumentQuery(question) : false
+      let candidateChunks = allChunks
+
+      // For single-document intent, keep candidates from top-relevance documents only.
+      // This avoids low-relevance cross-document bleed into citations.
+      if (!isMultiDocQuery && documentMetrics.size > 1) {
+        const docScores = Array.from(documentMetrics.entries())
+          .map(([docId, metrics]) => ({ docId, bestSimilarity: metrics.bestSimilarity }))
+          .sort((a, b) => b.bestSimilarity - a.bestSimilarity)
+
+        const globalBest = docScores[0]?.bestSimilarity || 0
+        const minBaseline = (filters?.minSimilarity ?? minSimilarityThreshold) + 0.02
+        const scoreFloor = Math.max(minBaseline, globalBest * 0.72)
+
+        const eligibleDocIds = new Set(
+          docScores
+            .filter(({ bestSimilarity }) => bestSimilarity >= scoreFloor)
+            .map(({ docId }) => docId)
+        )
+
+        if (eligibleDocIds.size === 0 && docScores[0]) {
+          eligibleDocIds.add(docScores[0].docId)
+        }
+
+        candidateChunks = allChunks.filter((chunk) => eligibleDocIds.has(chunk.documentId))
+        console.log(
+          `Single-doc gating: ${candidateChunks.length}/${allChunks.length} chunks retained from ${eligibleDocIds.size} document(s); floor=${scoreFloor.toFixed(3)}`
+        )
+      }
+
       // Step 1: Generate multiple retrieval strategies
       let finalChunks: typeof allChunks = []
       
@@ -831,16 +876,21 @@ export class RAGEngine {
         // If alternative embeddings are provided, use multi-query RRF
         if (alternativeEmbeddings.length > 0) {
           console.log(`Using Multi-Query Reciprocal Rank Fusion with ${alternativeEmbeddings.length + 1} query variations`)
-          finalChunks = this.applyMultiQueryRRF(allChunks, questionEmbedding, alternativeEmbeddings, question, topK, filters)
+          finalChunks = this.applyMultiQueryRRF(candidateChunks, questionEmbedding, alternativeEmbeddings, question, topK)
         } else {
           console.log("Using Reciprocal Rank Fusion (RRF) with multiple retrieval strategies")
-          finalChunks = this.applyReciprocalRankFusion(allChunks, questionEmbedding, question, topK, filters)
+          finalChunks = this.applyReciprocalRankFusion(candidateChunks, questionEmbedding, question, topK)
         }
       } else {
         // Fallback to single strategy with diversity algorithm
         console.log("Using single retrieval strategy with diversity algorithm")
-        const isMultiDoc = question ? this.isMultiDocumentQuery(question) : false
-        finalChunks = this.applyEnhancedDiversityAlgorithm(allChunks, documentMetrics, topK, filters?.minSimilarity ?? minSimilarityThreshold, isMultiDoc)
+        finalChunks = this.applyEnhancedDiversityAlgorithm(
+          candidateChunks,
+          documentMetrics,
+          topK,
+          filters?.minSimilarity ?? minSimilarityThreshold,
+          isMultiDocQuery
+        )
       }
 
       // Step 2: Re-ranking (if enabled)
@@ -899,6 +949,65 @@ export class RAGEngine {
       // No matches
       return 0
     }
+  }
+
+  /**
+   * Lexical exact-match boost for literal query terms and phrases.
+   * This complements identifier matching for non-legal/non-structured queries.
+   */
+  private calculateLexicalExactMatchBoost(query: string, chunkContent: string): number {
+    if (!query || !chunkContent) return 0
+
+    const normalizeText = (text: string) =>
+      text
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+    const stopWords = new Set([
+      "the", "and", "for", "with", "that", "this", "from", "have", "what", "when", "where", "which",
+      "who", "why", "how", "about", "into", "onto", "than", "then", "their", "there", "your", "you",
+      "are", "was", "were", "been", "being", "can", "could", "should", "would", "will", "shall", "may",
+      "might", "must", "does", "did", "done", "has", "had", "not", "but", "out", "any", "all", "per",
+      "our", "its", "his", "her", "them", "they", "also"
+    ])
+
+    const normalizedQuery = normalizeText(query)
+    const normalizedContent = normalizeText(chunkContent)
+
+    if (!normalizedQuery || !normalizedContent) return 0
+
+    const queryTerms = normalizedQuery
+      .split(/\s+/)
+      .filter((term) => term.length > 2 && !stopWords.has(term))
+
+    if (queryTerms.length === 0) return 0
+
+    const uniqueQueryTerms = Array.from(new Set(queryTerms))
+    const contentTermsSet = new Set(normalizedContent.split(/\s+/))
+    const matchedTerms = uniqueQueryTerms.filter((term) => contentTermsSet.has(term)).length
+    const coverage = matchedTerms / uniqueQueryTerms.length
+
+    const phrase = uniqueQueryTerms.join(" ")
+    const phraseMatch = uniqueQueryTerms.length > 1 && normalizedContent.includes(phrase)
+      ? 1
+      : 0
+
+    // Require meaningful overlap to count as an "exact" lexical signal.
+    if (coverage < 0.5 && phraseMatch === 0) return 0
+
+    const lexicalBoost = coverage * 0.8 + phraseMatch * 0.2
+    return Math.min(1, lexicalBoost)
+  }
+
+  /**
+   * Unified exact-match score used by retrieval/reranking.
+   */
+  private calculateCombinedExactMatchBoost(query: string, chunkContent: string): number {
+    const identifierBoost = this.calculateExactMatchBoost(query, chunkContent)
+    const lexicalBoost = this.calculateLexicalExactMatchBoost(query, chunkContent)
+    return Math.max(identifierBoost, lexicalBoost)
   }
 
   /**
@@ -985,14 +1094,13 @@ export class RAGEngine {
       documentName: string;
       semanticImportance: number;
       page?: number;
-      bbox?: any;
+      bbox?: unknown;
       level?: number;
       chunkType?: string;
     }>,
     questionEmbedding: number[],
     question: string,
-    topK: number,
-    filters?: RAGFilterOptions
+    topK: number
   ): typeof allChunks {
     console.log("=== Reciprocal Rank Fusion (RRF) ===")
     const k = 60 // RRF constant (standard value)
@@ -1006,7 +1114,7 @@ export class RAGEngine {
     const exactMatchRanked = [...allChunks]
       .map(chunk => ({
         ...chunk,
-        exactMatchScore: this.calculateExactMatchBoost(question, chunk.content)
+        exactMatchScore: this.calculateCombinedExactMatchBoost(question, chunk.content)
       }))
       .sort((a, b) => {
         // Combine similarity with exact match
@@ -1072,9 +1180,12 @@ export class RAGEngine {
         rrfRanks: entry.ranks
       }))
 
-    // Apply cross-document diversity to RRF results
+    // Apply cross-document diversity only for explicit multi-document queries.
+    // For single-document intent, diversity can surface unrelated documents.
     const isMultiDoc = this.isMultiDocumentQuery(question)
-    const rrfResults = this.applyCrossDocumentDiversity(sortedByRRF, topK, isMultiDoc)
+    const rrfResults = isMultiDoc
+      ? this.applyCrossDocumentDiversity(sortedByRRF, topK, isMultiDoc)
+      : sortedByRRF.slice(0, topK)
 
     console.log(`RRF: Combined ${chunkMap.size} unique chunks from 4 strategies, returning top ${rrfResults.length}`)
     if (rrfResults.length > 0) {
@@ -1174,15 +1285,14 @@ export class RAGEngine {
       documentName: string;
       semanticImportance: number;
       page?: number;
-      bbox?: any;
+      bbox?: unknown;
       level?: number;
       chunkType?: string;
     }>,
     questionEmbedding: number[],
     alternativeEmbeddings: number[][],
     question: string,
-    topK: number,
-    filters?: RAGFilterOptions
+    topK: number
   ): typeof allChunks {
     console.log("=== Multi-Query Reciprocal Rank Fusion ===")
     const k = 60 // RRF constant
@@ -1204,7 +1314,7 @@ export class RAGEngine {
         if (!doc || !doc.embeddings || !doc.chunks) continue
         
         // Find the chunk index
-        const chunkIndex = doc.chunks.findIndex((c, idx) => {
+        const chunkIndex = doc.chunks.findIndex((c) => {
           const cContent = typeof c === 'string' ? c : c.content
           return cContent === chunk.content
         })
@@ -1238,7 +1348,7 @@ export class RAGEngine {
       const doc = this.documents.find(d => d.id === chunk.documentId)
       if (!doc || !doc.chunks) continue
       
-      const chunkIndex = doc.chunks.findIndex((c, idx) => {
+      const chunkIndex = doc.chunks.findIndex((c) => {
         const cContent = typeof c === 'string' ? c : c.content
         return cContent === chunk.content
       })
@@ -1265,7 +1375,7 @@ export class RAGEngine {
         const doc = this.documents.find(d => d.id === chunk.documentId)
         if (!doc || !doc.chunks) return { chunk, rrfScore: 0 }
         
-        const chunkIndex = doc.chunks.findIndex((c, idx) => {
+        const chunkIndex = doc.chunks.findIndex((c) => {
           const cContent = typeof c === 'string' ? c : c.content
           return cContent === chunk.content
         })
@@ -1314,16 +1424,29 @@ export class RAGEngine {
         .trim()
     }
 
+    const stopWords = new Set([
+      "the", "and", "for", "with", "that", "this", "from", "what", "when", "where", "which", "who",
+      "why", "how", "about", "into", "onto", "than", "then", "their", "there", "your", "you", "are",
+      "was", "were", "been", "being", "can", "could", "should", "would", "will", "shall", "may", "might",
+      "must", "does", "did", "done", "has", "had", "not", "but", "out", "any", "all", "per", "our", "its",
+      "his", "her", "them", "they", "also"
+    ])
+
     const normalizedQuery = normalizeText(query)
     const normalizedContent = normalizeText(content)
 
-    const queryTerms = normalizedQuery.split(/\s+/).filter(term => term.length > 2) // Filter out very short terms
+    const queryTerms = normalizedQuery
+      .split(/\s+/)
+      .filter(term => term.length > 2 && !stopWords.has(term))
     const contentTerms = normalizedContent.split(/\s+/)
 
     if (queryTerms.length === 0) return 0
 
+    const uniqueQueryTerms = Array.from(new Set(queryTerms))
+
     // Calculate term frequency (TF) and inverse document frequency (IDF) inspired scores
     let totalScore = 0
+    let matchedTerms = 0
     const termFrequencies = new Map<string, number>()
 
     // Count term frequencies in content
@@ -1332,9 +1455,13 @@ export class RAGEngine {
     })
 
     // Calculate score for each query term
-    queryTerms.forEach(queryTerm => {
+    uniqueQueryTerms.forEach(queryTerm => {
       const tf = termFrequencies.get(queryTerm) || 0
       const contentLength = contentTerms.length
+
+      if (tf > 0) {
+        matchedTerms += 1
+      }
       
       // BM25-like scoring (simplified)
       // Score = (tf * idf) / (tf + k1 * (1 - b + b * (docLength / avgDocLength)))
@@ -1347,8 +1474,11 @@ export class RAGEngine {
       totalScore += score
     })
 
-    // Normalize by number of query terms
-    return totalScore / queryTerms.length
+    const bm25Like = totalScore / uniqueQueryTerms.length
+    const termCoverage = matchedTerms / uniqueQueryTerms.length
+
+    // Blend local term strength and query-term coverage.
+    return Math.min(1, bm25Like * 0.7 + termCoverage * 0.3)
   }
 
   /**
@@ -1364,11 +1494,11 @@ export class RAGEngine {
       documentName: string;
       semanticImportance: number;
       page?: number;
-      bbox?: any;
+      bbox?: unknown;
       level?: number;
       chunkType?: string;
       rrfScore?: number;
-      rrfRanks?: any;
+      rrfRanks?: unknown;
     }>,
     question: string,
     topK: number
@@ -1378,7 +1508,7 @@ export class RAGEngine {
 
     const reranked = chunks.map(chunk => {
       // Calculate multiple relevance signals
-      const exactMatchScore = this.calculateExactMatchBoost(question, chunk.content)
+      const exactMatchScore = this.calculateCombinedExactMatchBoost(question, chunk.content)
       const keywordScore = this.calculateKeywordRelevance(question, chunk.content)
       const semanticScore = chunk.similarity
       const importanceScore = chunk.semanticImportance / 3.0 // Normalize to 0-1
@@ -1419,7 +1549,12 @@ export class RAGEngine {
     const finalReranked = reranked
       .sort((a, b) => (b.rerankScore || 0) - (a.rerankScore || 0))
       .slice(0, topK)
-      .map(({ rerankScore, rerankSignals, ...chunk }) => chunk) // Remove temporary fields
+      .map((chunk) => {
+        const cleaned = { ...chunk } as Record<string, unknown>
+        delete cleaned.rerankScore
+        delete cleaned.rerankSignals
+        return cleaned as typeof chunks[0]
+      }) // Remove temporary fields
 
     console.log(`Re-ranking complete: ${finalReranked.length} chunks selected`)
     if (finalReranked.length > 0) {
@@ -1454,13 +1589,13 @@ export class RAGEngine {
   }
 
   // Normalize chunks to plain strings for embedding generation
-  private toPlainChunks(chunks: any[]): string[] {
+  private toPlainChunks(chunks: unknown[]): string[] {
     if (!Array.isArray(chunks)) return []
-    return chunks.map((c: any) => (typeof c === 'string' ? c : (c?.content ?? '')))
+    return chunks.map((c: unknown) => (typeof c === 'string' ? c : (c?.content ?? '')))
   }
 
   // Safe preview extraction for union chunk types
-  private getChunkPreview(chunk: any): string {
+  private getChunkPreview(chunk: unknown): string {
     if (!chunk) return ''
     const text = typeof chunk === 'string' ? chunk : (chunk?.content ?? '')
     return text?.substring ? text.substring(0, 100) : ''
@@ -1608,7 +1743,21 @@ export class RAGEngine {
         console.log(`[${queryId}] Response cached for future queries`)
       }
 
-      return response
+      return {
+        ...response,
+        queryAnalysis: {
+          originalQuery: queryAnalysis.originalQuery,
+          rewrittenQuery: queryAnalysis.rewrittenQuery,
+          queryType: queryAnalysis.queryType,
+          complexity: queryAnalysis.complexity,
+          requiresHyDE: queryAnalysis.requiresHyDE,
+          requiresStepBack: queryAnalysis.requiresStepBack,
+          alternativeQueries: queryAnalysis.alternativeQueries,
+          hasHypotheticalAnswer: !!queryAnalysis.hypotheticalAnswer,
+          hasStepBackQuestion: !!queryAnalysis.stepBackQuestion,
+          confidence: queryAnalysis.confidence,
+        },
+      }
 
     } catch (error) {
       console.error("Error in enhanced RAG query:", error);
@@ -1648,7 +1797,7 @@ export class RAGEngine {
     // ==================== PHASE 2: Self-Critique ====================
     const phase2Result = complexityLevel === 'simple' 
       ? null 
-      : await this.phase2_SelfCritique(phase1Result, tokenAllocation.critique)
+      : await this.phase2_SelfCritique(phase1Result)
     
     // ==================== PHASE 3: Generation ====================
     const generationStartTime = Date.now()
@@ -1682,7 +1831,7 @@ export class RAGEngine {
       const evaluation = createQueryEvaluation(
         queryId,
         question,
-        chunks.map((c: any) => ({
+        chunks.map((c: unknown) => ({
           similarity: c.similarity || 0,
           documentId: c.documentId || '',
           documentName: c.documentName || c.source || '',
@@ -1790,14 +1939,14 @@ export class RAGEngine {
         try {
           hydeEmbedding = await this.aiClient!.generateEmbedding(queryAnalysis.hypotheticalAnswer)
           console.log(`HyDE embedding generated from hypothetical answer (${queryAnalysis.hypotheticalAnswer.length} chars)`)
-        } catch (error) {
+        } catch {
           console.warn("Failed to generate HyDE embedding, falling back to query embedding")
         }
       }
       
       // ==================== Step-back Prompting ====================
       // If step-back is enabled, also retrieve context for the broader question
-      let stepBackChunks: any[] = []
+      let stepBackChunks: unknown[] = []
       if (queryAnalysis?.stepBackQuestion) {
         console.log("🔙 Using Step-back Prompting for broader context...")
         try {
@@ -1813,7 +1962,7 @@ export class RAGEngine {
             0.1 // Lower threshold for broader context
           )
           console.log(`Step-back retrieval found ${stepBackChunks.length} broader context chunks`)
-        } catch (error) {
+        } catch {
           console.warn("Failed to retrieve step-back context")
         }
       }
@@ -1831,7 +1980,7 @@ export class RAGEngine {
           try {
             const altEmbedding = await this.aiClient!.generateEmbedding(altQuery)
             alternativeEmbeddings.push(altEmbedding)
-          } catch (error) {
+          } catch {
             console.warn(`Failed to generate embedding for alternative query: ${altQuery}`)
           }
         }
@@ -1852,7 +2001,7 @@ export class RAGEngine {
         questionEmbedding, 
         adjustedChunkLimit, 
         filters, 
-        processedQuestion, 
+        question, 
         useRRF, 
         useReranking,
         alternativeEmbeddings // Pass alternative embeddings for multi-query retrieval
@@ -1862,7 +2011,7 @@ export class RAGEngine {
       // Debug: Log chunk similarities
       if (relevantChunks.length > 0) {
         console.log("Top chunks:")
-        relevantChunks.slice(0, 3).forEach((chunk: any, i: number) => {
+        relevantChunks.slice(0, 3).forEach((chunk: unknown, i: number) => {
           console.log(`  ${i + 1}. Similarity: ${chunk.similarity.toFixed(3)}, Source: ${chunk.source}`)
           console.log(`     Content preview: ${chunk.content.substring(0, 100)}...`)
         })
@@ -1880,7 +2029,7 @@ export class RAGEngine {
           console.log("- Embeddings length:", firstDoc.embeddings?.length)
           
           if (firstDoc.chunks && firstDoc.chunks.length > 0) {
-            const c0: any = firstDoc.chunks[0] as any
+            const c0: unknown = firstDoc.chunks[0] as unknown
             const prev = typeof c0 === 'string' ? c0.substring(0, 100) : c0.content?.substring(0, 100)
             console.log("- First chunk preview:", prev)
           }
@@ -1897,7 +2046,7 @@ export class RAGEngine {
         console.warn("No relevant chunks found - attempting fallback strategies...")
         
         // Strategy 1: Try broader keyword search
-        const keywordChunks = this.fallbackKeywordSearch(processedQuestion, expandedQueries, 10)
+        const keywordChunks = this.fallbackKeywordSearch(question, [processedQuestion, ...expandedQueries], 10)
         if (keywordChunks.length > 0) {
           console.log(`Fallback keyword search found ${keywordChunks.length} chunks`)
           relevantChunks = keywordChunks
@@ -1910,7 +2059,7 @@ export class RAGEngine {
             questionEmbedding,
             adjustedChunkLimit * 2, // Get more chunks
             filters,
-            processedQuestion,
+            question,
             useRRF,
             useReranking,
             alternativeEmbeddings,
@@ -1951,8 +2100,8 @@ export class RAGEngine {
       if (stepBackChunks.length > 0) {
         console.log(`Merging ${stepBackChunks.length} step-back context chunks with ${relevantChunks.length} main chunks`)
         // Deduplicate and merge (step-back chunks go first for broader context)
-        const existingContents = new Set(relevantChunks.map((c: any) => c.content.substring(0, 100)))
-        const uniqueStepBackChunks = stepBackChunks.filter((c: any) => 
+        const existingContents = new Set(relevantChunks.map((c: unknown) => c.content.substring(0, 100)))
+        const uniqueStepBackChunks = stepBackChunks.filter((c: unknown) => 
           !existingContents.has(c.content.substring(0, 100))
         )
         relevantChunks = [...uniqueStepBackChunks, ...relevantChunks]
@@ -1964,9 +2113,14 @@ export class RAGEngine {
       const optimizedChunks = this.optimizeChunksForTokens(relevantChunks, tokenBudget * 0.7)
       console.log(`Optimized to ${optimizedChunks.length} chunks`)
       
-      const context = optimizedChunks.map((chunk: any) => chunk.content).join("\n\n");
+      // Label each chunk with its source so the model can cite accurately
+      const context = optimizedChunks.map((chunk: unknown) => {
+        const name = chunk.documentName || chunk.source || 'Unknown'
+        const page = chunk.page != null ? ` | Page ${chunk.page}` : ''
+        return `[SOURCE: ${name}${page}]\n${chunk.content}`
+      }).join("\n\n---\n\n")
       console.log("Context length:", context.length, "characters")
-      
+
       // Generate initial response with enhanced prompt (include conversation history)
       const systemPrompt = this.createEnhancedSystemPrompt(questionType)
       const userPrompt = this.createPhase1UserPrompt(question, context, conversationHistory)
@@ -2050,15 +2204,15 @@ export class RAGEngine {
     }
   }
 
-  private async phase2_SelfCritique(phase1Result: any, tokenBudget: number) {
+  private async phase2_SelfCritique(phase1Result: unknown) {
     console.log("Phase 2: Self-Critique and Validation")
     
     const critiquePrompt = this.createCritiquePrompt(phase1Result)
     
     const messages = [
-      { 
-        role: "system" as const, 
-        content: "You are an AI critic. Review the response for accuracy, completeness, and source attribution. Use this format: ✓=verified, ?=uncertain, !=conflict, ∅=missing" 
+      {
+        role: "system" as const,
+        content: "You are a citation auditor. Check draft answers against source passages and return structured JSON only."
       },
       { role: "user" as const, content: critiquePrompt }
     ];
@@ -2077,8 +2231,8 @@ export class RAGEngine {
   }
 
   private async phase3_Refinement(
-    phase1Result: any, 
-    phase2Result: any, 
+    phase1Result: unknown, 
+    phase2Result: unknown, 
     tokenBudget: number,
     showThinking: boolean
   ): Promise<EnhancedQueryResponse> {
@@ -2092,9 +2246,9 @@ export class RAGEngine {
       refinementPrompt = this.createRefinementPrompt(phase1Result, phase2Result)
       
       const messages = [
-        { 
-          role: "system" as const, 
-          content: "You are a professional document analyst. Create polished, clean responses without meta-commentary, confidence ratings, or system artifacts. Focus on direct, helpful answers using proper markdown formatting." 
+        {
+          role: "system" as const,
+          content: "You are a technical writer. Produce clean, well-formatted answers grounded in the provided sources. No preamble, no meta-commentary, no confidence ratings."
         },
         { role: "user" as const, content: refinementPrompt }
       ];
@@ -2162,7 +2316,7 @@ Applied improvements based on critical review to ensure accuracy and clarity.
 
     // Prepare sources
     const sources = Array.from(
-      new Set(phase1Result.relevantChunks.map((chunk: any) => chunk.source))
+      new Set(phase1Result.relevantChunks.map((chunk: unknown) => chunk.source))
     ).filter(Boolean) as string[];
 
     // Check for hallucinations in final response
@@ -2389,7 +2543,7 @@ Only output the expanded query and alternatives, nothing else.`
     question: string,
     alternativeQueries: string[],
     limit: number
-  ): Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> {
+  ): Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: unknown }> {
     console.log("Performing enhanced fallback keyword search...")
     
     // Comprehensive stop words list
@@ -2439,7 +2593,7 @@ Only output the expanded query and alternatives, nothing else.`
     const keywordArray = Array.from(keywords)
     console.log(`Searching for ${keywordArray.length} keywords/phrases: ${keywordArray.slice(0, 10).join(', ')}${keywordArray.length > 10 ? '...' : ''}`)
     
-    const results: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> = []
+    const results: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: unknown }> = []
     
     // Search through all chunks
     for (const doc of this.documents) {
@@ -2503,10 +2657,10 @@ Only output the expanded query and alternatives, nothing else.`
   /**
    * Get top chunks by semantic importance when retrieval fails
    */
-  private getTopChunksByImportance(limit: number): Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> {
+  private getTopChunksByImportance(limit: number): Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: unknown }> {
     console.log("Retrieving top chunks by importance...")
     
-    const results: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: any }> = []
+    const results: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: unknown }> = []
     
     for (const doc of this.documents) {
       if (!doc.chunks || !doc.chunks.length) continue
@@ -2601,7 +2755,6 @@ Only output the expanded query and alternatives, nothing else.`
   }
 
   private analyzeQuestionType(question: string): string {
-    const questionLower = question.toLowerCase()
     
     if (/(what are|list|summary|key points|main|overview)/i.test(question)) {
       return 'summary'
@@ -2687,7 +2840,7 @@ Only output the expanded query and alternatives, nothing else.`
   /**
    * Optimize chunks for token budget with deduplication and smart truncation
    */
-  private optimizeChunksForTokens(chunks: any[], tokenBudget: number) {
+  private optimizeChunksForTokens(chunks: unknown[], tokenBudget: number) {
     // Step 1: Deduplicate chunks (remove near-duplicates)
     const deduplicatedChunks = this.deduplicateChunks(chunks)
     console.log(`Deduplication: ${chunks.length} -> ${deduplicatedChunks.length} chunks`)
@@ -2725,11 +2878,11 @@ Only output the expanded query and alternatives, nothing else.`
    * Deduplicate chunks by removing near-duplicates
    * Uses Jaccard similarity to detect overlap
    */
-  private deduplicateChunks(chunks: any[]): any[] {
+  private deduplicateChunks(chunks: unknown[]): unknown[] {
     if (chunks.length <= 1) return chunks
     
     const SIMILARITY_THRESHOLD = 0.7 // 70% similarity = duplicate
-    const deduplicated: any[] = []
+    const deduplicated: unknown[] = []
     
     for (const chunk of chunks) {
       const chunkWords = new Set(
@@ -2804,86 +2957,41 @@ Only output the expanded query and alternatives, nothing else.`
   }
 
   private createEnhancedSystemPrompt(questionType: string): string {
-    const basePrompt = `You are an expert document analyst with deep understanding of technical and academic content. Your goal is to provide accurate, comprehensive, and well-structured responses.
-
-⚠️ CRITICAL ANTI-HALLUCINATION RULES (MANDATORY):
-• ABSOLUTELY FORBIDDEN: You MUST NEVER invent, fabricate, or create information that is not explicitly stated in the provided document context
-• ABSOLUTELY FORBIDDEN: You MUST NEVER make up facts, numbers, dates, names, or any details not present in the context
-• ABSOLUTELY FORBIDDEN: You MUST NEVER infer information beyond what is directly stated, even if it seems logical
-• ABSOLUTELY FORBIDDEN: You MUST NEVER use your training data knowledge to fill gaps - ONLY use the provided context
-• MANDATORY: Every factual claim MUST be traceable to a specific citation in the provided context
-• MANDATORY: If information is not in the context, you MUST explicitly state "This information is not available in the provided documents"
-• MANDATORY: If you are uncertain about ANY detail, you MUST say "I cannot confirm this from the provided documents" rather than guessing
-
-CORE PRINCIPLES:
-• Synthesize information ONLY from the provided document context - do NOT use general knowledge
-• If context is insufficient, you MUST state: "The provided documents do not contain sufficient information to answer this question"
-• Prioritize accuracy over completeness - say "I don't know" or "Not found in documents" when uncertain
-• EVERY factual statement MUST have a citation - no exceptions
-• Use clear, professional language appropriate for the content
-
-RESPONSE STRUCTURE:
-• Start with a direct answer to the question (ONLY if answerable from context)
-• Support EVERY claim with evidence from documents (cited)
-• If the answer cannot be found in context, state this clearly at the beginning
-• Use proper markdown for readability:
-  - ## for main sections, ### for subsections
-  - **bold** for key terms and concepts
-  - Bullet points for lists (use • or - consistently)
-  - Tables with | separators for structured data
-  - > for important quotes or highlights
-  - Code blocks with \`\`\` for technical content
-
-CITATION FORMAT (MANDATORY):
-• EVERY factual statement MUST include a citation in this format: [Document Name, page/section]
-• Example: "The study found X [Research Paper.pdf, p.5]"
-• If citing multiple sources: "According to [Doc1.pdf, p.3] and [Doc2.pdf, p.7], the results show..."
-• If a statement has no citation, it is considered HALLUCINATION and is FORBIDDEN
-• Group multiple points from same source together when possible
-
-QUALITY STANDARDS:
-• NEVER invent information not in context - this is the highest priority rule
-• NEVER use vague language like "the document says" - be specific with citations
-• NEVER add confidence ratings, meta-commentary, or self-assessment
-• NEVER use preambles like "Based on the provided documents..." - just answer directly
-• Technical accuracy and citation accuracy are the ONLY priorities`
-
-    const typeSpecificPrompts = {
-      'summary': '\n\nFOR SUMMARIES: Provide hierarchical overview with main themes, key findings, and supporting details. Use headings to organize major topics.',
-      'analysis': '\n\nFOR ANALYSIS: Present systematic examination with: 1) Context/Background, 2) Key Findings with evidence, 3) Implications or Conclusions. Connect concepts logically.',
-      'timeline': '\n\nFOR TIMELINES: Create chronological table or ordered list with dates, events, and significance. Format: Date | Event | Details | Source.',
-      'data': '\n\nFOR DATA QUERIES: Present numbers in well-formatted tables with headers, units, and context. Explain what the data means.',
-      'process': '\n\nFOR PROCESSES: Use numbered steps with clear action items. Include prerequisites, main steps, and expected outcomes.',
-      'comparison': '\n\nFOR COMPARISONS: Use side-by-side table or structured sections showing: similarities, differences, and relative strengths/limitations.',
-      'general': '\n\nFOR GENERAL QUERIES: Structure response with clear sections. Use headings, lists, and examples to enhance clarity.'
+    const typeFormats: Record<string, string> = {
+      summary: 'Organise your answer with ## headings for each major theme.',
+      analysis: 'Structure: 1) Background, 2) Key findings with evidence, 3) Implications.',
+      timeline: 'Use a markdown table: | Date | Event | Details | Source |',
+      data: 'Present numbers in a markdown table with column headers and units.',
+      process: 'Use a numbered list. Each step: action → expected outcome.',
+      comparison: 'Use a side-by-side markdown table: | Aspect | Doc A | Doc B |',
+      general: 'Use ## headings and bullet points to organise the response.',
     }
+    const format = typeFormats[questionType] ?? typeFormats.general
 
-    return basePrompt + (typeSpecificPrompts[questionType as keyof typeof typeSpecificPrompts] || typeSpecificPrompts.general)
+    return `You are a document analyst. Answer questions using only the source passages provided in the user message.
+
+Citation rules:
+- Every factual claim must end with a citation: [Filename, p.N]
+- Each source passage is labelled [SOURCE: Filename | Page N] — use that label for citations
+- When a fact comes from multiple passages, cite each: [File1, p.2] [File2, p.7]
+- If the passages do not contain enough information to answer, write: "Not found in the provided documents."
+
+Format: ${format}
+Start your answer directly — no preamble like "Based on the documents...".`
   }
 
   private createPhase1UserPrompt(question: string, context: string, conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>): string {
-    let prompt = `CONTEXT FROM DOCUMENTS:
+    const historyNote = conversationHistory && conversationHistory.length > 0
+      ? `\n<conversation_context>Use the prior conversation to resolve pronouns (it, this, that) or follow-up references.</conversation_context>`
+      : ''
+
+    return `<sources>
 ${context}
+</sources>
+${historyNote}
+<question>${question}</question>
 
-QUESTION: ${question}`
-
-    // Add conversation context note if history exists
-    if (conversationHistory && conversationHistory.length > 0) {
-      prompt += `\n\nCONVERSATION CONTEXT: The user has asked follow-up questions. Use the conversation history above to understand references like "it", "that", "this", or follow-up questions.`
-    }
-
-    prompt += `\n\n⚠️ CRITICAL INSTRUCTIONS:
-1. Answer ONLY using information explicitly stated in the CONTEXT above
-2. If the answer is not in the CONTEXT, you MUST state: "The provided documents do not contain information to answer this question"
-3. EVERY factual statement MUST include a citation: [Document Name, page/section]
-4. DO NOT invent, infer, or create any information not in the CONTEXT
-5. DO NOT use your general knowledge - ONLY use the CONTEXT provided
-6. If you are uncertain about ANY detail, state "I cannot confirm this from the provided documents"
-7. If this is a follow-up question, use the conversation history to understand context and references`
-
-    prompt += `\n\nProvide a direct, well-formatted response based STRICTLY on the context above. Use clean markdown formatting and ensure EVERY claim has a citation.`
-    
-    return prompt
+Answer using only the sources above. Cite every factual claim as [Filename, p.N]. If the answer is not in the sources, write "Not found in the provided documents."`
   }
 
   /**
@@ -2906,7 +3014,7 @@ QUESTION: ${question}`
       const contextResolutionPrompt = `You are a conversation context resolver. The user asked a question that may reference previous conversation.
 
 CONVERSATION HISTORY:
-${conversationHistory.slice(-6).map((msg, i) => `${msg.role.toUpperCase()}: ${msg.content}`).join('\n\n')}
+${conversationHistory.slice(-6).map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`).join('\n\n')}
 
 CURRENT QUESTION: "${question}"
 
@@ -2940,81 +3048,55 @@ Only output the resolved question, nothing else.`
     }
   }
 
-  private createCritiquePrompt(phase1Result: any): string {
-    return `You are a critical reviewer evaluating response quality and checking for HALLUCINATIONS. Review this response with extreme scrutiny.
+  private createCritiquePrompt(phase1Result: unknown): string {
+    return `You are a citation auditor. Check the draft answer against the source passages.
 
-QUESTION: ${phase1Result.question}
-
-ORIGINAL CONTEXT:
+<sources>
 ${phase1Result.context}
+</sources>
 
-INITIAL RESPONSE:
+<question>${phase1Result.question}</question>
+
+<draft>
 ${phase1Result.initialResponse}
+</draft>
 
-⚠️ CRITICAL HALLUCINATION DETECTION CHECKLIST:
-1. HALLUCINATION CHECK: Does EVERY factual claim appear in the ORIGINAL CONTEXT above?
-   - Check each number, date, name, statistic, and specific detail
-   - Mark ANY claim not explicitly in ORIGINAL CONTEXT as HALLUCINATION
-   - Look for invented facts, made-up numbers, or fabricated details
+For each factual claim in the draft, verify it appears in the sources above.
 
-2. CITATION VERIFICATION: Does EVERY claim have a proper citation?
-   - Format: [Document Name, page/section]
-   - NO uncited factual statements are allowed
-   - Verify citations match actual sources
+Respond with JSON only — no prose:
+{
+  "uncited_claims": ["exact sentence from draft that has no citation"],
+  "hallucinated_claims": ["exact sentence that contradicts or is absent from sources"],
+  "missing_info": ["important aspects of the question not addressed"],
+  "verdict": "pass" | "revise"
+}
 
-3. ACCURACY: Are all facts supported by ORIGINAL CONTEXT or clearly marked as "not found"?
-   - Compare response claims word-by-word against ORIGINAL CONTEXT
-   - Flag any inference, assumption, or deduction beyond explicit statements
-
-4. COMPLETENESS: Does it fully address all parts of the question using ONLY context?
-5. CLARITY: Is the explanation clear and well-organized?
-6. FORMAT: Is markdown clean and consistent?
-7. RELEVANCE: Does it stay focused on the question?
-
-For each issue found, note:
-• ✓ = Verified in ORIGINAL CONTEXT and good
-• ? = Uncertain or needs clarification
-• ! = HALLUCINATION detected - claim not in ORIGINAL CONTEXT
-• ∅ = Missing important information
-• 🚫 = INVENTED/FABRICATED information (highest priority to flag)
-
-MANDATORY: Flag ALL hallucinations (claims not in ORIGINAL CONTEXT) with 🚫. Provide specific, actionable feedback focusing on removing ALL hallucinations.`
+verdict is "pass" only when: every claim is cited, no hallucinations detected, question is fully answered.`
   }
 
-  private createRefinementPrompt(phase1Result: any, phase2Result: any): string {
-    return `QUESTION: ${phase1Result.question}
-
-ORIGINAL CONTEXT:
+  private createRefinementPrompt(phase1Result: unknown, phase2Result: unknown): string {
+    const issues = phase2Result.critiqueText
+    return `<sources>
 ${phase1Result.context}
+</sources>
 
-INITIAL RESPONSE:
+<question>${phase1Result.question}</question>
+
+<draft>
 ${phase1Result.initialResponse}
+</draft>
 
-CRITICAL REVIEW FEEDBACK:
-${phase2Result.critiqueText}
+<issues>
+${issues}
+</issues>
 
-⚠️ MANDATORY REFINEMENT REQUIREMENTS:
-1. VERIFY EVERY factual claim against the ORIGINAL CONTEXT - remove any information not explicitly stated
-2. ENSURE EVERY statement has a citation: [Document Name, page/section]
-3. REMOVE any invented, inferred, or fabricated information
-4. If any claim cannot be verified in context, REMOVE it or mark as "not found in documents"
-5. DO NOT add any information not in the ORIGINAL CONTEXT
+Revise the draft to fix all issues listed above:
+- Remove or replace any hallucinated or uncited claims
+- Add missing citations in the form [Filename, p.N] using the source labels
+- Cover any missing aspects of the question that the sources support
+- Keep all valid, cited content from the draft
 
-TASK: Create an improved, polished final response that:
-• Addresses all issues identified in the review
-• VERIFIES every claim against the ORIGINAL CONTEXT
-• Maintains factual accuracy with MANDATORY citations for every claim
-• Uses clean, professional markdown formatting
-• Provides direct, comprehensive answer ONLY from the context
-• Removes any meta-commentary, confidence scores, or artifacts
-• REMOVES any hallucinated or unverified information
-
-IMPORTANT:
-- Output ONLY the refined response itself
-- Do NOT explain what changes were made
-- Do NOT add notes about improvements
-- Focus on delivering the best possible answer that is 100% grounded in the provided context
-- If you cannot verify a claim in the ORIGINAL CONTEXT, you MUST remove it`
+Output only the final answer — no explanations, no meta-commentary.`
   }
 
   /**
@@ -3023,7 +3105,7 @@ IMPORTANT:
    */
   private checkGroundedness(
     response: string,
-    chunks: Array<{ content: string; source: string; [key: string]: any }>,
+    chunks: Array<{ content: string; source: string; [key: string]: unknown }>,
     question: string
   ): {
     isGrounded: boolean
@@ -3032,6 +3114,7 @@ IMPORTANT:
     verifiedClaims: string[]
   } {
     console.log("=== Groundedness Check ===")
+    console.log(`Question under evaluation: ${question.substring(0, 120)}`)
     
     // Extract all factual claims from response (sentences with specific information)
     const sentences = response
@@ -3120,7 +3203,7 @@ IMPORTANT:
    */
   private enforceCitations(
     response: string,
-    chunks: Array<{ content: string; source: string; [key: string]: any }>
+    chunks: Array<{ content: string; source: string; [key: string]: unknown }>
   ): string {
     // Check if response already has citations
     const hasCitations = /\[.*?\]/.test(response)
@@ -3225,20 +3308,25 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
   }
 
   private parseCritiqueResponse(critique: string): string[] {
-    const issues = []
-    
-    // Check for hallucinations (highest priority)
-    if (critique.includes('🚫') || critique.toLowerCase().includes('hallucination') || critique.toLowerCase().includes('invented') || critique.toLowerCase().includes('fabricated')) {
-      issues.push('HALLUCINATION DETECTED - Invented or fabricated information found')
+    const issues: string[] = []
+
+    // Try to parse the structured JSON response from Phase 2
+    try {
+      const jsonMatch = critique.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        if (Array.isArray(parsed.uncited_claims)) issues.push(...parsed.uncited_claims.map((c: string) => `Uncited: ${c}`))
+        if (Array.isArray(parsed.hallucinated_claims)) issues.push(...parsed.hallucinated_claims.map((c: string) => `Hallucination: ${c}`))
+        if (Array.isArray(parsed.missing_info)) issues.push(...parsed.missing_info.map((c: string) => `Missing: ${c}`))
+        return issues
+      }
+    } catch {
+      // fall through to legacy text parsing
     }
-    if (critique.includes('!')) {
-      issues.push('Conflicting information found or hallucination detected')  
-    }
-    if (critique.includes('?')) {
-      issues.push('Uncertain information identified')
-    }
-    if (critique.includes('∅')) {
-      issues.push('Missing information noted')
+
+    // Legacy text-based fallback (for non-JSON responses)
+    if (critique.toLowerCase().includes('hallucination') || critique.toLowerCase().includes('fabricated')) {
+      issues.push('Hallucination detected')
     }
     if (critique.toLowerCase().includes('unsupported')) {
       issues.push('Unsupported claims detected')
@@ -3253,7 +3341,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
     return issues
   }
 
-  private calculateQualityMetrics(phase1Result: any, phase2Result: any, finalResponse: string) {
+  private calculateQualityMetrics(phase1Result: unknown, phase2Result: unknown, finalResponse: string) {
     // Basic quality scoring based on available information
     const hasSourceAttribution = finalResponse.includes('[') || finalResponse.includes('Document') || finalResponse.includes('Source')
     const hasClearStructure = finalResponse.includes('\n\n') || finalResponse.includes('##') || finalResponse.includes('1.')
@@ -3433,7 +3521,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
   }
 
   // Diagnostic method to help troubleshoot issues
-  async runDiagnostics(): Promise<any> {
+  async runDiagnostics(): Promise<unknown> {
     console.log("=== RAG Engine Diagnostics ===")
     
     const diagnostics: {
@@ -3564,8 +3652,8 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
   }
 
   private extractSemanticImportance(
-    chunk: string | any, 
-    docMetadata?: any,
+    chunk: string | unknown, 
+    docMetadata?: unknown,
     contentTypeBoosts?: { tableBoost: number; imageBoost: number; equationBoost: number; dataBoost: number }
   ): number {
     let importance = 1.0
@@ -3817,7 +3905,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
     const fallbackChunks: typeof allChunks = []
     
     // Get the best chunk from each document
-    for (const [docId, metrics] of documentMetrics) {
+    for (const [docId] of documentMetrics) {
       const docChunks = allChunks
         .filter(chunk => chunk.documentId === docId)
         .sort((a, b) => b.similarity - a.similarity)

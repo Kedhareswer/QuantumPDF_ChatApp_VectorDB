@@ -1,19 +1,19 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
-import { History, X, Search, Clock, ChevronRight } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+    SheetTrigger,
 } from "@/components/ui/sheet"
+import { ChevronRight, Clock, History, Search } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
 
 interface QueryHistoryItem {
   id: string
@@ -30,28 +30,44 @@ interface QueryHistoryProps {
 const STORAGE_KEY = "quantum-pdf-query-history"
 const MAX_HISTORY = 50
 
+declare global {
+  interface Window {
+    __addQueryToHistory?: (query: string, responseLength?: number) => void
+  }
+}
+
 export function QueryHistory({ onSelectQuery, className = "" }: QueryHistoryProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [history, setHistory] = useState<QueryHistoryItem[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
-
-  useEffect(() => {
-    // Load history from localStorage
+  const [history, setHistory] = useState<QueryHistoryItem[]>(() => {
+    if (typeof window === "undefined") return []
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored).map((item: any) => ({
+      if (!stored) return []
+
+      const parsed = JSON.parse(stored) as unknown
+      if (!Array.isArray(parsed)) return []
+
+      return parsed
+        .filter(
+          (item): item is { id: string; query: string; timestamp: string; responseLength?: number } =>
+            typeof item === "object" &&
+            item !== null &&
+            typeof (item as { id?: unknown }).id === "string" &&
+            typeof (item as { query?: unknown }).query === "string" &&
+            typeof (item as { timestamp?: unknown }).timestamp === "string"
+        )
+        .map((item) => ({
           ...item,
-          timestamp: new Date(item.timestamp)
+          timestamp: new Date(item.timestamp),
         }))
-        setHistory(parsed)
-      }
     } catch (error) {
       console.error("Failed to load query history:", error)
+      return []
     }
-  }, [])
+  })
+  const [searchTerm, setSearchTerm] = useState("")
 
-  const addToHistory = (query: string, responseLength?: number) => {
+  const addToHistory = useCallback((query: string, responseLength?: number) => {
     if (!query.trim()) return
 
     const newItem: QueryHistoryItem = {
@@ -65,17 +81,24 @@ export function QueryHistory({ onSelectQuery, className = "" }: QueryHistoryProp
       // Remove duplicates (same query)
       const filtered = prev.filter(item => item.query.toLowerCase() !== query.toLowerCase().trim())
       const updated = [newItem, ...filtered].slice(0, MAX_HISTORY)
-      
+
       // Save to localStorage
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
       } catch (error) {
         console.error("Failed to save query history:", error)
       }
-      
+
       return updated
     })
-  }
+  }, [])
+
+  useEffect(() => {
+    window.__addQueryToHistory = addToHistory
+    return () => {
+      delete window.__addQueryToHistory
+    }
+  }, [addToHistory])
 
   const clearHistory = () => {
     if (window.confirm("Clear all query history?")) {
@@ -206,9 +229,6 @@ export function QueryHistory({ onSelectQuery, className = "" }: QueryHistoryProp
           </ScrollArea>
         </SheetContent>
       </Sheet>
-
-      {/* Export addToHistory function for parent component */}
-      {typeof window !== 'undefined' && ((window as any).__addQueryToHistory = addToHistory) && null}
     </>
   )
 }
@@ -216,8 +236,8 @@ export function QueryHistory({ onSelectQuery, className = "" }: QueryHistoryProp
 // Hook to add queries to history from outside
 export function useQueryHistory() {
   const addToHistory = (query: string, responseLength?: number) => {
-    if (typeof window !== 'undefined' && (window as any).__addQueryToHistory) {
-      (window as any).__addQueryToHistory(query, responseLength)
+    if (typeof window !== 'undefined' && window.__addQueryToHistory) {
+      window.__addQueryToHistory(query, responseLength)
     }
   }
   return { addQueryHistory: addToHistory }

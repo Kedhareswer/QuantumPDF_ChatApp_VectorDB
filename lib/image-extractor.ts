@@ -1,6 +1,6 @@
 'use client';
 
-import type { ExtractedImage } from "@/types/multimodal-types"
+import type { ExtractedImage } from "@/types/multimodal-types";
 
 export interface ImageExtractionOptions {
   maxImages?: number
@@ -44,7 +44,7 @@ export class PDFImageExtractor {
    * Extract high-resolution previews for selected pages
    */
   async extractPagePreviews(
-    pdf: any, // PDFDocumentProxy
+    pdf: unknown, // PDFDocumentProxy
     documentId: string,
     options: PagePreviewExtractionOptions = {},
     onProgress?: (progress: ImageExtractionProgress) => void,
@@ -110,7 +110,7 @@ export class PDFImageExtractor {
    * Render a single PDF page into a high-resolution preview image
    */
   private async renderPagePreview(
-    page: any,
+    page: unknown,
     pageNumber: number,
     documentId: string,
     options: Required<PagePreviewExtractionOptions>,
@@ -180,7 +180,7 @@ export class PDFImageExtractor {
    * Uses PDF.js operator lists to find image XObjects
    */
   async extractInlineImages(
-    pdf: any, // PDFDocumentProxy
+    pdf: unknown, // PDFDocumentProxy
     documentId: string,
     options: ImageExtractionOptions = {},
     onProgress?: (progress: ImageExtractionProgress) => void,
@@ -272,8 +272,8 @@ export class PDFImageExtractor {
    * access to PDF.js internals for proper image decoding
    */
   private async extractImageFromOperator(
-    page: any,
-    args: any[],
+    page: unknown,
+    args: unknown[],
     pageNumber: number,
     documentId: string,
     imageIndex: number,

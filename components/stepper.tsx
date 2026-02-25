@@ -15,7 +15,7 @@ interface StepperProps {
 export function Stepper({ steps }: StepperProps) {
   return (
     <div className="space-y-3">
-      {steps.map((step, index) => (
+      {steps.map((step) => (
         <div key={step.key} className="flex items-center space-x-3">
           <div className="flex-shrink-0">
             {step.status === "done" && (

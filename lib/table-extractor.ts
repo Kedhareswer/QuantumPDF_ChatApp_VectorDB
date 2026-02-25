@@ -1,6 +1,6 @@
 'use client';
 
-import type { ExtractedTable } from "@/types/multimodal-types"
+import type { ExtractedTable } from "@/types/multimodal-types";
 
 export interface TableExtractionOptions {
   maxTables?: number
@@ -38,7 +38,7 @@ export class PDFTableExtractor {
    * Uses heuristics to detect table-like structures in text
    */
   async extractTablesFromText(
-    pdf: any, // PDFDocumentProxy
+    pdf: unknown, // PDFDocumentProxy
     documentId: string,
     options: TableExtractionOptions = {},
     onProgress?: (progress: TableExtractionProgress) => void,
@@ -105,7 +105,7 @@ export class PDFTableExtractor {
    * Detect tables in text content using heuristics
    */
   private async detectTablesInText(
-    textContent: any,
+    textContent: unknown,
     pageNumber: number,
     documentId: string,
     options: Required<TableExtractionOptions>,
@@ -141,8 +141,8 @@ export class PDFTableExtractor {
   /**
    * Group text items by line (similar y-coordinates)
    */
-  private groupTextItemsByLine(items: any[]): any[][] {
-    const lines: Map<number, any[]> = new Map()
+  private groupTextItemsByLine(items: unknown[]): unknown[][] {
+    const lines: Map<number, unknown[]> = new Map()
     const yTolerance = 2 // pixels
 
     for (const item of items) {
@@ -170,11 +170,11 @@ export class PDFTableExtractor {
    * Find regions that look like tables
    */
   private findTableRegions(
-    lines: any[][],
+    lines: unknown[][],
     options: Required<TableExtractionOptions>,
-  ): any[][] {
-    const regions: any[][] = []
-    let currentRegion: any[] = []
+  ): unknown[][] {
+    const regions: unknown[][] = []
+    let currentRegion: unknown[] = []
     let prevColumnCount = 0
 
     for (let i = 0; i < lines.length; i++) {
@@ -216,7 +216,7 @@ export class PDFTableExtractor {
   /**
    * Estimate number of columns based on text spacing
    */
-  private estimateColumnCount(line: any[]): number {
+  private estimateColumnCount(line: unknown[]): number {
     if (line.length <= 1) return line.length
 
     // Calculate gaps between text items
@@ -239,7 +239,7 @@ export class PDFTableExtractor {
    * Parse a detected table region into structured data
    */
   private parseTableRegion(
-    region: any[][],
+    region: unknown[][],
     pageNumber: number,
     documentId: string,
     options: Required<TableExtractionOptions>,
@@ -292,8 +292,6 @@ export class PDFTableExtractor {
     const tableId = `${documentId}_table_${pageNumber}_${++this.tableCounter}`
     
     // Calculate bounding box
-    const firstLine = region[0]
-    const lastLine = region[region.length - 1]
     const minX = Math.min(...region.flat().map(item => item.transform[4]))
     const maxX = Math.max(...region.flat().map(item => item.transform[4] + item.width))
     const minY = Math.min(...region.flat().map(item => item.transform[5]))
@@ -324,7 +322,7 @@ export class PDFTableExtractor {
   /**
    * Determine column boundaries across all rows
    */
-  private determineColumnBoundaries(region: any[][]): number[] {
+  private determineColumnBoundaries(region: unknown[][]): number[] {
     const allXPositions: number[] = []
 
     // Collect all x-positions
@@ -374,7 +372,7 @@ export class PDFTableExtractor {
   /**
    * Calculate confidence score for table extraction
    */
-  private calculateTableConfidence(region: any[][], rows: string[][]): number {
+  private calculateTableConfidence(region: unknown[][], rows: string[][]): number {
     let score = 0.5 // Base score
 
     // More rows = higher confidence
@@ -406,11 +404,10 @@ export class DOCXTableExtractor {
    * This is a placeholder for future implementation with docx.js
    */
   async extractFromDocument(
-    arrayBuffer: ArrayBuffer,
-    documentId: string,
     options: TableExtractionOptions = {},
   ): Promise<TableExtractionResult> {
     const startTime = Date.now()
+    void options
 
     // Placeholder implementation
     // Full implementation would:

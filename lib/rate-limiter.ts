@@ -21,7 +21,7 @@ export abstract class BaseRateLimiter {
   }
 
   abstract acquire(): Promise<void>
-  abstract getStats(): any
+  abstract getStats(): unknown
   abstract reset(): void
 }
 

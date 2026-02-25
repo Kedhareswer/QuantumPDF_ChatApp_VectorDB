@@ -6,9 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "pwa:icons:svg": "node scripts/create-pwa-icons.js",
-    "pwa:icons:png": "node scripts/generate-pwa-icons.js",
+    "lint": "eslint .",
+    "pwa:icons:svg": "node scripts/create-pwa-icons.mjs",
+    "pwa:icons:png": "node scripts/generate-pwa-icons.mjs",
     "pwa:test": "npm run build && npm start",
     "pwa:validate": "npm run build && npx serve@latest out -l 3000"
   },
@@ -58,7 +58,7 @@
     "lucide-react": "^0.554.0",
     "mammoth": "^1.11.0",
     "mermaid": "^11.12.1",
-    "next": "16.0.7",
+    "next": "^16.1.6",
     "next-themes": "^0.4.6",
     "papaparse": "^5.4.1",
     "pdfjs-dist": "latest",
@@ -92,8 +92,15 @@
     "@types/papaparse": "^5.5.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.1.4",
+    "baseline-browser-mapping": "^2.10.0",
+    "eslint": "^9.39.3",
+    "eslint-config-next": "^16.1.6",
+    "jsdom": "^28.1.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.17",
-    "typescript": "^5"
+    "ts-morph": "^27.0.2",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }

@@ -45,7 +45,7 @@ export interface ExtractedTable {
   };
   rows?: string[][];
   markdown?: string;
-  json?: any[][];
+  json?: unknown[][];
   rowCount: number;
   columnCount: number;
   headers?: string[];
@@ -81,7 +81,7 @@ export interface ExtractedChart {
   imageId: string; // Reference to ExtractedImage
   chartType?: 'bar' | 'line' | 'pie' | 'scatter' | 'area' | 'unknown';
   description?: string;
-  dataPoints?: any[];
+  dataPoints?: unknown[];
   extractedAt: Date;
 }
 

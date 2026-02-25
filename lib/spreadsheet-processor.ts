@@ -1,7 +1,7 @@
 'use client';
 
-import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { AdvancedChunker, type TextChunk } from './advanced-chunking';
 
 export interface SpreadsheetProcessingResult {
@@ -168,7 +168,7 @@ export class SpreadsheetProcessor {
             });
 
             const { formattedText, rowCount, columnCount } = this.formatCSVData(
-              results.data as any[],
+              results.data as unknown[],
               results.meta.fields || [],
               file.name
             );
@@ -273,7 +273,7 @@ export class SpreadsheetProcessor {
           header: 1,
           defval: '',
           blankrows: false,
-        }) as any[][];
+        }) as unknown[][];
 
         if (jsonData.length === 0) {
           warnings.push(`Sheet "${sheetName}" is empty`);
@@ -326,7 +326,7 @@ export class SpreadsheetProcessor {
   }
 
   private formatCSVData(
-    data: any[],
+    data: unknown[],
     headers: string[],
     fileName: string
   ): { formattedText: string; rowCount: number; columnCount: number } {
@@ -373,7 +373,7 @@ export class SpreadsheetProcessor {
   }
 
   private formatExcelSheet(
-    data: any[][],
+    data: unknown[][],
     sheetName: string,
     includeSheetName: boolean
   ): { formattedText: string; rowCount: number; columnCount: number } {
@@ -430,7 +430,7 @@ export class SpreadsheetProcessor {
     return 'low';
   }
 
-  private createFallbackContent(file: File, error: any, processingTime: number): string {
+  private createFallbackContent(file: File, error: unknown, processingTime: number): string {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     return `# Spreadsheet Processing Report: ${file.name}

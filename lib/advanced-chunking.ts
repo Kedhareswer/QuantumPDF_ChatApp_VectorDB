@@ -13,7 +13,7 @@ export interface TextChunk {
     keywordDensity: number
     // Optional fields used by downstream components when available
     page?: number
-    bbox?: any
+    bbox?: unknown
     level?: number
   }
 }
@@ -56,7 +56,7 @@ export class AdvancedChunker {
       let chunkIndex = 0
 
       for (const paragraph of paragraphs) {
-        const adaptiveMaxSize = this.getAdaptiveChunkSize(paragraph, currentChunk)
+        const adaptiveMaxSize = this.getAdaptiveChunkSize(paragraph)
 
         if (currentChunk.length + paragraph.length > adaptiveMaxSize && currentChunk.length > 0) {
           // Create chunk from current content
@@ -363,7 +363,6 @@ export class AdvancedChunker {
       const lines = content.split('\n')
 
       let buf = ''
-      let bufStart = section.startChar
 
       // Map each line to its start char relative to the section
       const lineStarts: number[] = []
@@ -431,7 +430,7 @@ export class AdvancedChunker {
     return sentences.slice(-overlapCount).join(' ')
   }
 
-  private getAdaptiveChunkSize(paragraph: string, currentChunk: string): number {
+  private getAdaptiveChunkSize(paragraph: string): number {
     if (!this.options.adaptiveThreshold) {
       return this.options.maxChunkSize
     }

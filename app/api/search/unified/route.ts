@@ -1,9 +1,8 @@
-import { NextRequest } from "next/server"
-import type { MetadataRoute } from "next"
+import { AIClient } from "@/lib/ai-client"
+import { EnhancedURLProcessor } from "@/lib/enhanced-url-processor"
 import { createVectorDatabase } from "@/lib/vector-database"
 import type { VectorDBConfig } from "@/lib/vector-database-types"
-import { AIClient } from "@/lib/ai-client"
-import { EnhancedURLProcessor, processURLContent } from "@/lib/enhanced-url-processor"
+import { NextRequest } from "next/server"
 
 // Runtime: Node.js (we use network + modest parsing)
 export const runtime = "nodejs"
@@ -79,7 +78,7 @@ interface SourceItem {
 
 // Utilities
 const enc = new TextEncoder()
-function sse(controller: ReadableStreamDefaultController, event: any) {
+function sse(controller: ReadableStreamDefaultController, event: unknown) {
   controller.enqueue(enc.encode(`data: ${JSON.stringify(event)}\n\n`))
 }
 
@@ -87,9 +86,6 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
 
-function pick<T>(arr: T[], n: number): T[] {
-  return arr.slice(0, clamp(n, 0, arr.length))
-}
 
 function toISO(d?: string | Date) {
   try { return d ? (typeof d === 'string' ? new Date(d).toISOString() : d.toISOString()) : undefined } catch { return undefined }
@@ -298,7 +294,7 @@ async function localSearchProvider(query: string, maxResults: number, cfg?: Vect
     await vdb.initialize()
 
     // Create AI client for embeddings
-    const ai = new AIClient({ provider: aiConf.provider as any, apiKey: aiConf.apiKey, model: aiConf.model, baseUrl: aiConf.baseUrl })
+    const ai = new AIClient({ provider: aiConf.provider as unknown, apiKey: aiConf.apiKey, model: aiConf.model, baseUrl: aiConf.baseUrl })
     let embedding: number[] = []
     try {
       embedding = await ai.generateEmbedding(query)
@@ -331,7 +327,7 @@ async function localSearchProvider(query: string, maxResults: number, cfg?: Vect
         publishedAt,
       }
     })
-  } catch (e) {
+  } catch {
     // On any failure, do not block the rest of providers
     return []
   }
@@ -388,8 +384,6 @@ function crossCheckClaims(claims: string[], sources: SourceItem[]): Array<{claim
 
 // Research gap identification for academic queries
 function identifyResearchGaps(sources: SourceItem[], query: string): string[] {
-  const topics = extractTopics(sources)
-  const queryTerms = query.toLowerCase().split(/\s+/).filter(w => w.length > 3)
   
   // Common research areas that might be underexplored
   const potentialGaps = [
@@ -533,61 +527,7 @@ function spellCheck(query: string): string[] {
   return corrections
 }
 
-// Extract focus area from paper title and abstract
-function extractFocusArea(title: string, snippet: string): string {
-  const text = (title + ' ' + snippet).toLowerCase()
-  
-  if (text.includes('diagnostic') || text.includes('diagnosis') || text.includes('imaging')) return 'Diagnostics'
-  if (text.includes('treatment') || text.includes('therapy') || text.includes('therapeutic')) return 'Treatment'
-  if (text.includes('monitoring') || text.includes('patient care') || text.includes('clinical')) return 'Patient Care'
-  if (text.includes('drug') || text.includes('pharmaceutical') || text.includes('medication')) return 'Drug Discovery'
-  if (text.includes('surgery') || text.includes('surgical') || text.includes('robotic')) return 'Surgery'
-  if (text.includes('prediction') || text.includes('prognosis') || text.includes('risk')) return 'Prediction'
-  if (text.includes('workflow') || text.includes('decision support') || text.includes('clinical decision')) return 'Clinical Support'
-  
-  return 'General AI'
-}
-
 // Analyze research trends from sources
-function analyzeTrends(sources: SourceItem[]): Array<{category: string; insight: string}> {
-  const trends = []
-  const focusAreas = sources.map(s => extractFocusArea(s.title, s.snippet || ''))
-  const focusCount = focusAreas.reduce((acc, area) => {
-    acc[area] = (acc[area] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
-  
-  const topFocus = Object.entries(focusCount).sort(([,a], [,b]) => b - a)[0]
-  if (topFocus) {
-    trends.push({
-      category: 'Primary Focus',
-      insight: `${topFocus[1]} out of ${sources.length} papers focus on ${topFocus[0].toLowerCase()}`
-    })
-  }
-  
-  const recentPapers = sources.filter(s => {
-    if (!s.publishedAt) return false
-    const pubDate = new Date(s.publishedAt)
-    const oneYearAgo = new Date()
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
-    return pubDate > oneYearAgo
-  }).length
-  
-  trends.push({
-    category: 'Research Activity',
-    insight: `${recentPapers} papers published in the last year, indicating ${recentPapers > sources.length * 0.6 ? 'high' : 'moderate'} research activity`
-  })
-  
-  const hasMultipleAuthors = sources.filter(s => s.authors && s.authors.length > 3).length
-  if (hasMultipleAuthors > 0) {
-    trends.push({
-      category: 'Collaboration',
-      insight: `${hasMultipleAuthors} papers show multi-institutional collaboration (4+ authors)`
-    })
-  }
-  
-  return trends
-}
 
 // Summarize methodologies present across sources (heuristic)
 function summarizeMethodologies(sources: SourceItem[]): { breakdown: Record<string, number>; top: string[] } {
@@ -652,12 +592,12 @@ async function biorxivSearch(query: string, maxResults: number): Promise<SourceI
     const url = `https://api.biorxiv.org/details/biorxiv/2020-01-01/2025-12-31/${maxResults}?format=json`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: any = await res.json()
+    const data: unknown = await res.json()
     const papers = data?.collection || []
-    return papers.filter((p: any) => 
+    return papers.filter((p: unknown) => 
       (p.title?.toLowerCase().includes(query.toLowerCase()) || 
        p.abstract?.toLowerCase().includes(query.toLowerCase()))
-    ).slice(0, maxResults).map((p: any) => ({
+    ).slice(0, maxResults).map((p: unknown) => ({
       id: p.doi || p.preprint_id,
       provider: 'biorxiv' as const,
       title: p.title || 'bioRxiv preprint',
@@ -675,12 +615,12 @@ async function medrxivSearch(query: string, maxResults: number): Promise<SourceI
     const url = `https://api.medrxiv.org/details/medrxiv/2020-01-01/2025-12-31/${maxResults}?format=json`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: any = await res.json()
+    const data: unknown = await res.json()
     const papers = data?.collection || []
-    return papers.filter((p: any) => 
+    return papers.filter((p: unknown) => 
       (p.title?.toLowerCase().includes(query.toLowerCase()) || 
        p.abstract?.toLowerCase().includes(query.toLowerCase()))
-    ).slice(0, maxResults).map((p: any) => ({
+    ).slice(0, maxResults).map((p: unknown) => ({
       id: p.doi || p.preprint_id,
       provider: 'medrxiv' as const,
       title: p.title || 'medRxiv preprint',
@@ -698,9 +638,9 @@ async function doajSearch(query: string, maxResults: number): Promise<SourceItem
     const url = `https://doaj.org/api/search/articles/${encodeURIComponent(query)}?pageSize=${maxResults}`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: any = await res.json()
+    const data: unknown = await res.json()
     const results = data?.results || []
-    return results.map((r: any) => {
+    return results.map((r: unknown) => {
       const bibjson = r.bibjson || {}
       return {
         id: r.id || bibjson.identifier?.[0]?.id,
@@ -708,7 +648,7 @@ async function doajSearch(query: string, maxResults: number): Promise<SourceItem
         title: bibjson.title || 'DOAJ Article',
         url: bibjson.link?.[0]?.url || `https://doaj.org/article/${r.id}`,
         snippet: bibjson.abstract || '',
-        authors: bibjson.author?.map((a: any) => a.name).slice(0, 5) || [],
+        authors: bibjson.author?.map((a: unknown) => a.name).slice(0, 5) || [],
         publishedAt: toISO(bibjson.year ? `${bibjson.year}-01-01` : undefined),
         openAccess: true
       }
@@ -750,15 +690,15 @@ async function crossrefSearch(query: string, maxResults: number): Promise<Source
     const url = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${maxResults}&sort=relevance&order=desc`
     const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0 (mailto:support@example.com)' } })
     if (!res.ok) return []
-    const data: any = await res.json()
+    const data: unknown = await res.json()
     const items = data?.message?.items || []
-    return items.map((item: any) => ({
+    return items.map((item: unknown) => ({
       id: item.DOI,
       provider: 'crossref' as const,
       title: item.title?.[0] || 'CrossRef Work',
       url: item.URL || `https://doi.org/${item.DOI}`,
       snippet: item.abstract || '',
-      authors: item.author?.map((a: any) => `${a.given || ''} ${a.family || ''}`.trim()).slice(0, 5) || [],
+      authors: item.author?.map((a: unknown) => `${a.given || ''} ${a.family || ''}`.trim()).slice(0, 5) || [],
       publishedAt: toISO(item.published?.['date-parts']?.[0] ? `${item.published['date-parts'][0].join('-')}` : undefined),
       citations: typeof item['is-referenced-by-count'] === 'number' ? item['is-referenced-by-count'] : undefined
     }))
@@ -769,8 +709,8 @@ async function hnSearch(query: string, maxResults: number): Promise<SourceItem[]
   const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&hitsPerPage=${maxResults}`
   const res = await fetch(url)
   if (!res.ok) return []
-  const data: any = await res.json()
-  const hits: any[] = data?.hits || []
+  const data: unknown = await res.json()
+  const hits: unknown[] = data?.hits || []
   return hits.map(h => ({
     id: h.objectID,
     provider: "hn" as const,
@@ -797,12 +737,12 @@ async function openalexSearch(query: string, maxResults: number): Promise<Source
     const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${maxResults}&filter=is_oa:true,type:journal-article&sort=cited_by_count:desc`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: any = await res.json()
-    const works: any[] = data?.results || data?.works || []
-    return works.slice(0, maxResults).map((w: any) => {
+    const data: unknown = await res.json()
+    const works: unknown[] = data?.results || data?.works || []
+    return works.slice(0, maxResults).map((w: unknown) => {
       const id = w.id || w.doi || w.openalex || w.ids?.openalex || w.ids?.doi || w.display_name
       const title = w.display_name || w.title || (w.biblio?.title || '')
-      const authors = Array.isArray(w.authorships) ? w.authorships.map((a: any) => a?.author?.display_name).filter(Boolean) : []
+      const authors = Array.isArray(w.authorships) ? w.authorships.map((a: unknown) => a?.author?.display_name).filter(Boolean) : []
       const url = w.primary_location?.landing_page_url || w.open_access?.oa_url || (w.doi ? `https://doi.org/${w.doi.replace(/^doi:/i,'')}` : (w.id || ''))
       const publishedAt = toISO(w.publication_date || (w.publication_year ? `${w.publication_year}-01-01` : undefined))
       const citations = typeof w.cited_by_count === 'number' ? w.cited_by_count : undefined
@@ -818,11 +758,11 @@ async function semanticScholarSearch(query: string, maxResults: number): Promise
     const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${maxResults}&fields=title,year,authors,url,openAccessPdf,citationCount`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: any = await res.json()
-    const items: any[] = data?.data || []
-    return items.map((p: any) => {
+    const data: unknown = await res.json()
+    const items: unknown[] = data?.data || []
+    return items.map((p: unknown) => {
       const url = p.openAccessPdf?.url || p.url || (p.externalIds?.DOI ? `https://doi.org/${p.externalIds.DOI}` : '')
-      const authors = Array.isArray(p.authors) ? p.authors.map((a: any) => a.name) : []
+      const authors = Array.isArray(p.authors) ? p.authors.map((a: unknown) => a.name) : []
       const publishedAt = toISO(p.year ? `${p.year}-01-01` : undefined)
       const citations = typeof p.citationCount === 'number' ? p.citationCount : undefined
       const openAccess = !!p.openAccessPdf?.url
@@ -837,13 +777,13 @@ async function pubmedSearch(query: string, maxResults: number): Promise<SourceIt
     const esearch = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmax=${maxResults}&retmode=json&sort=relevance&term=${encodeURIComponent(query)}`
     const r1 = await fetch(esearch)
     if (!r1.ok) return []
-    const j1: any = await r1.json()
+    const j1: unknown = await r1.json()
     const ids: string[] = j1?.esearchresult?.idlist || []
     if (!ids.length) return []
     const esum = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=${ids.join(',')}`
     const r2 = await fetch(esum)
     if (!r2.ok) return []
-    const j2: any = await r2.json()
+    const j2: unknown = await r2.json()
     const out: SourceItem[] = []
     const result = j2?.result || {}
     const uids: string[] = result?.uids || []
@@ -851,7 +791,7 @@ async function pubmedSearch(query: string, maxResults: number): Promise<SourceIt
       const it = result[id]
       if (!it) continue
       const title = it.title || `PubMed ${id}`
-      const authors = Array.isArray(it.authors) ? it.authors.map((a: any) => a.name).filter(Boolean) : []
+      const authors = Array.isArray(it.authors) ? it.authors.map((a: unknown) => a.name).filter(Boolean) : []
       const url = `https://pubmed.ncbi.nlm.nih.gov/${id}/`
       const publishedAt = toISO(it.pubdate)
       out.push({ id, provider: 'pubmed', title, url, authors, publishedAt })
@@ -866,9 +806,9 @@ async function redditSearch(query: string, maxResults: number): Promise<SourceIt
     const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&sort=relevance&t=all&limit=${maxResults}`
     const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
     if (!res.ok) return []
-    const data: any = await res.json()
-    const children: any[] = data?.data?.children || []
-    return children.slice(0, maxResults).map((c: any) => {
+    const data: unknown = await res.json()
+    const children: unknown[] = data?.data?.children || []
+    return children.slice(0, maxResults).map((c: unknown) => {
       const d = c.data || {}
       const url = d.url || `https://www.reddit.com${d.permalink || ''}`
       const publishedAt = toISO(d.created_utc ? new Date(d.created_utc * 1000) : undefined)
@@ -883,9 +823,9 @@ async function githubSearch(query: string, maxResults: number): Promise<SourceIt
     const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=${maxResults}`
     const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
     if (!res.ok) return []
-    const data: any = await res.json()
-    const items: any[] = data?.items || []
-    return items.map((r: any) => ({ id: String(r.id), provider: 'github' as const, title: r.full_name || r.name, url: r.html_url, snippet: r.description || '', publishedAt: toISO(r.updated_at), openAccess: true }))
+    const data: unknown = await res.json()
+    const items: unknown[] = data?.items || []
+    return items.map((r: unknown) => ({ id: String(r.id), provider: 'github' as const, title: r.full_name || r.name, url: r.html_url, snippet: r.description || '', publishedAt: toISO(r.updated_at), openAccess: true }))
   } catch { return [] }
 }
 
@@ -916,27 +856,6 @@ function computeScore(item: SourceItem, query: string): number {
 }
 
 // Summarization using Hugging Face if available (fallback to snippet)
-async function summarizeText(text: string, title: string): Promise<string> {
-  try {
-    const key = process.env.HUGGINGFACE_API_KEY
-    if (!key) {
-      // Lightweight extract when no key
-      return `- ${title}: ${text.slice(0, 280)}...`
-    }
-    const prompt = `Summarize the following content in 4-6 bullet points focusing on key claims, evidence, and limitations. Be concise. Title: ${title}. Content: ${text}`
-    const resp = await fetch("https://api-inference.huggingface.co/models/microsoft/Phi-4", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ inputs: prompt, parameters: { max_new_tokens: 240, temperature: 0.5, return_full_text: false } })
-    })
-    if (!resp.ok) return `- ${title}: ${text.slice(0, 280)}...`
-    const data = await resp.json()
-    const out = Array.isArray(data) && data[0]?.generated_text ? data[0].generated_text : data.generated_text || ""
-    return out || `- ${title}: ${text.slice(0, 280)}...`
-  } catch (e) {
-    return `- ${title}: ${text.slice(0, 280)}...`
-  }
-}
 
 function uniqBy<T>(arr: T[], key: (x: T) => string): T[] {
   const seen = new Set<string>()
@@ -969,7 +888,6 @@ export async function POST(req: NextRequest) {
     "arxiv", "openalex", "semanticscholar", "pubmed", "biorxiv", "medrxiv", "doaj", "crossref", "hn", "reddit", "github", "ssrn"
   ])
   const intent = detectIntent(query)
-  const summaryLevel = body.summaryLevel || 'standard' // quick, standard, detailed
   const synthesisMode: 'server' | 'client' = body.synthesis === 'client' ? 'client' : 'server'
   const links = Array.isArray(body.links) ? body.links : []
   const useLocalDocs = !!body.useLocalDocs

@@ -1,19 +1,18 @@
 "use client"
 
-import React, { useState } from "react"
-import { Filter, X, ChevronDown } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { ChevronDown, Filter, X } from "lucide-react"
+import { useState } from "react"
 
 interface Document {
   id: string
@@ -36,7 +35,6 @@ export function DocumentFilter({
   const [isOpen, setIsOpen] = useState(false)
   
   const isAllSelected = selectedDocumentIds.length === 0 || selectedDocumentIds.length === documents.length
-  const selectedCount = isAllSelected ? documents.length : selectedDocumentIds.length
 
   const handleToggleAll = () => {
     if (isAllSelected) {

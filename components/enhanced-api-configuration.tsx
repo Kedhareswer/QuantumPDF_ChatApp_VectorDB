@@ -2,15 +2,15 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { Zap, Eye, EyeOff, Check, X, AlertTriangle, Info, ExternalLink } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { AlertTriangle, Check, ExternalLink, Eye, EyeOff, Info, X, Zap } from "lucide-react"
+import { useState } from "react"
 
 // Replace the PROVIDER_INFO constant with this updated version that includes all providers
 const PROVIDER_INFO = {
@@ -133,16 +133,16 @@ const PROVIDER_INFO = {
     defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
     baseUrl: "https://api.deepinfra.com/v1/openai",
     features: ["Serverless", "Open Source Models", "Low Cost"],
-    limitations: ["No Embeddings", "Limited Features", "API Reliability"],
+    limitations: ["Limited Features", "API Reliability"],
     signupUrl: "https://deepinfra.com/",
-    embeddingSupport: false,
+    embeddingSupport: true,
     disabled: false,
   },
   deepseek: {
     name: "DeepSeek",
     description: "Advanced reasoning models",
-    models: ["deepseek-chat", "deepseek-coder", "deepseek-r1"],
-    defaultModel: "deepseek-r1",
+    models: ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"],
+    defaultModel: "deepseek-chat",
     baseUrl: "https://api.deepseek.com/v1",
     features: ["Advanced Reasoning", "Code Generation", "Cost Effective"],
     limitations: ["No Embeddings", "Limited Availability", "API Costs"],
@@ -157,22 +157,21 @@ const PROVIDER_INFO = {
       "gemini-2.5-pro", 
       "gemini-2.5-flash", 
       "gemini-2.5-flash-lite",
-      "gemini-2.5-flash-image",
-      "gemini-2.5-flash-preview-09-2025"
+      "gemini-embedding-001"
     ],
     defaultModel: "gemini-2.5-flash",
-    baseUrl: "https://generativelanguage.googleapis.com/v1",
-    features: ["Multimodal", "Google Knowledge", "Fast Response"],
-    limitations: ["No Embeddings", "API Costs", "Limited Models"],
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    features: ["Multimodal", "Google Knowledge", "Fast Response", "Embeddings"],
+    limitations: ["API Costs", "Limited Models"],
     signupUrl: "https://aistudio.google.com/",
-    embeddingSupport: false,
+    embeddingSupport: true,
     disabled: false,
   },
   vertex: {
     name: "Google Vertex AI",
     description: "Enterprise AI platform with embeddings",
-    models: ["gemini-2.5-pro", "gemini-2.5-flash", "text-embedding-gecko"],
-    defaultModel: "gemini-2.5-pro",
+    models: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-embedding-001"],
+    defaultModel: "gemini-2.5-flash",
     baseUrl: "https://us-central1-aiplatform.googleapis.com/v1",
     features: ["Enterprise Grade", "Embeddings", "Google Cloud Integration"],
     limitations: ["Complex Setup", "API Costs", "GCP Required"],
@@ -196,11 +195,11 @@ const PROVIDER_INFO = {
     name: "Perplexity",
     description: "Search-augmented models with real-time knowledge",
     models: [
-      "llama-3.1-sonar-large-128k-online", 
-      "llama-3.1-sonar-small-128k-online",
-      "llama-3.1-sonar-huge-128k-online"
+      "sonar",
+      "sonar-pro",
+      "sonar-reasoning"
     ],
-    defaultModel: "llama-3.1-sonar-small-128k-online",
+    defaultModel: "sonar",
     baseUrl: "https://api.perplexity.ai",
     features: ["Real-time Knowledge", "Search Augmented", "Online Access"],
     limitations: ["No Embeddings", "Limited Features", "API Costs"],
@@ -212,9 +211,9 @@ const PROVIDER_INFO = {
   xai: {
     name: "xAI (Grok)",
     description: "Real-time knowledge models",
-    models: ["grok-3-beta", "grok-3-mini-beta", "grok-beta"],
-    defaultModel: "grok-3-mini-beta",
-    baseUrl: "https://api.xai.com/v1",
+    models: ["grok-3-latest", "grok-3-mini", "grok-4-0709"],
+    defaultModel: "grok-3-latest",
+    baseUrl: "https://api.x.ai/v1",
     features: ["Real-time Knowledge", "Strong Reasoning", "Fast Response"],
     limitations: ["No Embeddings", "Limited Availability", "API Costs"],
     signupUrl: "https://grok.x.ai/",

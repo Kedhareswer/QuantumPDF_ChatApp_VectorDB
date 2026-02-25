@@ -1,19 +1,14 @@
 // Type declarations for PDF.js legacy build
 declare module 'pdfjs-dist/legacy/build/pdf' {
   // Include basic types that are needed for PDF.js functionality
-  const getDocument: any;
-  const GlobalWorkerOptions: any;
+  const getDocument: unknown;
+  const GlobalWorkerOptions: unknown;
   const version: string;
-  const PDFWorker: any;
-  const AnnotationLayer: any;
-  const renderTextLayer: any;
+  const PDFWorker: unknown;
+  const AnnotationLayer: unknown;
+  const renderTextLayer: unknown;
   
   export {
-    getDocument,
-    GlobalWorkerOptions,
-    version,
-    PDFWorker,
-    AnnotationLayer,
-    renderTextLayer
-  };
+        AnnotationLayer, GlobalWorkerOptions, PDFWorker, getDocument, renderTextLayer, version
+    };
 }

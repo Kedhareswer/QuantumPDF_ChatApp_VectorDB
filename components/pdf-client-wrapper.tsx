@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
 import { EnhancedPDFProcessor } from '@/lib/enhanced-pdf-processor';
+import { useEffect, useState } from 'react';
 
 // Props for the PDF client wrapper
 interface PDFClientWrapperProps {

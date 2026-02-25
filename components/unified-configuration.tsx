@@ -1,22 +1,21 @@
 "use client"
 
-import { useState } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Slider } from "@/components/ui/slider"
-import { Label } from "@/components/ui/label"
-import { Zap, Database, Eye, EyeOff, Check, X, ExternalLink, Info, AlertTriangle, Loader2, Globe, Cpu, Brain, Search } from "lucide-react"
-import { useAppStore } from "@/lib/store"
-import { 
-  ConfigurationTestingSkeleton, 
-  APITestingSkeleton, 
-  VectorDatabaseLoadingSkeleton 
+import {
+    ConfigurationTestingSkeleton,
+    VectorDatabaseLoadingSkeleton
 } from "@/components/skeleton-loaders"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useAppStore } from "@/lib/store"
+import { AlertTriangle, Check, Cpu, Database, ExternalLink, Eye, EyeOff, Info, Loader2, X, Zap } from "lucide-react"
+import { useState } from "react"
 
 // Updated: December 2025 - Latest models from official provider documentation
 const AI_PROVIDERS = {
@@ -405,8 +404,8 @@ const VECTOR_DB_PROVIDERS = {
 }
 
 interface UnifiedConfigurationProps {
-  onTestAI: (config: any) => Promise<boolean>
-  onTestVectorDB: (config: any) => Promise<boolean>
+  onTestAI: (config: unknown) => Promise<boolean>
+  onTestVectorDB: (config: unknown) => Promise<boolean>
 }
 
 export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfigurationProps) {
@@ -429,7 +428,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
     const providerInfo = AI_PROVIDERS[provider]
     setAIConfig({
       ...aiConfig,
-      provider: provider as any,
+      provider: provider as unknown,
       model: providerInfo.defaultModel,
       baseUrl: providerInfo.defaultBaseUrl,
       apiKey: "",
@@ -441,7 +440,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
     const providerInfo = VECTOR_DB_PROVIDERS[provider]
     setVectorDBConfig({
       ...vectorDBConfig,
-      provider: provider as any,
+      provider: provider as unknown,
       apiKey: "",
       url: providerInfo.defaultUrl || "",
       indexName: "pdf-documents",
@@ -566,7 +565,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
   }
 
   const filteredProviders = Object.entries(AI_PROVIDERS).filter(
-    ([_, provider]) => provider.category === selectedCategory,
+    ([, provider]) => provider.category === selectedCategory,
   )
 
   return (
@@ -693,7 +692,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>
-                      <strong>Warning:</strong> This provider doesn't support embeddings. Document processing will use
+                      <strong>Warning:</strong> This provider doesn&apos;t support embeddings. Document processing will use
                       fallback embeddings which may reduce search quality.
                     </AlertDescription>
                   </Alert>
@@ -704,7 +703,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>
-                      <strong>Error:</strong> Provider "{aiConfig.provider}" is not supported. Please select a different provider.
+                      <strong>Error:</strong> Provider &quot;{aiConfig.provider}&quot; is not supported. Please select a different provider.
                     </AlertDescription>
                   </Alert>
                 )}

@@ -8,7 +8,7 @@ export interface PerformanceMetric {
   operation: string
   duration: number
   timestamp: Date
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export class PerformanceMonitor {
@@ -23,10 +23,10 @@ export class PerformanceMonitor {
   /**
    * Start timing an operation
    */
-  startOperation(operationName: string): () => void {
+  startOperation(operationName: string): (metadata?: Record<string, unknown>) => void {
     const startTime = performance.now()
 
-    return (metadata?: Record<string, any>) => {
+    return (metadata?: Record<string, unknown>) => {
       const duration = performance.now() - startTime
       this.recordMetric({
         operation: operationName,
@@ -175,7 +175,7 @@ export const performanceMonitor = new PerformanceMonitor(
 export async function measureAsync<T>(
   operationName: string,
   fn: () => Promise<T>,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): Promise<T> {
   const endTiming = performanceMonitor.startOperation(operationName)
 
@@ -193,7 +193,7 @@ export async function measureAsync<T>(
 export function measureSync<T>(
   operationName: string,
   fn: () => T,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): T {
   const endTiming = performanceMonitor.startOperation(operationName)
 

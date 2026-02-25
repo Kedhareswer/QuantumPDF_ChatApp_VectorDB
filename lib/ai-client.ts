@@ -61,11 +61,130 @@ const embeddingCache = new Map<string, EmbeddingCacheEntry>()
 const EMBEDDING_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
 const MAX_CACHE_SIZE = 1000 // Maximum cached embeddings
 
+const PROVIDER_DEFAULT_TEXT_MODELS: Record<AIConfig["provider"], string> = {
+  huggingface: "meta-llama/Meta-Llama-3.3-70B-Instruct",
+  openai: "gpt-4o-mini",
+  anthropic: "claude-sonnet-4-5-20250514",
+  aiml: "gpt-4o-mini",
+  groq: "llama-3.3-70b-versatile",
+  openrouter: "openai/gpt-4o-mini",
+  deepinfra: "meta-llama/Meta-Llama-3.3-70B-Instruct",
+  deepseek: "deepseek-chat",
+  googleai: "gemini-2.5-flash",
+  vertex: "gemini-2.5-flash",
+  mistral: "mistral-small-latest",
+  perplexity: "sonar",
+  xai: "grok-3-latest",
+  alibaba: "qwen-turbo",
+  minimax: "abab6.5-chat",
+  fireworks: "accounts/fireworks/models/llama-v3p3-70b-instruct",
+  cerebras: "llama3.1-8b",
+  replicate: "meta/meta-llama-3-8b-instruct",
+  anyscale: "meta-llama/Meta-Llama-3.1-8B-Instruct",
+}
+
+const PROVIDER_DEFAULT_EMBEDDING_MODELS: Partial<Record<AIConfig["provider"], string>> = {
+  huggingface: "sentence-transformers/all-MiniLM-L6-v2",
+  openai: "text-embedding-3-small",
+  aiml: "text-embedding-3-small",
+  googleai: "gemini-embedding-001",
+  fireworks: "nomic-ai/nomic-embed-text-v1.5",
+  deepinfra: "BAAI/bge-base-en-v1.5",
+}
+
+const MODEL_MIGRATIONS: Partial<Record<AIConfig["provider"], Record<string, string>>> = {
+  googleai: {
+    "embedding-001": "gemini-embedding-001",
+    "models/embedding-001": "gemini-embedding-001",
+  },
+  openai: {
+    "gpt-4-turbo-preview": "gpt-4o",
+  },
+  anthropic: {
+    "claude-3-5-haiku-latest": "claude-3-5-haiku-20241022",
+  },
+  deepseek: {
+    "deepseek-r1": "deepseek-reasoner",
+  },
+  perplexity: {
+    "llama-3.1-sonar-small-128k-online": "sonar",
+    "llama-3.1-sonar-large-128k-online": "sonar-pro",
+    "llama-3.1-sonar-huge-128k-online": "sonar-pro",
+  },
+  xai: {
+    "grok-beta": "grok-3-latest",
+    "grok-3-mini-beta": "grok-3-mini",
+    "grok-3-beta": "grok-3-latest",
+  },
+  vertex: {
+    "text-embedding-gecko": "gemini-2.5-flash",
+  },
+}
+
 export class AIClient {
   private config: AIConfig
 
   constructor(config: AIConfig) {
-    this.config = config
+    const normalizedModel = this.normalizeModelAlias(config.provider, config.model)
+    const normalizedBaseUrl =
+      config.provider === "xai" && config.baseUrl?.includes("api.xai.com")
+        ? config.baseUrl.replace("api.xai.com", "api.x.ai")
+        : config.baseUrl
+
+    this.config = {
+      ...config,
+      model: normalizedModel,
+      baseUrl: normalizedBaseUrl,
+    }
+  }
+
+  private normalizeModelAlias(provider: AIConfig["provider"], model: string): string {
+    const trimmedModel = (model || "").trim()
+    if (!trimmedModel) return trimmedModel
+
+    const migrations = MODEL_MIGRATIONS[provider]
+    if (!migrations) return trimmedModel
+
+    const direct = migrations[trimmedModel]
+    if (direct) return direct
+
+    const lower = trimmedModel.toLowerCase()
+    const match = Object.entries(migrations).find(([oldId]) => oldId.toLowerCase() === lower)
+    return match?.[1] || trimmedModel
+  }
+
+  private isEmbeddingModel(model: string): boolean {
+    const lower = (model || "").toLowerCase()
+    return (
+      lower.includes("embedding") ||
+      lower.includes("embed-") ||
+      lower.includes("embed/") ||
+      lower.includes("text-embedding") ||
+      lower.includes("nomic-embed") ||
+      lower.includes("bge-")
+    )
+  }
+
+  private getModelForPurpose(purpose: "text" | "embedding"): string {
+    const provider = this.config.provider
+    const configuredModel = this.normalizeModelAlias(provider, this.config.model || "")
+    const defaultTextModel = PROVIDER_DEFAULT_TEXT_MODELS[provider]
+    const defaultEmbeddingModel = PROVIDER_DEFAULT_EMBEDDING_MODELS[provider]
+
+    if (!configuredModel) {
+      return purpose === "embedding" ? defaultEmbeddingModel || defaultTextModel : defaultTextModel
+    }
+
+    if (purpose === "text" && this.isEmbeddingModel(configuredModel)) {
+      console.warn(`Model '${configuredModel}' is an embedding model for ${provider}. Using text model '${defaultTextModel}'.`)
+      return defaultTextModel
+    }
+
+    if (purpose === "embedding" && defaultEmbeddingModel && !this.isEmbeddingModel(configuredModel)) {
+      return defaultEmbeddingModel
+    }
+
+    return configuredModel
   }
 
   /**
@@ -159,18 +278,31 @@ export class AIClient {
     }
   }
 
-  async generateEmbeddings(texts: string[]): Promise<number[][]> {
+  async generateEmbeddings(
+    texts: string[],
+    onProgress?: (progress: { completed: number; total: number; textPreview: string }) => void,
+  ): Promise<number[][]> {
     const embeddings: number[][] = []
     for (let i = 0; i < texts.length; i++) {
       const text = texts[i]
       if (!text || typeof text !== "string" || text.trim().length === 0) {
         console.warn(`AIClient:generateEmbeddings - Skipping invalid text at index ${i}, using fallback.`)
         embeddings.push(this.generateFallbackEmbedding("invalid input"))
+        onProgress?.({
+          completed: embeddings.length,
+          total: texts.length,
+          textPreview: "invalid input",
+        })
         continue
       }
       try {
         const embedding = await this.generateEmbedding(text) // Calls the simplified generateEmbedding
         embeddings.push(embedding)
+        onProgress?.({
+          completed: embeddings.length,
+          total: texts.length,
+          textPreview: text.substring(0, 50),
+        })
         // Add small delay to avoid rate limiting
         if (i < texts.length - 1) {
           await new Promise((resolve) => setTimeout(resolve, 100))
@@ -181,6 +313,11 @@ export class AIClient {
           error instanceof Error ? error.message : String(error),
         )
         embeddings.push(this.generateFallbackEmbedding(text))
+        onProgress?.({
+          completed: embeddings.length,
+          total: texts.length,
+          textPreview: text.substring(0, 50),
+        })
       }
     }
     return embeddings
@@ -191,7 +328,7 @@ export class AIClient {
     try {
       const requestBody: { text: string; model?: string; apiKey?: string } = {
         text: text,
-        model: this.config.model || "sentence-transformers/all-MiniLM-L6-v2",
+        model: this.getModelForPurpose("embedding") || "sentence-transformers/all-MiniLM-L6-v2",
       }
 
       if (this.config.provider === "huggingface" && this.config.apiKey) {
@@ -224,10 +361,7 @@ export class AIClient {
     const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
     console.log(`AIClient: [Direct Text] Making OpenAI API request to: ${baseUrl}/embeddings`)
     try {
-      const modelToUse =
-        this.config.provider === "openai" && this.config.model.startsWith("text-embedding")
-          ? this.config.model
-          : "text-embedding-3-small"
+      const modelToUse = this.getModelForPurpose("embedding")
       const response = await fetch(`${baseUrl}/embeddings`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
@@ -239,7 +373,7 @@ export class AIClient {
         try {
           const errorData = JSON.parse(errorText)
           if (errorData.error && errorData.error.message) errorMessage = errorData.error.message
-        } catch (parseError) {
+        } catch {
           console.warn("Could not parse OpenAI error response as JSON")
         }
         throw new Error(`OpenAI API error: ${errorMessage}`)
@@ -276,7 +410,7 @@ export class AIClient {
       const truncatedText = text.length > maxLength ? text.substring(0, maxLength) : text
 
       // Use appropriate embedding model for AIML
-      let embeddingModel = this.config.model
+      let embeddingModel = this.getModelForPurpose("embedding")
 
       // AIML supports OpenAI-compatible embedding models
       const validEmbeddingModels = [
@@ -331,7 +465,7 @@ export class AIClient {
           } else if (errorData.detail) {
             errorMessage = errorData.detail
           }
-        } catch (parseError) {
+        } catch {
           console.warn("Could not parse AIML error response as JSON:", errorText)
         }
 
@@ -392,7 +526,7 @@ export class AIClient {
 
     try {
       // Use appropriate embedding model for Fireworks
-      let embeddingModel = this.config.model
+      let embeddingModel = this.getModelForPurpose("embedding")
 
       // If the configured model is not an embedding model, use default
       if (!embeddingModel.includes("embedding")) {
@@ -435,11 +569,7 @@ export class AIClient {
 
     try {
       // Use appropriate embedding model for DeepInfra
-      let embeddingModel = this.config.model
-
-      if (!embeddingModel.includes("embedding")) {
-        embeddingModel = "BAAI/bge-base-en-v1.5"
-      }
+      const embeddingModel = this.getModelForPurpose("embedding")
 
       const response = await fetch(`${baseUrl}/embeddings`, {
         method: "POST",
@@ -475,14 +605,23 @@ export class AIClient {
     console.log(`AIClient: [Direct Text] Making Google AI API request to: ${baseUrl}`)
 
     try {
-      // Use appropriate embedding model for Google AI
-      let embeddingModel = this.config.model
-
-      if (!embeddingModel.includes("embedding")) {
-        embeddingModel = "models/embedding-001"
+      // Normalize model naming to Gemini embeddings and avoid deprecated legacy model IDs.
+      let embeddingModel = this.getModelForPurpose("embedding")
+      if (!embeddingModel || !embeddingModel.toLowerCase().includes("embedding")) {
+        embeddingModel = "gemini-embedding-001"
       }
 
-      const response = await fetch(`${baseUrl}/${embeddingModel}:embedContent?key=${this.config.apiKey}`, {
+      if (embeddingModel === "embedding-001" || embeddingModel === "models/embedding-001") {
+        console.warn("Google AI model 'embedding-001' is deprecated. Falling back to 'gemini-embedding-001'.")
+        embeddingModel = "gemini-embedding-001"
+      }
+
+      if (!embeddingModel.startsWith("models/")) {
+        embeddingModel = `models/${embeddingModel}`
+      }
+
+      const normalizedBaseUrl = baseUrl.replace(/\/+$/, "")
+      const response = await fetch(`${normalizedBaseUrl}/${embeddingModel}:embedContent?key=${this.config.apiKey}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -505,11 +644,11 @@ export class AIClient {
       }
 
       return result.embedding.values
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error(`Vertex AI embedding generation failed: ${error.message}`)
+        console.error(`Google AI embedding generation failed: ${error.message}`)
       } else {
-        console.error(`Vertex AI embedding generation failed: ${String(error)}`)
+        console.error(`Google AI embedding generation failed: ${String(error)}`)
       }
       return this.generateFallbackEmbedding(text)
     }
@@ -693,7 +832,7 @@ export class AIClient {
               if (content) {
                 onChunk(content)
               }
-            } catch (e) {
+            } catch {
               // Skip invalid JSON lines
             }
           }
@@ -706,6 +845,7 @@ export class AIClient {
   }
 
   private getProviderConfig(messages: ChatMessage[]) {
+    const textModel = this.getModelForPurpose("text")
     const baseConfigs = {
       anthropic: {
         baseUrl: this.config.baseUrl || "https://api.anthropic.com",
@@ -715,7 +855,7 @@ export class AIClient {
           "anthropic-version": "2023-06-01",
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           max_tokens: 2048,
           messages: messages.filter((m) => m.role !== "system"),
           system: messages.find((m) => m.role === "system")?.content,
@@ -730,7 +870,7 @@ export class AIClient {
           "X-Title": "QuantumPDF ChatApp"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -743,7 +883,7 @@ export class AIClient {
           "Content-Type": "application/json"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -756,7 +896,7 @@ export class AIClient {
           "Content-Type": "application/json"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -769,7 +909,7 @@ export class AIClient {
           "Content-Type": "application/json"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -782,7 +922,7 @@ export class AIClient {
           "Content-Type": "application/json"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -795,7 +935,7 @@ export class AIClient {
           "Content-Type": "application/json"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -809,7 +949,7 @@ export class AIClient {
           "User-Agent": "QuantumPDF-ChatApp/1.0"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -822,7 +962,7 @@ export class AIClient {
           "Content-Type": "application/json"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -835,7 +975,7 @@ export class AIClient {
           "Content-Type": "application/json"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -849,7 +989,7 @@ export class AIClient {
           "User-Agent": "QuantumPDF-ChatApp/1.0"
         },
         requestBody: {
-          model: this.config.model,
+          model: textModel,
           messages,
           max_tokens: 2048,
           temperature: 0.7
@@ -1015,10 +1155,12 @@ export class AIClient {
   private async generateHuggingFaceText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const prompt = this.formatMessagesForHuggingFace(messages)
     const context = messages.find((m) => m.role === "system")?.content || ""
-    const requestBody: { prompt: string; context: string; model: string; apiKey?: string } = {
+    const model = this.getModelForPurpose("text")
+    const requestBody: { prompt: string; context: string; model: string; temperature: number; apiKey?: string } = {
       prompt,
       context,
-      model: this.config.model,
+      model,
+      temperature,
     }
     if (this.config.provider === "huggingface" && this.config.apiKey) {
       requestBody.apiKey = this.config.apiKey
@@ -1075,7 +1217,7 @@ export class AIClient {
         const payloadRaw = dataLine.replace(/^data:\s*/, "")
         if (!payloadRaw) continue
 
-        let payload: any
+        let payload: unknown
         try {
           payload = JSON.parse(payloadRaw)
         } catch {
@@ -1114,10 +1256,11 @@ export class AIClient {
 
   private async generateOpenAIText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
+      body: JSON.stringify({ model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`OpenAI API error: ${response.statusText}`)
     const result = await response.json()
@@ -1132,11 +1275,12 @@ export class AIClient {
   ): Promise<void> {
     try {
       const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
+      const model = this.getModelForPurpose("text")
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          model: this.config.model, 
+          model, 
           messages: messages, 
           max_tokens: 2048, 
           temperature: 0.1, // Low temperature for factual responses
@@ -1177,7 +1321,7 @@ export class AIClient {
               if (content) {
                 onChunk(content)
               }
-            } catch (e) {
+            } catch {
               // Skip invalid JSON lines
             }
           }
@@ -1203,7 +1347,7 @@ export class AIClient {
     const baseUrl = this.config.baseUrl || "https://api.aimlapi.com/v1"
 
     // Ensure we're using a text generation model
-    let textModel = this.config.model
+    let textModel = this.getModelForPurpose("text")
     const embeddingModels = ["text-embedding"]
     const isEmbeddingModel = embeddingModels.some((model) => textModel.toLowerCase().includes(model))
 
@@ -1247,6 +1391,7 @@ export class AIClient {
 
   private async generateAnthropicText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.anthropic.com"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/v1/messages`, {
       method: "POST",
       headers: {
@@ -1255,7 +1400,7 @@ export class AIClient {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: this.config.model,
+        model,
         max_tokens: 500,
         temperature,
         messages: messages.filter((m) => m.role !== "system"),
@@ -1280,12 +1425,13 @@ export class AIClient {
     try {
       const baseUrl = this.config.baseUrl || "https://api.groq.com/openai/v1"
       const apiKey = this.config.apiKey.trim()
+      const model = this.getModelForPurpose("text")
       
       if (!apiKey) {
         throw new Error("Groq API key is not configured")
       }
 
-      console.log("Sending request to Groq API with model:", this.config.model)
+      console.log("Sending request to Groq API with model:", model)
       
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
@@ -1295,7 +1441,7 @@ export class AIClient {
           "User-Agent": "QuantumPDF-ChatApp/1.0"
         },
         body: JSON.stringify({ 
-          model: this.config.model, 
+          model, 
           messages: messages,
           max_tokens: 2048, // Increased from 500 to allow for longer responses
           temperature,
@@ -1337,6 +1483,7 @@ export class AIClient {
     try {
       const baseUrl = this.config.baseUrl || "https://api.groq.com/openai/v1"
       const apiKey = this.config.apiKey.trim()
+      const model = this.getModelForPurpose("text")
       
       if (!apiKey) {
         throw new Error("Groq API key is not configured")
@@ -1350,7 +1497,7 @@ export class AIClient {
           "User-Agent": "QuantumPDF-ChatApp/1.0"
         },
         body: JSON.stringify({ 
-          model: this.config.model, 
+          model, 
           messages: messages,
           max_tokens: 2048,
           temperature: 0.7,
@@ -1393,7 +1540,7 @@ export class AIClient {
               if (content) {
                 onChunk(content)
               }
-            } catch (e) {
+            } catch {
               // Skip invalid JSON lines
             }
           }
@@ -1430,6 +1577,7 @@ export class AIClient {
       const defaultBase = "https://api.fireworks.ai/inference/v1"
       const baseUrl = this.config.baseUrl?.trim() || defaultBase
       const apiKey = this.config.apiKey.trim()
+      const model = this.getModelForPurpose("text")
 
       if (!apiKey) throw new Error("Fireworks API key is not configured")
 
@@ -1444,7 +1592,7 @@ export class AIClient {
           "User-Agent": "QuantumPDF-ChatApp/1.0"
         },
         body: JSON.stringify({
-          model: this.config.model,
+          model,
           messages: messages,
           max_tokens: 2048,
           temperature,
@@ -1463,7 +1611,7 @@ export class AIClient {
 
         // Common error: 404 Not Found when the model name is invalid or not hosted.
         if (response.status === 404) {
-          throw new Error(`Fireworks model not found or endpoint invalid (404). Check the model name '${this.config.model}' and base URL '${baseUrl}'.`)
+          throw new Error(`Fireworks model not found or endpoint invalid (404). Check the model name '${model}' and base URL '${baseUrl}'.`)
         }
 
         throw new Error(`Fireworks API error (${response.status}): ${response.statusText} - ${errorText}`)
@@ -1493,10 +1641,11 @@ export class AIClient {
 
   private async generateCerebrasText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.cerebras.ai/v1"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
+      body: JSON.stringify({ model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`Cerebras API error: ${response.statusText}`)
     const result = await response.json()
@@ -1514,6 +1663,7 @@ export class AIClient {
 
   private async generateGoogleAIText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://generativelanguage.googleapis.com/v1beta"
+    const model = this.getModelForPurpose("text")
 
     // Convert messages to Google AI format
     const contents = messages.map((msg) => ({
@@ -1521,10 +1671,13 @@ export class AIClient {
       parts: [{ text: msg.content }],
     }))
 
-    const response = await fetch(`${baseUrl}/models/${this.config.model}:generateContent?key=${this.config.apiKey}`, {
+    const response = await fetch(`${baseUrl}/models/${model}:generateContent?key=${this.config.apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents }),
+      body: JSON.stringify({
+        contents,
+        generationConfig: { temperature },
+      }),
     })
     if (!response.ok) throw new Error(`Google AI API error: ${response.statusText}`)
     const result = await response.json()
@@ -1543,6 +1696,7 @@ export class AIClient {
   private async generateReplicateText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.replicate.com/v1"
     const apiKey = this.config.apiKey?.trim()
+    const model = this.getModelForPurpose("text")
     if (!apiKey) {
       throw new Error("Replicate API key is not configured")
     }
@@ -1554,7 +1708,7 @@ export class AIClient {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: this.config.model,
+        model,
         messages,
         max_tokens: 1024,
         temperature,
@@ -1586,10 +1740,11 @@ export class AIClient {
 
   private async generateAnyscaleText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.endpoints.anyscale.com/v1"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
+      body: JSON.stringify({ model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`Anyscale API error: ${response.statusText}`)
     const result = await response.json()
@@ -1608,6 +1763,7 @@ export class AIClient {
   // Proper implementations for providers that were using placeholders
   private async generateOpenRouterText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://openrouter.ai/api/v1"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { 
@@ -1617,7 +1773,7 @@ export class AIClient {
         "X-Title": "QuantumPDF ChatApp"
       },
       body: JSON.stringify({ 
-        model: this.config.model, 
+        model, 
         messages: messages, 
         max_tokens: 500, 
         temperature
@@ -1639,10 +1795,11 @@ export class AIClient {
 
   private async generateDeepInfraText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.deepinfra.com/v1/openai"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
+      body: JSON.stringify({ model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`DeepInfra API error: ${response.statusText}`)
     const result = await response.json()
@@ -1660,10 +1817,11 @@ export class AIClient {
 
   private async generateDeepSeekText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.deepseek.com/v1"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
+      body: JSON.stringify({ model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`DeepSeek API error: ${response.statusText}`)
     const result = await response.json()
@@ -1690,8 +1848,9 @@ export class AIClient {
     }
     
     // Check if project ID is passed via model config (format: "project:model")
-    if (this.config.model && this.config.model.includes(':')) {
-      const parts = this.config.model.split(':')
+    const model = this.getModelForPurpose("text")
+    if (model && model.includes(':')) {
+      const parts = model.split(':')
       if (parts.length === 2) {
         return parts[0]
       }
@@ -1720,7 +1879,8 @@ export class AIClient {
   private async generateVertexText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const projectId = this.extractVertexProjectId()
     const region = this.extractVertexRegion()
-    const model = this.config.model.includes(':') ? this.config.model.split(':')[1] : this.config.model
+    const normalized = this.getModelForPurpose("text")
+    const model = normalized.includes(':') ? normalized.split(':')[1] : normalized
     
     const baseUrl = `https://${region}-aiplatform.googleapis.com/v1`
     const endpoint = `${baseUrl}/projects/${projectId}/locations/${region}/publishers/google/models/${model}:generateContent`
@@ -1773,10 +1933,11 @@ export class AIClient {
 
   private async generateMistralText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.mistral.ai/v1"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
+      body: JSON.stringify({ model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`Mistral API error: ${response.statusText}`)
     const result = await response.json()
@@ -1794,10 +1955,11 @@ export class AIClient {
 
   private async generatePerplexityText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.perplexity.ai"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
+      body: JSON.stringify({ model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`Perplexity API error: ${response.statusText}`)
     const result = await response.json()
@@ -1815,10 +1977,11 @@ export class AIClient {
 
   private async generateXAIText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.x.ai/v1"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.config.model, messages: messages, max_tokens: 500, temperature }),
+      body: JSON.stringify({ model, messages: messages, max_tokens: 500, temperature }),
     })
     if (!response.ok) throw new Error(`xAI API error: ${response.statusText}`)
     const result = await response.json()
@@ -1836,6 +1999,7 @@ export class AIClient {
 
   private async generateAlibabaText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://dashscope.aliyuncs.com/api/v1"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/services/aigc/text-generation/generation`, {
       method: "POST",
       headers: { 
@@ -1844,7 +2008,7 @@ export class AIClient {
         "X-DashScope-SSE": "disable"
       },
       body: JSON.stringify({
-        model: this.config.model,
+        model,
         input: {
           messages: messages
         },
@@ -1870,6 +2034,7 @@ export class AIClient {
 
   private async generateMiniMaxText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
     const baseUrl = this.config.baseUrl || "https://api.minimax.chat/v1"
+    const model = this.getModelForPurpose("text")
     const response = await fetch(`${baseUrl}/text/chatcompletion_v2`, {
       method: "POST",
       headers: { 
@@ -1877,7 +2042,7 @@ export class AIClient {
         "Content-Type": "application/json" 
       },
       body: JSON.stringify({
-        model: this.config.model,
+        model,
         messages: messages,
         max_tokens: 500,
         temperature
@@ -1935,71 +2100,5 @@ export class AIClient {
     }
   }
 
-  private async simpleGenerateText(provider: string, messages: ChatMessage[]): Promise<string> {
-    console.log(`Generating text with ${provider} (simplified fallback)`)
-    if (!this.config.apiKey) throw new Error(`${provider} API key not provided`)
-    
-    // Construct a helpful response based on the input
-    const userMessage = messages.find(m => m.role === 'user')?.content || ''
-    const systemMessage = messages.find(m => m.role === 'system')?.content || ''
-    
-    // Simple keyword-based response generation
-    const keywords = userMessage.toLowerCase().split(/\s+/)
-    let response = `I understand you're asking about: "${userMessage.substring(0, 100)}${userMessage.length > 100 ? '...' : ''}"\n\n`
-    
-    if (keywords.some(k => ['summary', 'summarize', 'overview'].includes(k))) {
-      response += "Based on the available documents, here are the key points I can identify:\n\n"
-      response += "• This appears to be a request for summarization\n"
-      response += "• I'm currently using a fallback response system\n"
-      response += "• For more detailed analysis, please ensure your AI provider is properly configured\n\n"
-    } else if (keywords.some(k => ['find', 'search', 'locate', 'where'].includes(k))) {
-      response += "I can help you search through the documents. However, I'm currently operating in fallback mode.\n\n"
-      response += "To get more accurate search results:\n"
-      response += "• Verify your AI provider configuration\n"
-      response += "• Check your API key and model settings\n"
-      response += "• Try rephrasing your query with more specific terms\n\n"
-    } else {
-      response += "I'm currently operating in simplified mode due to AI provider limitations.\n\n"
-      response += "To get full AI-powered responses:\n"
-      response += "• Check your AI provider settings in the configuration panel\n"
-      response += "• Ensure your API key is valid and has sufficient credits\n"
-      response += "• Try switching to a different AI provider\n\n"
-    }
-    
-    response += `**Provider**: ${provider}\n`
-    response += `**Status**: Fallback Mode\n`
-    response += `**Suggestion**: Please configure a fully supported AI provider for better responses.`
-    
-    return response
-  }
-  private async simpleGenerateEmbedding(provider: string, text: string): Promise<number[]> {
-    try {
-      if (!text || typeof text !== 'string' || text.trim().length === 0) {
-        throw new Error(`Invalid text input for ${provider} embedding`);
-      }
-      
-      console.log(`Generating text embedding with ${provider} (simplified hash) for: ${text.substring(0, 30)}`)
-      const dimension = DEFAULT_EMBEDDING_DIMENSION;
-      const embedding = new Array<number>(dimension).fill(0);
-      
-      // Simple hash-based embedding
-      for (let i = 0; i < text.length; i++) {
-        const charCode = text.charCodeAt(i);
-        const index = charCode % dimension;
-        embedding[index] += charCode / 128;
-      }
-      
-      // Calculate magnitude and normalize the vector
-      const magnitude = Math.sqrt(embedding.reduce((sum: number, val: number) => sum + val * val, 0));
-      return magnitude > 0 
-        ? embedding.map((val: number) => val / magnitude)
-        : embedding;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`Error in ${provider} simple embedding generation:`, errorMessage);
-      // Return a zero vector of the expected dimension
-      return new Array(DEFAULT_EMBEDDING_DIMENSION).fill(0);
-    }
-  }
 
 }

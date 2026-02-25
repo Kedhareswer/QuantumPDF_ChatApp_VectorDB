@@ -1,23 +1,24 @@
 "use client"
 
-import type React from "react"
-import { useState, useRef, useCallback } from "react"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
+import { PDFClientWrapper } from "@/components/pdf-client-wrapper"
+import { PDFProcessorSkeleton } from "@/components/skeleton-loaders"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
-import { AlertCircle, FileText, Upload, X, CheckCircle, AlertTriangle, RefreshCw, Info, Loader2, Image as ImageIcon } from "lucide-react"
-import { useAppStore } from "@/lib/store"
+import { DOCXProcessor } from "@/lib/docx-processor"
 import { EnhancedPDFProcessor, type ProcessingProgress } from "@/lib/enhanced-pdf-processor"
 import { SpreadsheetProcessor } from "@/lib/spreadsheet-processor"
-import { DOCXProcessor } from "@/lib/docx-processor"
-import { PDFProcessorSkeleton, DocumentCardSkeleton } from "@/components/skeleton-loaders"
-import { PDFClientWrapper } from "@/components/pdf-client-wrapper"
+import { useAppStore } from "@/lib/store"
+import { AlertCircle, AlertTriangle, CheckCircle, FileText, Image as ImageIcon, Info, Loader2, RefreshCw, Upload, X } from "lucide-react"
+import Image from "next/image"
+import type React from "react"
+import { useCallback, useRef, useState } from "react"
 
 interface UnifiedPDFProcessorProps {
-  onDocumentProcessed: (document: any) => void
+  onDocumentProcessed: (document: unknown) => void | Promise<void>
 }
 
 export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessorProps) {
@@ -27,9 +28,9 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<ProcessingProgress | null>(null)
   const [processingMethod, setProcessingMethod] = useState<string | null>(null)
-  const [processingStats, setProcessingStats] = useState<any>(null)
+  const [processingStats, setProcessingStats] = useState<unknown>(null)
   const [retryCount, setRetryCount] = useState(0)
-  const [isInitializing, setIsInitializing] = useState(false)
+  const [isInitializing] = useState(false)
   const [pdfProcessorReady, setPdfProcessorReady] = useState(false)
   const [useOCRFallback, setUseOCRFallback] = useState(false)
 
@@ -143,14 +144,14 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
       setProgress(null)
       setProcessingStats(null)
 
-      let result: any
+      let result: unknown
 
       if (isDOCX) {
         // Process DOCX
         result = await docxProcessor.current.processFile(
           file,
           (progressUpdate) => {
-            setProgress(progressUpdate as any)
+            setProgress(progressUpdate as unknown)
           }
         )
       } else if (isSpreadsheet) {
@@ -158,7 +159,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         result = await spreadsheetProcessor.current.processFile(
           file,
           (progressUpdate) => {
-            setProgress(progressUpdate as any)
+            setProgress(progressUpdate as unknown)
           }
         )
       } else {
@@ -213,8 +214,8 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
       }
 
       // Count inline images and page previews separately
-      const pagePreviewCount = result.metadata.multimodal?.images?.filter((img: any) => img.type === 'page-preview').length ?? 0
-      const inlineImageCount = result.metadata.multimodal?.images?.filter((img: any) => img.type === 'inline-image').length ?? 0
+      const pagePreviewCount = result.metadata.multimodal?.images?.filter((img: unknown) => img.type === 'page-preview').length ?? 0
+      const inlineImageCount = result.metadata.multimodal?.images?.filter((img: unknown) => img.type === 'inline-image').length ?? 0
       const tableCount = result.metadata.multimodal?.summary.tableCount ?? 0
       const equationCount = result.metadata.multimodal?.summary.equationCount ?? 0
 
@@ -244,7 +245,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         previewImages: result.metadata.multimodal?.images?.slice(0, 3) ?? [],
       })
 
-      onDocumentProcessed(document)
+      await Promise.resolve(onDocumentProcessed(document))
 
       const successMessage =
         result.metadata.warnings && result.metadata.warnings.length > 0
@@ -589,13 +590,15 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                     Page Previews ({processingStats.previewImages.length})
                   </h5>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {processingStats.previewImages.map((preview: any) => (
+                    {processingStats.previewImages.map((preview: PreviewImage) => (
                       <div key={preview.id} className="border rounded bg-white shadow-sm overflow-hidden">
-                        <img
+                        <Image
                           src={preview.dataUrl}
                           alt={preview.altText || `Preview for page ${preview.pageNumber}`}
+                          width={320}
+                          height={96}
                           className="w-full h-24 object-cover"
-                          loading="lazy"
+                          unoptimized
                         />
                         <div className="text-[10px] sm:text-xs p-1 text-center text-gray-600">
                           Page {preview.pageNumber ?? "?"}
@@ -654,3 +657,9 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   </div>
   )
 }
+  interface PreviewImage {
+    id: string
+    dataUrl: string
+    altText?: string
+    pageNumber?: number
+  }

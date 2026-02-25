@@ -4,8 +4,8 @@
  * This file is kept for reference but may be removed in future versions.
  */
 
-import { BrowserOCRProcessor } from "./ocr-processor"
 import { AdvancedChunker, type TextChunk } from "./advanced-chunking"
+import { BrowserOCRProcessor } from "./ocr-processor"
 
 export interface PDFProcessingResult {
   text: string
@@ -40,7 +40,7 @@ export interface ProcessingProgress {
 }
 
 export class AdvancedPDFProcessor {
-  private pdfjsLib: any = null
+  private pdfjsLib: unknown = null
   private isInitialized = false
   private workerInitialized = false
   private ocrProcessor: BrowserOCRProcessor
@@ -298,7 +298,7 @@ export class AdvancedPDFProcessor {
       method: "PDF.js",
     })
 
-    let metadata: any = {}
+    let metadata: unknown = {}
     try {
       const metadataResult = await pdf.getMetadata()
       metadata = metadataResult.info || {}
@@ -411,7 +411,7 @@ export class AdvancedPDFProcessor {
     }
   }
 
-  private extractFormattedText(textContent: any): string {
+  private extractFormattedText(textContent: unknown): string {
     if (!textContent?.items) return ""
 
     let text = ""
@@ -441,15 +441,6 @@ export class AdvancedPDFProcessor {
       .trim()
   }
 
-  private async extractTextWithOCR(
-    page: any,
-    pageNum: number,
-    onProgress?: (progress: ProcessingProgress) => void,
-  ): Promise<{ text: string; confidence: number }> {
-    // Skip OCR processing to avoid version conflicts
-    console.warn(`Skipping OCR for page ${pageNum} - OCR disabled`)
-    return { text: "", confidence: 0 }
-  }
 
   private async processWithServer(
     file: File,
@@ -513,188 +504,6 @@ export class AdvancedPDFProcessor {
     }
   }
 
-  private async processWithOCR(
-    file: File,
-    onProgress?: (progress: ProcessingProgress) => void,
-    startTime: number = Date.now(),
-  ): Promise<PDFProcessingResult> {
-    onProgress?.({
-      stage: "Preparing PDF for OCR processing...",
-      progress: 20,
-      method: "OCR",
-    })
-
-    try {
-      // Check if OCR should be used
-      const useOCR = this.ocrProcessor && (this.options?.useOCR || false)
-
-      if (!useOCR) {
-        throw new Error("OCR processor not available - Tesseract.js initialization failed")
-      }
-
-      // Convert PDF to images and process with OCR
-      const arrayBuffer = await file.arrayBuffer()
-
-      // Use simpler PDF loading for OCR processing
-      const loadingTask = this.pdfjsLib.getDocument({
-        data: arrayBuffer,
-        useWorkerFetch: false,
-        disableAutoFetch: true,
-        disableStream: true,
-      })
-
-      const pdf = await loadingTask.promise
-
-      let fullText = ""
-      let totalConfidence = 0
-      let pageCount = 0
-      let successfulPages = 0
-      let failedPages = 0
-
-      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-        try {
-          onProgress?.({
-            stage: `OCR processing page ${pageNum} of ${pdf.numPages}...`,
-            progress: 20 + (pageNum / pdf.numPages) * 60,
-            method: "OCR",
-          })
-
-          const page = await pdf.getPage(pageNum)
-          const viewport = page.getViewport({ scale: 1.5 }) // Reduced scale for better performance
-          const canvas = document.createElement("canvas")
-          const context = canvas.getContext("2d")!
-          canvas.height = viewport.height
-          canvas.width = viewport.width
-
-          await page.render({ canvasContext: context, viewport }).promise
-
-          const ocrResult = await this.ocrProcessor.processCanvas(canvas)
-          // Update progress after OCR processing
-          this.onOCRProgress?.({
-            progress: 100,
-            page: pageNum,
-            totalPages: pdf.numPages
-          })
-
-          if (ocrResult.text.trim() && !ocrResult.text.includes("[OCR processing failed")) {
-            fullText += `\n\n=== Page ${pageNum} (OCR) ===\n${ocrResult.text}`
-            totalConfidence += ocrResult.confidence
-            pageCount++
-            successfulPages++
-          } else {
-            failedPages++
-            console.warn(`OCR failed for page ${pageNum}`)
-          }
-        } catch (pageError) {
-          failedPages++
-          console.warn(`Error processing page ${pageNum} with OCR:`, pageError)
-          fullText += `\n\n=== Page ${pageNum} (OCR Error) ===\n[Page could not be processed with OCR]`
-        }
-      }
-
-      onProgress?.({
-        stage: "Creating optimized chunks from OCR text...",
-        progress: 85,
-        method: "OCR",
-      })
-
-      // If no text was extracted, provide a meaningful fallback
-      if (!fullText.trim() || pageCount === 0) {
-        fullText = `# OCR Processing Report: ${file.name}
-
-## Processing Summary
-OCR processing was attempted but could not extract readable text from this PDF.
-
-### Possible Reasons:
-- The PDF contains complex layouts or formatting
-- The image quality is too low for reliable text recognition
-- The document uses fonts or languages not well supported by OCR
-- The PDF is already text-based and doesn't require OCR
-
-### Recommendations:
-1. Try using a different PDF processing method
-2. Ensure the PDF has good image quality if it's scanned
-3. Consider using professional OCR software for complex documents
-4. Check if the PDF is text-based rather than image-based
-
-**File**: ${file.name}
-**Pages Processed**: ${pdf.numPages}
-**Successful Pages**: ${successfulPages}
-**Failed Pages**: ${failedPages}
-**Processing Time**: ${((Date.now() - startTime) / 1000).toFixed(2)} seconds`
-      }
-
-      const advancedChunks = this.chunker.chunkText(fullText.trim())
-      const chunks = advancedChunks.map((chunk) => chunk.content)
-
-      const processingTime = Date.now() - startTime
-      const avgConfidence = pageCount > 0 ? totalConfidence / pageCount : 0
-
-      return {
-        text: fullText.trim(),
-        chunks,
-        advancedChunks,
-        metadata: {
-          title: file.name,
-          author: "OCR Processor",
-          subject: "OCR extracted content",
-          pages: pdf.numPages,
-          processingMethod: "OCR",
-          extractionQuality: avgConfidence > 80 ? "high" : avgConfidence > 60 ? "medium" : "low",
-          language: this.detectLanguage(fullText),
-          fileSize: file.size,
-          processingTime,
-          successfulPages,
-          failedPages,
-          ocrUsed: true,
-          ocrConfidence: avgConfidence,
-        },
-      }
-    } catch (error) {
-      console.error("OCR processing failed:", error)
-
-      // Instead of throwing, return a fallback result
-      const processingTime = Date.now() - startTime
-      const fallbackText = `# OCR Processing Failed: ${file.name}
-
-## Error Details
-OCR processing encountered an error: ${error instanceof Error ? error.message : "Unknown error"}
-
-## Alternative Solutions
-1. **Try Standard PDF Processing**: Use the regular PDF text extraction method
-2. **Check File Format**: Ensure the file is a valid PDF
-3. **File Size**: Large files may cause processing issues
-4. **Browser Compatibility**: Try using a different browser
-5. **Manual Text Entry**: Consider manually entering the text content
-
-**File**: ${file.name}
-**Processing Time**: ${(processingTime / 1000).toFixed(2)} seconds
-**Error**: ${error instanceof Error ? error.message : "Unknown error"}`
-
-      const advancedChunks = this.chunker.chunkText(fallbackText)
-      const chunks = advancedChunks.map((chunk) => chunk.content)
-
-      return {
-        text: fallbackText,
-        chunks,
-        advancedChunks,
-        metadata: {
-          title: file.name,
-          author: "OCR Processor",
-          subject: "OCR processing failed",
-          pages: 1,
-          processingMethod: "OCR (Failed)",
-          extractionQuality: "low" as const,
-          language: "English",
-          fileSize: file.size,
-          processingTime,
-          successfulPages: 0,
-          failedPages: 1,
-          ocrUsed: false,
-        },
-      }
-    }
-  }
 
   private async processWithStructuredFallback(
     file: File,

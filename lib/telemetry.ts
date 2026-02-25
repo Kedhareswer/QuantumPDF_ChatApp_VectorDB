@@ -4,7 +4,7 @@ export interface TelemetryEvent {
   timestamp: Date
   category: 'embedding' | 'query' | 'retrieval' | 'provider' | 'cache' | 'performance' | 'ingestion'
   action: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
   duration?: number
   success?: boolean
   error?: string

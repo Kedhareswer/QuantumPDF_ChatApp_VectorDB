@@ -195,9 +195,9 @@ export interface QueryCacheValue {
   answer: string
   sources: string[]
   relevanceScore: number
-  retrievedChunks: any[]
-  qualityMetrics: any
-  tokenUsage: any
+  retrievedChunks: unknown[]
+  qualityMetrics: unknown
+  tokenUsage: unknown
 }
 
 export class QueryCache extends BaseCache<QueryCacheKey, QueryCacheValue> {

@@ -8,7 +8,7 @@ interface RetrievedChunk {
   documentId?: string
   documentName?: string
   page?: number
-  bbox?: any
+  bbox?: unknown
   level?: number
   chunkType?: string
 }
@@ -41,6 +41,18 @@ interface Message {
       criticalReview: string
       finalRefinement: string
     }
+    queryAnalysis?: {
+      originalQuery: string
+      rewrittenQuery: string
+      queryType: string
+      complexity: "simple" | "moderate" | "complex"
+      requiresHyDE: boolean
+      requiresStepBack: boolean
+      alternativeQueries: string[]
+      hasHypotheticalAnswer: boolean
+      hasStepBackQuestion: boolean
+      confidence: number
+    }
   }
 }
 
@@ -51,7 +63,7 @@ interface Document {
   chunks: string[]
   embeddings: number[][]
   uploadedAt: Date
-  metadata?: any
+  metadata?: unknown
 }
 
 export type AIProvider =
@@ -143,7 +155,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       // Initial state
       messages: [],
       documents: [],
@@ -240,27 +252,48 @@ export const useAppStore = create<AppState>()(
     {
       name: "quantum-pdf-store",
       partialize: (state) => ({
-        aiConfig: state.aiConfig,
+        aiConfig: {
+          ...state.aiConfig,
+          apiKey: "",
+        },
         vectorDBConfig: state.vectorDBConfig,
         sidebarCollapsed: state.sidebarCollapsed,
         activeTab: state.activeTab,
       }),
       // Add version and migration logic
-      version: 1,
-      migrate: (persistedState: any, version: number) => {
+      version: 2,
+      migrate: (persistedState: unknown, version: number) => {
+        if (!persistedState || typeof persistedState !== "object") {
+          return persistedState
+        }
+        const state = persistedState as Record<string, unknown>
+
+        if (version < 2) {
+          const aiConfig = state.aiConfig
+          if (aiConfig && typeof aiConfig === "object") {
+            state.aiConfig = {
+              ...(aiConfig as Record<string, unknown>),
+              apiKey: "",
+            }
+          }
+        }
+
         if (version === 0) {
           // Migration from version 0 to 1: fix invalid providers
-          if (persistedState.aiConfig) {
+          if (state.aiConfig && typeof state.aiConfig === "object") {
             const validProviders = [
               "huggingface", "openai", "anthropic", "aiml", "groq", "openrouter",
               "deepinfra", "deepseek", "googleai", "vertex", "mistral", "perplexity",
               "xai", "alibaba", "minimax", "fireworks", "cerebras", "replicate", "anyscale"
             ];
-            
-            if (!validProviders.includes(persistedState.aiConfig.provider)) {
-              console.warn(`Migrating invalid provider "${persistedState.aiConfig.provider}" to "openai"`);
-              persistedState.aiConfig = {
-                ...persistedState.aiConfig,
+
+            const aiConfig = state.aiConfig as Record<string, unknown>
+            const provider = typeof aiConfig.provider === "string" ? aiConfig.provider : ""
+
+            if (!validProviders.includes(provider)) {
+              console.warn(`Migrating invalid provider "${provider}" to "openai"`);
+              state.aiConfig = {
+                ...aiConfig,
                 provider: "openai",
                 model: "gpt-4o-mini",
                 baseUrl: "https://api.openai.com/v1"
@@ -268,7 +301,7 @@ export const useAppStore = create<AppState>()(
             }
           }
         }
-        return persistedState;
+        return state;
       },
     },
   ),

@@ -1,53 +1,50 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-// @ts-ignore - missing types
+// @ts-expect-error - missing types
 import remarkMath from 'remark-math'
-// @ts-ignore - missing types
-import rehypeKatex from 'rehype-katex'
+// @ts-expect-error - missing types
 import Mermaid from '@/components/mermaid'
 import type { Components } from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
 
-import {
-  Send,
-  Loader2,
-  FileText,
-  Brain,
-  Clock,
-  Target,
-  Sparkles,
-  MessageSquare,
-  Zap,
-  Settings,
-  HelpCircle,
-  ChevronDown,
-  ChevronRight,
-  Eye,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent } from "@/components/ui/card"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { ChunkVisualization } from "@/components/chunk-visualization"
+import { DocumentFilter } from "@/components/document-filter"
+import { QueryHistory } from "@/components/query-history"
+import { QuickActions } from "@/components/quick-actions"
 import { EnhancedChatProcessingSkeleton } from "@/components/skeleton-loaders"
 import { ThinkingBubble } from "@/components/thinking-bubble"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/hooks/use-toast"
 import { useAppStore } from "@/lib/store"
-import { QuickActions } from "@/components/quick-actions"
-import { CitationBadge, parseCitations } from "@/components/citation-badge"
-import { DocumentFilter } from "@/components/document-filter"
-import { ChunkVisualization } from "@/components/chunk-visualization"
-import { QueryHistory } from "@/components/query-history"
-import { ExportMenu } from "@/components/export-menu"
+import {
+    Brain,
+    ChevronDown,
+    ChevronRight,
+    Clock,
+    Eye,
+    FileText,
+    HelpCircle,
+    Loader2,
+    MessageSquare,
+    Send,
+    Settings,
+    Sparkles,
+    Target,
+    Zap,
+} from "lucide-react"
 
 interface RetrievedChunk {
   content: string
@@ -56,7 +53,7 @@ interface RetrievedChunk {
   documentId?: string
   documentName?: string
   page?: number
-  bbox?: any
+  bbox?: unknown
   level?: number
   chunkType?: string
 }
@@ -89,6 +86,18 @@ interface Message {
       criticalReview: string
       finalRefinement: string
     }
+    queryAnalysis?: {
+      originalQuery: string
+      rewrittenQuery: string
+      queryType: string
+      complexity: "simple" | "moderate" | "complex"
+      requiresHyDE: boolean
+      requiresStepBack: boolean
+      alternativeQueries: string[]
+      hasHypotheticalAnswer: boolean
+      hasStepBackQuestion: boolean
+      confidence: number
+    }
   }
 }
 
@@ -105,9 +114,18 @@ interface ChatInterfaceProps {
   onNewSession: () => void
   isProcessing: boolean
   disabled: boolean
-  ragEngine?: any // Add ragEngine prop for diagnostics
-  documentContext?: any
-  aiClient?: any
+  ragEngine?: unknown // Add ragEngine prop for diagnostics
+  documentContext?: unknown
+  aiClient?: unknown
+  embeddingStatus?: {
+    active: boolean
+    stage: "idle" | "embedding" | "indexing"
+    documentName: string
+    completed: number
+    total: number
+    textPreview: string
+    startedAt: number | null
+  }
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -247,27 +265,27 @@ function MessageContent({ content }: { content: string }) {
             <div key={part.id} className="markdown-content">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex as any]}
+                rehypePlugins={[rehypeKatex as unknown]}
                 components={{
                   // Custom styling for markdown elements
-                  h1: ({ children }) => <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 mt-4 sm:mt-6 first:mt-0 wrap-break-word">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-base sm:text-lg md:text-xl font-bold mb-2 sm:mb-3 mt-3 sm:mt-5 first:mt-0 wrap-break-word">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-sm sm:text-base md:text-lg font-bold mb-2 mt-3 sm:mt-4 first:mt-0 wrap-break-word">{children}</h3>,
-                  h4: ({ children }) => <h4 className="text-xs sm:text-sm md:text-base font-bold mb-2 mt-2 sm:mt-3 first:mt-0 wrap-break-word">{children}</h4>,
-                  h5: ({ children }) => <h5 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 wrap-break-word">{children}</h5>,
-                  h6: ({ children }) => <h6 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 wrap-break-word">{children}</h6>,
-                  p: ({ children }) => <p className="mb-3 sm:mb-4 last:mb-0 leading-relaxed text-xs sm:text-sm md:text-base wrap-break-word">{children}</p>,
+                  h1: ({ children }) => <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 mt-4 sm:mt-6 first:mt-0 break-words">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-base sm:text-lg md:text-xl font-bold mb-2 sm:mb-3 mt-3 sm:mt-5 first:mt-0 break-words">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm sm:text-base md:text-lg font-bold mb-2 mt-3 sm:mt-4 first:mt-0 break-words">{children}</h3>,
+                  h4: ({ children }) => <h4 className="text-xs sm:text-sm md:text-base font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h4>,
+                  h5: ({ children }) => <h5 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h5>,
+                  h6: ({ children }) => <h6 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h6>,
+                  p: ({ children }) => <p className="mb-3 sm:mb-4 last:mb-0 leading-relaxed text-xs sm:text-sm md:text-base break-words">{children}</p>,
                   ul: ({ children }) => <ul className="list-disc list-inside mb-3 sm:mb-4 space-y-1 text-xs sm:text-sm">{children}</ul>,
                   ol: ({ children }) => <ol className="list-decimal list-inside mb-3 sm:mb-4 space-y-1 text-xs sm:text-sm">{children}</ol>,
-                  li: ({ children }) => <li className="leading-relaxed wrap-break-word">{children}</li>,
+                  li: ({ children }) => <li className="leading-relaxed break-words">{children}</li>,
                   blockquote: ({ children }) => (
                     <blockquote className="border-l-4 border-gray-300 pl-3 sm:pl-4 my-3 sm:my-4 italic text-gray-700 bg-gray-50 py-2 text-xs sm:text-sm">
                       {children}
                     </blockquote>
                   ),
-                  code: (props: any) => {
+                  code: (props: unknown) => {
                     const { inline, children, ...rest } = props;
-                    const className: any = (props as any).className || ''
+                    const className: unknown = (props as unknown).className || ''
                     const langMatch = /language-(\w+)/.exec(className)
                     const language = langMatch ? langMatch[1] : undefined
                     const codeString = String(children).trim()
@@ -277,17 +295,17 @@ function MessageContent({ content }: { content: string }) {
                     }
 
                     return inline ? (
-                      <code className="bg-gray-100 px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono text-gray-800 wrap-break-word" {...rest}>
+                      <code className="bg-gray-100 px-1 sm:px-1.5 py-0.5 rounded text-[10px] sm:text-xs font-mono text-gray-800 break-all" {...rest}>
                         {children}
                       </code>
                     ) : (
-                      <code className="block bg-gray-100 p-2 sm:p-3 rounded text-[10px] sm:text-xs font-mono overflow-x-auto" {...rest}>
+                      <code className="block bg-gray-100 p-2 sm:p-3 rounded text-[10px] sm:text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words" {...rest}>
                         {children}
                       </code>
                     );
                   },
                   pre: ({ children }) => (
-                    <pre className="bg-gray-100 p-2 sm:p-3 rounded text-[10px] sm:text-xs font-mono overflow-x-auto mb-3 sm:mb-4">
+                    <pre className="bg-gray-100 p-2 sm:p-3 rounded text-[10px] sm:text-xs font-mono overflow-x-auto whitespace-pre-wrap break-words mb-3 sm:mb-4">
                       {children}
                     </pre>
                   ),
@@ -311,7 +329,7 @@ function MessageContent({ content }: { content: string }) {
                     </th>
                   ),
                   td: ({ children }) => (
-                    <td className="border border-gray-300 px-2 sm:px-3 md:px-4 py-1 sm:py-2 text-gray-700 text-[10px] sm:text-xs wrap-break-word">
+                    <td className="border border-gray-300 px-2 sm:px-3 md:px-4 py-1 sm:py-2 text-gray-700 text-[10px] sm:text-xs break-words">
                       {children}
                     </td>
                   ),
@@ -320,7 +338,7 @@ function MessageContent({ content }: { content: string }) {
                   a: ({ href, children }) => (
                     <a
                       href={href}
-                      className="text-blue-600 hover:text-blue-800 underline text-xs sm:text-sm wrap-break-word"
+                      className="text-blue-600 hover:text-blue-800 underline text-xs sm:text-sm break-all"
                       target="_blank"
                       rel="noopener noreferrer"
                     >
@@ -345,17 +363,14 @@ function MessageContent({ content }: { content: string }) {
 export function ChatInterface({ 
   messages, 
   onSendMessage, 
-  onAddMessage,
   onClearChat, 
   onNewSession, 
   isProcessing, 
   disabled, 
   ragEngine,
-  documentContext,
-  aiClient,
+  embeddingStatus,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("")
-  const [isExpanded, setIsExpanded] = useState(false)
   const [showAdvancedControls, setShowAdvancedControls] = useState(false)
   const [isRunningDiagnostics, setIsRunningDiagnostics] = useState(false)
   const [enhancedOptions, setEnhancedOptions] = useState({
@@ -365,14 +380,21 @@ export function ChatInterface({
   // Search mode: smart detection (no explicit controls)
   const [useContext, setUseContext] = useState(true)
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([])
-  const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
-  const [viewingDocument, setViewingDocument] = useState<{id: string, page: number} | null>(null)
+  const [, setPdfViewerOpen] = useState(false)
+  const [, setViewingDocument] = useState<{id: string, page: number} | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+  const EMBEDDING_FUN_LINES = [
+    "Hold up... chef is aligning vectors just right.",
+    "Spicing chunks with cosine seasoning.",
+    "Embedding engine is in the kitchen. No raw chunks served.",
+    "Calibrating the brain juice. Almost there.",
+    "One more stir and these chunks become searchable."
+  ]
 
-  const { aiConfig, vectorDBConfig, setActiveTab, modelStatus, documents: storeDocuments } = useAppStore()
+  const { documents: storeDocuments } = useAppStore()
   
   // Get documents for filter
   const filterDocuments = (storeDocuments || []).map(doc => ({
@@ -412,7 +434,7 @@ export function ChatInterface({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSubmitStreaming(e as any)
+      handleSubmitStreaming(e as unknown)
     }
   }
 
@@ -430,21 +452,6 @@ export function ChatInterface({
     }
   }
 
-  const handleCopy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      toast({
-        title: "Copied!",
-        description: "Message copied to clipboard."
-      })
-    } catch (err) {
-      toast({
-        title: "Copy failed",
-        description: "Could not copy message.",
-        variant: "destructive"
-      })
-    }
-  }
 
   const formatTimestamp = (date: Date) => {
     return date.toLocaleTimeString("en-US", {
@@ -459,6 +466,98 @@ export function ChatInterface({
     if (ms < 1000) return `${ms}ms`
     return `${(ms / 1000).toFixed(1)}s`
   }
+
+  const normalizeCitationToken = (value: string) =>
+    value.toLowerCase().replace(/\s+/g, "").replace(/[.,[\]()"']/g, "")
+
+  const getCitationAlignedChunks = (message: Message): RetrievedChunk[] => {
+    const chunks = message.metadata?.retrievedChunks || []
+    if (!chunks.length || message.role !== "assistant") return chunks
+
+    const cited = Array.from(message.content.matchAll(/\[([^\]]+)\]/g))
+      .map((m) => m[1]?.split(",")[0]?.trim())
+      .filter(Boolean)
+      .map((name) => normalizeCitationToken(name))
+
+    if (!cited.length) return chunks
+
+    const matched = chunks.filter((chunk) => {
+      const source = normalizeCitationToken(chunk.source || "")
+      const doc = normalizeCitationToken(chunk.documentName || "")
+      return cited.some((c) => source.includes(c) || doc.includes(c) || c.includes(doc))
+    })
+
+    return matched.length > 0 ? matched : chunks
+  }
+
+  const renderEmbeddingStatusCard = (variant: "inline" | "spotlight" = "inline") => {
+    if (!embeddingStatus?.active) return null
+
+    const isSpotlight = variant === "spotlight"
+    const totalChunks = Math.max(embeddingStatus.total || 1, 1)
+    const completedChunks = Math.max(0, Math.min(embeddingStatus.completed || 0, totalChunks))
+    const progressPercent = Math.min(100, Math.max(6, Math.round((completedChunks / totalChunks) * 100)))
+    const currentChunk = embeddingStatus.stage === "embedding"
+      ? Math.min(completedChunks + 1, totalChunks)
+      : completedChunks
+    const funLineIndex = Math.min(
+      EMBEDDING_FUN_LINES.length - 1,
+      Math.floor(completedChunks / 20),
+    )
+
+    return (
+      <Card
+        className={`border-2 border-black ${
+          isSpotlight
+            ? "bg-amber-100 shadow-[0_12px_24px_rgba(0,0,0,0.12)]"
+            : "bg-amber-50"
+        }`}
+      >
+        <CardContent className={`space-y-2 ${isSpotlight ? "p-4 sm:p-5" : "p-3"}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-500 opacity-75" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-orange-600" />
+              </span>
+              <p className={`${isSpotlight ? "text-base sm:text-lg" : "text-sm"} font-semibold`}>
+                {embeddingStatus.stage === "indexing"
+                  ? "Plating finished vectors into the database..."
+                  : "Hold up, cooking embeddings..."}
+              </p>
+            </div>
+            <Badge variant="outline" className="text-xs border-black">
+              {completedChunks}/{totalChunks}
+            </Badge>
+          </div>
+
+          <div className="h-2 rounded-full bg-black/10 overflow-hidden">
+            <div
+              className="h-full bg-black transition-all duration-500"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          <p className="text-xs text-gray-700">
+            {embeddingStatus.stage === "embedding"
+              ? `Embedding chunk ${currentChunk}/${totalChunks}...`
+              : "Indexing complete chunks for retrieval..."}
+          </p>
+
+          <p className="text-xs text-gray-600 italic">{EMBEDDING_FUN_LINES[funLineIndex]}</p>
+
+          {embeddingStatus.textPreview && (
+            <p className="text-[11px] text-gray-500 truncate">
+              Now seasoning: &quot;{embeddingStatus.textPreview}&quot;
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const showEmbeddingSpotlight = Boolean(embeddingStatus?.active && messages.length === 0)
+  const showEmbeddingInline = Boolean(embeddingStatus?.active && messages.length > 0)
 
   const runDiagnostics = async () => {
     if (!ragEngine) {
@@ -486,7 +585,7 @@ export function ChatInterface({
 ## Document Analysis
 ${diagnostics.documents.length === 0 
   ? '❌ No documents found' 
-  : diagnostics.documents.map((doc: any, i: number) => 
+  : diagnostics.documents.map((doc: unknown, i: number) => 
     `**${i + 1}. ${doc.name}**
 - Chunks: ${doc.chunksCount}
 - Embeddings: ${doc.embeddingsCount}
@@ -513,18 +612,6 @@ ${diagnostics.documents.length === 0
 *Diagnostic completed at ${new Date().toLocaleString()}*`
 
       // Add diagnostic message to chat
-      const diagnosticMessage = {
-        id: Date.now().toString(),
-        role: "assistant" as const,
-        content: diagnosticReport,
-        timestamp: new Date(),
-        sources: ['System Diagnostics'],
-        metadata: {
-          responseTime: 0,
-          relevanceScore: 1.0,
-          retrievedChunks: 0,
-        },
-      }
 
       // This would need to be passed up to the parent component
       // For now, just log the results
@@ -547,13 +634,13 @@ ${diagnostics.documents.length === 0
     onSendMessage(text, {
       useContext,
       showThinking: enhancedOptions.showThinking,
-      complexityLevel: enhancedOptions.complexityLevel === 'auto' ? undefined : (enhancedOptions.complexityLevel as any),
+      complexityLevel: enhancedOptions.complexityLevel === 'auto' ? undefined : (enhancedOptions.complexityLevel as unknown),
       documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined
     })
     
     // Add to query history
-    if (typeof window !== 'undefined' && (window as any).__addQueryToHistory) {
-      (window as any).__addQueryToHistory(text)
+    if (typeof window !== 'undefined' && (window as unknown).__addQueryToHistory) {
+      (window as unknown).__addQueryToHistory(text)
     }
   }
 
@@ -564,9 +651,8 @@ ${diagnostics.documents.length === 0
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm sm:text-base md:text-lg font-semibold">Chat</h2>
           <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap">
-            {/* Query History & Export */}
+            {/* Query History */}
             <QueryHistory onSelectQuery={handleSelectQuery} />
-            <ExportMenu messages={messages} />
             
             {/* Settings */}
             <TooltipProvider>
@@ -610,7 +696,7 @@ ${diagnostics.documents.length === 0
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
                       <p className="text-sm">
-                        <strong>Thinking Mode:</strong> Shows AI's reasoning process<br/>
+                        <strong>Thinking Mode:</strong> Shows AI&apos;s reasoning process<br/>
                         <strong>Complexity:</strong> Controls analysis depth<br/>
                         • Simple: Fast, direct answers<br/>
                         • Normal: Balanced analysis<br/>
@@ -724,73 +810,83 @@ ${diagnostics.documents.length === 0
         Skip to chat messages
       </a>
 
+      {showEmbeddingInline && (
+        <div className="max-w-4xl mx-auto w-full px-4 pt-3">
+          {renderEmbeddingStatusCard("inline")}
+        </div>
+      )}
+
       {/* Messages Area */}
       <ScrollArea className="flex-1 h-0 px-4 sm:px-6 lg:px-8" ref={scrollAreaRef}>
         <div id="chat-messages" className="max-w-4xl mx-auto py-6 space-content-lg">
           {messages.length === 0 ? (
-            <div className="flex items-center justify-center min-h-[60vh]">
-              <div className="text-center space-y-8 max-w-2xl px-4">
-                <div className="w-24 h-24 border-4 border-black mx-auto flex items-center justify-center bg-gray-50 card-enhanced">
-                  <Brain className="w-12 h-12" />
+            showEmbeddingSpotlight ? (
+              <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="w-full max-w-3xl px-4">
+                  {renderEmbeddingStatusCard("spotlight")}
                 </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="text-center space-y-8 max-w-2xl px-4">
+                  <div className="w-24 h-24 border-4 border-black mx-auto flex items-center justify-center bg-gray-50 card-enhanced">
+                    <Brain className="w-12 h-12" />
+                  </div>
 
-                <div className="space-y-4">
-                  <h1 className="text-hierarchy-1">QUANTUM PDF READY</h1>
-                  <p className="text-lg text-gray-600 leading-relaxed">
-                    {disabled
-                      ? "Configure AI Providers and Upload PDFs to start chatting"
-                      : "Ask questions about your uploaded documents"}
-                  </p>
-                </div>
+                  <div className="space-y-4">
+                    <h1 className="text-hierarchy-1">QUANTUM PDF READY</h1>
+                    <p className="text-lg text-gray-600 leading-relaxed">
+                      {disabled
+                        ? "Configure AI Providers and Upload PDFs to start chatting"
+                        : "Ask questions about your uploaded documents"}
+                    </p>
+                  </div>
 
-                {!disabled && (
-                  <div className="space-y-6">
-                    <h2 className="text-hierarchy-3 text-gray-800">SUGGESTED QUESTIONS:</h2>
-                    <div className="grid gap-3 max-w-xl mx-auto">
-                      {SUGGESTED_QUESTIONS.map((question, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleSuggestedQuestion(question)}
-                          className="p-4 text-left border-2 border-gray-300 hover:border-black hover:bg-gray-50 transition-all duration-200 text-sm group btn-enhanced"
-                          disabled={isProcessing}
-                          aria-label={`Ask: ${question}`}
-                        >
-                          <div className="flex items-start space-x-3">
-                            <Sparkles className="w-4 h-4 mt-0.5 text-gray-500 group-hover:text-black transition-colors" />
-                            <span className="leading-relaxed">{question}</span>
-                          </div>
-                        </button>
-                      ))}
+                  {!disabled && (
+                    <div className="space-y-6">
+                      <h2 className="text-hierarchy-3 text-gray-800">SUGGESTED QUESTIONS:</h2>
+                      <div className="grid gap-3 max-w-xl mx-auto">
+                        {SUGGESTED_QUESTIONS.map((question, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleSuggestedQuestion(question)}
+                            className="p-4 text-left border-2 border-gray-300 hover:border-black hover:bg-gray-50 transition-all duration-200 text-sm group btn-enhanced"
+                            disabled={isProcessing}
+                            aria-label={`Ask: ${question}`}
+                          >
+                            <div className="flex items-start space-x-3">
+                              <Sparkles className="w-4 h-4 mt-0.5 text-gray-500 group-hover:text-black transition-colors" />
+                              <span className="leading-relaxed">{question}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-8 text-sm text-gray-500">
-                  <div className="text-center space-y-2">
-                    <MessageSquare className="w-8 h-8 mx-auto" />
-                    <p className="font-medium">Multi-document chat</p>
-                  </div>
-                  <div className="text-center space-y-2">
-                    <Brain className="w-8 h-8 mx-auto" />
-                    <p className="font-medium">AI-powered analysis</p>
-                  </div>
-                  <div className="text-center space-y-2">
-                    <FileText className="w-8 h-8 mx-auto" />
-                    <p className="font-medium">Source citations</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-8 text-sm text-gray-500">
+                    <div className="text-center space-y-2">
+                      <MessageSquare className="w-8 h-8 mx-auto" />
+                      <p className="font-medium">Multi-document chat</p>
+                    </div>
+                    <div className="text-center space-y-2">
+                      <Brain className="w-8 h-8 mx-auto" />
+                      <p className="font-medium">AI-powered analysis</p>
+                    </div>
+                    <div className="text-center space-y-2">
+                      <FileText className="w-8 h-8 mx-auto" />
+                      <p className="font-medium">Source citations</p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-
-            
-
-            
+            )
           ) : (
             <div className="space-y-8">
               {messages.map((message) => (
-                <div key={message.id} className="space-y-4" role="article" aria-label={`${message.role} message`}>
+                <div key={message.id} className="space-y-4 min-w-0" role="article" aria-label={`${message.role} message`}>
                   {/* Message Header */}
-                  <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-start justify-between flex-wrap gap-2 min-w-0">
                     <div className="flex items-center space-x-4">
                       <Badge
                         variant="outline"
@@ -806,14 +902,14 @@ ${diagnostics.documents.length === 0
                     </div>
 
                     {message.metadata && (
-                      <div className="flex items-center space-x-3 flex-wrap gap-2">
-                        {message.metadata.responseTime && (
+                      <div className="flex items-center justify-end gap-2 flex-wrap max-w-full">
+                        {message.metadata.responseTime !== undefined && (
                           <Badge variant="outline" className="text-xs border-gray-300">
                             <Clock className="w-3 h-3 mr-1" />
                             {formatResponseTime(message.metadata.responseTime)}
                           </Badge>
                         )}
-                        {message.metadata.relevanceScore && (
+                        {message.metadata.relevanceScore !== undefined && (
                           <Badge variant="outline" className="text-xs border-gray-300">
                             <Target className="w-3 h-3 mr-1" />
                             {(message.metadata.relevanceScore * 100).toFixed(1)}%
@@ -882,7 +978,7 @@ ${diagnostics.documents.length === 0
                           responseTime={message.metadata.responseTime}
                         />
                       )}
-                    <div className="flex justify-between items-start gap-4">
+                    <div className="flex justify-between items-start gap-4 min-w-0">
                       <div className="flex-1 min-w-0">
                           <MessageContent
                             content={(() => {
@@ -904,9 +1000,54 @@ ${diagnostics.documents.length === 0
                     {/* Chunk Visualization */}
                     {message.metadata?.retrievedChunks && message.metadata.retrievedChunks.length > 0 && (
                       <ChunkVisualization
-                        chunks={message.metadata.retrievedChunks}
+                        chunks={getCitationAlignedChunks(message)}
                         onViewPage={handleViewPage}
                       />
+                    )}
+
+                    {message.role === "assistant" && message.metadata?.queryAnalysis && (
+                      <Collapsible>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="outline" size="sm" className="justify-between w-full text-xs">
+                            <span className="flex items-center gap-2">
+                              <Brain className="w-3 h-3" />
+                              Query Breakdown
+                            </span>
+                            <ChevronDown className="w-3 h-3" />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="pt-2">
+                          <div className="border rounded-md p-3 bg-gray-50 text-xs space-y-3">
+                            <div className="space-y-1">
+                              <p className="font-semibold text-gray-700">Rewritten Query</p>
+                              <p className="text-gray-800 break-words">{message.metadata.queryAnalysis.rewrittenQuery}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="outline">{message.metadata.queryAnalysis.queryType}</Badge>
+                              <Badge variant="outline">{message.metadata.queryAnalysis.complexity}</Badge>
+                              <Badge variant="outline">
+                                Confidence {Math.round((message.metadata.queryAnalysis.confidence || 0) * 100)}%
+                              </Badge>
+                              <Badge variant={message.metadata.queryAnalysis.requiresHyDE ? "default" : "outline"}>
+                                HyDE {message.metadata.queryAnalysis.requiresHyDE ? "ON" : "OFF"}
+                              </Badge>
+                              <Badge variant={message.metadata.queryAnalysis.requiresStepBack ? "default" : "outline"}>
+                                Step-back {message.metadata.queryAnalysis.requiresStepBack ? "ON" : "OFF"}
+                              </Badge>
+                            </div>
+                            {message.metadata.queryAnalysis.alternativeQueries?.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="font-semibold text-gray-700">Alternative Queries</p>
+                                <ul className="list-disc pl-4 space-y-1 text-gray-700">
+                                  {message.metadata.queryAnalysis.alternativeQueries.slice(0, 3).map((query, idx) => (
+                                    <li key={`${message.id}-query-alt-${idx}`} className="break-words">{query}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     )}
                     </div>
                   </div>
@@ -955,7 +1096,7 @@ ${diagnostics.documents.length === 0
                   onKeyDown={handleKeyDown}
                   placeholder={disabled ? 'Configure AI provider and upload documents to start chatting...' : 'Ask a question about your documents... (Shift+Enter for new line)'}
                   disabled={disabled || isProcessing}
-                  className="min-h-10 h-10 sm:min-h-12 sm:h-12 max-h-30 resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-xs sm:text-sm md:text-base leading-relaxed w-full p-2 sm:p-3"
+                  className="min-h-10 h-10 sm:min-h-12 sm:h-12 max-h-[120px] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-xs sm:text-sm md:text-base leading-relaxed w-full p-2 sm:p-3"
                   rows={1}
                 />
               </div>

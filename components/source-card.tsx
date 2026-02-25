@@ -1,11 +1,10 @@
 "use client"
 
-import React from "react"
-import { FileText, ExternalLink, ChevronRight } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { ExternalLink, FileText } from "lucide-react"
 
 interface SourceCardProps {
   source: string
@@ -18,6 +17,24 @@ interface SourceCardProps {
   index?: number
 }
 
+function parseSourceLabel(source: string): { name: string; page?: number } {
+  const trimmed = source.trim()
+
+  const sourceTagMatch = trimmed.match(/^\[?SOURCE:\s*(.+?)(?:\s*\|\s*Page\s*(\d+))?\]?$/i)
+  if (sourceTagMatch) {
+    return {
+      name: sourceTagMatch[1].trim(),
+      page: sourceTagMatch[2] ? parseInt(sourceTagMatch[2], 10) : undefined,
+    }
+  }
+
+  const legacyMatch = trimmed.match(/^(.+?)(?:\s*·\s*p\.(\d+))?/i)
+  return {
+    name: legacyMatch?.[1]?.trim() || source,
+    page: legacyMatch?.[2] ? parseInt(legacyMatch[2], 10) : undefined,
+  }
+}
+
 export function SourceCard({
   source,
   documentName,
@@ -25,13 +42,11 @@ export function SourceCard({
   similarity,
   preview,
   documentId,
-  onViewPage,
-  index = 0
-}: SourceCardProps) {
+  onViewPage}: SourceCardProps) {
   // Parse source string to extract document name and page if not provided
-  const parsedSource = source.match(/^(.+?)(?:\s*·\s*p\.(\d+))?/i)
-  const displayName = documentName || parsedSource?.[1] || source
-  const displayPage = page || (parsedSource?.[2] ? parseInt(parsedSource[2]) : undefined)
+  const parsedSource = parseSourceLabel(source)
+  const displayName = documentName || parsedSource.name || source
+  const displayPage = page || parsedSource.page
   
   const similarityPercent = similarity ? Math.round(similarity * 100) : undefined
   const similarityColor = similarityPercent 

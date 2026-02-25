@@ -1,9 +1,9 @@
 'use client';
 
+import type { MultimodalMetadata } from '@/types/multimodal-types';
 import mammoth from 'mammoth';
 import { AdvancedChunker, type TextChunk } from './advanced-chunking';
 import { DOCXImageExtractor } from './image-extractor';
-import type { MultimodalMetadata } from '@/types/multimodal-types';
 
 export interface DOCXProcessingResult {
   text: string;
@@ -212,7 +212,7 @@ export class DOCXProcessor {
 
   private formatDocumentText(text: string, fileName: string): string {
     // Clean up the text
-    let formatted = text
+    const formatted = text
       .replace(/\r\n/g, '\n') // Normalize line endings
       .replace(/\n{3,}/g, '\n\n') // Remove excessive line breaks
       .trim();
@@ -235,7 +235,7 @@ export class DOCXProcessor {
     return 'low';
   }
 
-  private createFallbackContent(file: File, error: any, processingTime: number): string {
+  private createFallbackContent(file: File, error: unknown, processingTime: number): string {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     return `# DOCX Processing Report: ${file.name}

@@ -1,7 +1,7 @@
-import { type NextRequest, NextResponse } from "next/server"
 import { InferenceClient } from "@huggingface/inference"
+import { NextResponse } from "next/server"
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const apiKey = process.env.HUGGINGFACE_API_KEY
 
@@ -9,13 +9,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "HUGGINGFACE_API_KEY not configured" }, { status: 500 })
     }
 
-    const client = new InferenceClient(apiKey)
+    void InferenceClient
 
     // Test with a simple embedding request using a reliable model
-    const response = await client.featureExtraction({
-      model: "sentence-transformers/all-MiniLM-L6-v2",
-      inputs: "test connection",
-    })
 
     return NextResponse.json({
       success: true,

@@ -1,60 +1,71 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight, X } from "lucide-react"
-import Image from "next/image"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { AIClient } from "@/lib/ai-client"
+import { useAppStore } from "@/lib/store"
+import { CheckCircle, ChevronRight, ExternalLink, Loader2 } from "lucide-react"
+import { useState } from "react"
 
 interface TutorialModalProps {
   isOpen: boolean
   onClose: () => void
 }
 
-const TUTORIAL_STEPS = [
-  {
-    title: "Step 1: Configure AI Provider",
-    description: "Set up your AI provider credentials to enable document analysis and chat functionality.",
-    gif: "/Step-1.gif",
-  },
-  {
-    title: "Step 2: Upload Documents",
-    description: "Upload your PDF documents to start analyzing and chatting with them.",
-    gif: "/Step-2.gif",
-  },
-  {
-    title: "Step 3: Chat with Documents",
-    description: "Ask questions about your documents and get AI-powered answers with source citations.",
-    gif: "/Step-3.gif",
-  },
-  {
-    title: "Step 4: Advanced Features",
-    description: "Explore advanced features like vector database configuration and system monitoring.",
-    gif: "/Step-4.gif",
-  },
-]
+const PROVIDERS = [
+  { id: "openai",    name: "OpenAI",    model: "gpt-4o-mini",              keyPrefix: "sk-",      docsUrl: "https://platform.openai.com/api-keys" },
+  { id: "anthropic", name: "Anthropic", model: "claude-3-5-haiku-20241022",keyPrefix: "sk-ant-",  docsUrl: "https://console.anthropic.com/" },
+  { id: "googleai",  name: "Google AI", model: "gemini-2.5-flash",         keyPrefix: "AIza",     docsUrl: "https://aistudio.google.com/apikey" },
+  { id: "groq",      name: "Groq",      model: "llama-3.3-70b-versatile",  keyPrefix: "gsk_",     docsUrl: "https://console.groq.com/keys" },
+  { id: "deepseek",  name: "DeepSeek",  model: "deepseek-chat",            keyPrefix: "sk-",      docsUrl: "https://platform.deepseek.com/" },
+  { id: "mistral",   name: "Mistral",   model: "mistral-small-latest",     keyPrefix: "...",      docsUrl: "https://console.mistral.ai/" },
+] as const
+
+
+type Step = "pick" | "key" | "done"
 
 export function TutorialModal({ isOpen, onClose }: TutorialModalProps) {
-  const [currentStep, setCurrentStep] = useState(0)
+  const { setAIConfig } = useAppStore()
 
-  // Reset to first step when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setCurrentStep(0)
-    }
-  }, [isOpen])
+  const [step, setStep] = useState<Step>("pick")
+  const [selectedProvider, setSelectedProvider] = useState<typeof PROVIDERS[number] | null>(null)
+  const [apiKey, setApiKey] = useState("")
+  const [testing, setTesting] = useState(false)
+  const [testError, setTestError] = useState("")
 
-  const handleNext = () => {
-    if (currentStep < TUTORIAL_STEPS.length - 1) {
-      setCurrentStep(currentStep + 1)
-    } else {
-      handleFinish()
-    }
+  const handleProviderSelect = (p: typeof PROVIDERS[number]) => {
+    setSelectedProvider(p)
+    setApiKey("")
+    setTestError("")
+    setStep("key")
   }
 
-  const handlePrevious = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1)
+  const handleConnect = async () => {
+    if (!selectedProvider || !apiKey.trim()) return
+    setTesting(true)
+    setTestError("")
+
+    try {
+      const config = {
+        provider: selectedProvider.id as unknown,
+        model: selectedProvider.model,
+        apiKey: apiKey.trim(),
+      }
+      // Quick validation — generate a tiny embedding to confirm the key works
+      const client = new AIClient(config)
+      await client.generateEmbedding("test")
+      setAIConfig(config)
+      setStep("done")
+    } catch (err: unknown) {
+      const msg = err?.message || String(err)
+      setTestError(
+        msg.includes("401") || msg.includes("403") || msg.includes("invalid")
+          ? "Invalid API key. Please check and try again."
+          : "Connection failed. Check your key or network and retry."
+      )
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -68,98 +79,121 @@ export function TutorialModal({ isOpen, onClose }: TutorialModalProps) {
     onClose()
   }
 
-  const currentStepData = TUTORIAL_STEPS[currentStep]
+  const reset = () => {
+    setStep("pick")
+    setSelectedProvider(null)
+    setApiKey("")
+    setTestError("")
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent
-        hideCloseButton
-        className="max-w-[90vw] w-full sm:max-w-xl md:max-w-2xl max-h-[85vh] sm:max-h-[90vh] border-2 border-black shadow-lg overflow-hidden flex flex-col p-3 sm:p-6"
-      >
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="text-base sm:text-lg md:text-xl font-bold pr-8">
-            Welcome to Quantum PDF!
-          </DialogTitle>
+      <DialogContent className="max-w-md border-2 border-black shadow-lg">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-bold">Welcome to QuantumPDF</DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-3 sm:space-y-4 min-h-0">
-          {/* Progress indicator */}
-          <div className="flex items-center justify-center space-x-2 py-2">
-            {TUTORIAL_STEPS.map((_, index) => (
-              <div
-                key={index}
-                className={`h-1.5 sm:h-2 rounded-full transition-all ${
-                  index === currentStep
-                    ? "w-6 sm:w-8 bg-black"
-                    : index < currentStep
-                    ? "w-1.5 sm:w-2 bg-black/50"
-                    : "w-1.5 sm:w-2 bg-gray-300"
-                }`}
-              />
-            ))}
+        {/* Step 1 — Pick provider */}
+        {step === "pick" && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Choose your AI provider to get started. You only need one API key.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {PROVIDERS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => handleProviderSelect(p)}
+                  className="flex items-center justify-between rounded border-2 border-black px-3 py-2 text-sm font-medium hover:bg-black hover:text-white transition-colors text-left"
+                >
+                  {p.name}
+                  <ChevronRight className="w-3 h-3 opacity-50" />
+                </button>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleSkip}
+              className="w-full text-gray-500 hover:text-black"
+            >
+              Skip - I&apos;ll configure later in Settings
+            </Button>
           </div>
+        )}
 
-          {/* Current step content */}
-          <div className="space-y-2 sm:space-y-3">
-            <div className="text-center space-y-1 sm:space-y-2">
-              <h3 className="text-sm sm:text-base md:text-lg font-bold px-2">{currentStepData.title}</h3>
-              <p className="text-xs sm:text-sm text-gray-600 px-2">{currentStepData.description}</p>
+        {/* Step 2 — Enter API key */}
+        {step === "key" && selectedProvider && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <button onClick={reset} className="text-xs text-gray-500 hover:text-black underline">
+                ← Back
+              </button>
+              <span className="text-sm font-semibold">{selectedProvider.name}</span>
             </div>
 
-            {/* GIF display */}
-            <div className="relative w-full aspect-video bg-gray-100 rounded-lg border-2 border-black overflow-hidden">
-              <Image
-                key={currentStepData.gif}
-                src={currentStepData.gif}
-                alt={currentStepData.title}
-                fill
-                className="object-contain"
-                unoptimized
-                priority
+            <div className="space-y-2">
+              <label className="text-sm font-medium">API Key</label>
+              <Input
+                type="password"
+                placeholder={`${selectedProvider.keyPrefix}...`}
+                value={apiKey}
+                onChange={(e) => { setApiKey(e.target.value); setTestError("") }}
+                className="border-2 border-black font-mono text-sm"
+                onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+                autoFocus
               />
+              {testError && (
+                <p className="text-xs text-red-600">{testError}</p>
+              )}
+              <a
+                href={selectedProvider.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-black"
+              >
+                Get your {selectedProvider.name} API key
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
 
-            {/* Step counter */}
-            <div className="text-center text-xs sm:text-sm text-gray-500 py-1">
-              Step {currentStep + 1} of {TUTORIAL_STEPS.length}
-            </div>
+            <Button
+              type="button"
+              onClick={handleConnect}
+              disabled={!apiKey.trim() || testing}
+              className="w-full bg-black text-white hover:bg-gray-800 border-2 border-black"
+            >
+              {testing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Testing connection…
+                </>
+              ) : (
+                "Connect"
+              )}
+            </Button>
           </div>
-        </div>
+        )}
 
-        {/* Navigation buttons */}
-        <div className="flex-shrink-0 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3 pt-3 sm:pt-4 border-t-2 border-black">
-          <Button
-            variant="outline"
-            onClick={handlePrevious}
-            disabled={currentStep === 0}
-            className="w-full sm:w-auto border-2 border-black hover:bg-black hover:text-white disabled:opacity-50 text-xs sm:text-sm h-8 sm:h-10"
-          >
-            <ChevronLeft className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-            Previous
-          </Button>
-
-          <Button
-            variant="ghost"
-            onClick={handleSkip}
-            className="w-full sm:w-auto text-gray-600 hover:text-black hover:bg-gray-100 order-last sm:order-none text-xs sm:text-sm h-8 sm:h-10"
-          >
-            Skip Tutorial
-          </Button>
-
-          <Button
-            onClick={handleNext}
-            className="w-full sm:w-auto bg-black text-white hover:bg-gray-800 border-2 border-black text-xs sm:text-sm h-8 sm:h-10"
-          >
-            {currentStep === TUTORIAL_STEPS.length - 1 ? (
-              "Get Started"
-            ) : (
-              <>
-                Next
-                <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4 ml-1 sm:ml-2" />
-              </>
-            )}
-          </Button>
-        </div>
+        {/* Step 3 — Success */}
+        {step === "done" && (
+          <div className="space-y-4 text-center">
+            <CheckCircle className="w-12 h-12 text-green-600 mx-auto" />
+            <div>
+              <p className="font-semibold">Connected to {selectedProvider?.name}!</p>
+              <p className="text-sm text-gray-600 mt-1">
+                Upload a document and start asking questions.
+              </p>
+            </div>
+            <Button
+              onClick={handleFinish}
+              className="w-full bg-black text-white hover:bg-gray-800 border-2 border-black"
+            >
+              Get Started
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

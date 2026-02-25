@@ -1,8 +1,8 @@
-import React, { useState } from "react"
-import { Brain, ChevronDown, ChevronRight, Clock, Sparkles, Zap } from "lucide-react"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Brain, ChevronDown, ChevronRight, Clock } from "lucide-react"
+import { useState } from "react"
 
 interface Reasoning {
   initialThoughts?: string

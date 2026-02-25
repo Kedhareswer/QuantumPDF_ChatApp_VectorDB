@@ -1,5 +1,5 @@
-import { getEmbeddingDimension, createZeroVector, DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
 import { calculateKeywordScore, enhancedKeywordSimilarity } from "./keyword-scoring"
+import { createZeroVector, getEmbeddingDimension } from "./vector-dimensions"
 
 interface VectorDBConfig {
   provider: "pinecone" | "weaviate" | "local"
@@ -20,7 +20,7 @@ interface VectorDocument {
     chunkIndex: number
     documentId: string
     timestamp: Date
-    [key: string]: any
+    [key: string]: unknown
   }
 }
 
@@ -28,12 +28,12 @@ interface SearchResult {
   id: string
   content: string
   score: number
-  metadata: any
+  metadata: unknown
 }
 
 interface SearchOptions {
   mode: "semantic" | "keyword" | "hybrid"
-  filters?: Record<string, any>
+  filters?: Record<string, unknown>
   limit?: number
   threshold?: number
 }
@@ -60,7 +60,7 @@ export abstract class VectorDatabase {
   }
 }
 
-import type { Pinecone as PineconeClient, Index as PineconeIndex } from "@pinecone-database/pinecone";
+import type { Pinecone as PineconeClient, Index as PineconeIndex } from "@pinecone-database/pinecone"
 
 class PineconeDatabase extends VectorDatabase {
   private pinecone!: PineconeClient
@@ -87,7 +87,7 @@ class PineconeDatabase extends VectorDatabase {
         // Try to get existing index
         this.index = this.pinecone.index(indexName)
         await this.index.describeIndexStats()
-      } catch (error) {
+      } catch {
         // Index doesn't exist, create it
         console.log(`Creating Pinecone index: ${indexName}`)
         await this.pinecone.createIndex({
@@ -155,7 +155,7 @@ class PineconeDatabase extends VectorDatabase {
           return []
         }
 
-        const searchParams: any = {
+        const searchParams: unknown = {
           vector: embedding,
           topK: options.limit || 10,
           includeMetadata: true,
@@ -168,7 +168,7 @@ class PineconeDatabase extends VectorDatabase {
 
         const pineconeResults = await this.index.query(searchParams)
         
-        results = pineconeResults.matches?.map((match: any) => ({
+        results = pineconeResults.matches?.map((match: unknown) => ({
           id: match.id,
           content: match.metadata?.content || "",
           score: match.score || 0,
@@ -181,7 +181,7 @@ class PineconeDatabase extends VectorDatabase {
       } else if (options.mode === "keyword") {
         // Pure keyword search using metadata filtering
         // Since Pinecone doesn't have native text search, we'll fetch more results and filter locally
-        const searchParams: any = {
+        const searchParams: unknown = {
           vector: embedding.length > 0 ? embedding : createZeroVector(this.config.dimension), // Use zero vector if no embedding
           topK: Math.min(1000, (options.limit || 10) * 10), // Fetch more to filter locally
           includeMetadata: true,
@@ -197,7 +197,7 @@ class PineconeDatabase extends VectorDatabase {
 
         // Filter results locally using keyword matching
         const keywordFilteredResults = allResults
-          .map((match: any) => {
+          .map((match: unknown) => {
             const content = match.metadata?.content || ""
             const keywordScore = calculateKeywordScore(query, content)
             
@@ -220,7 +220,7 @@ class PineconeDatabase extends VectorDatabase {
 
       } else if (options.mode === "hybrid") {
         // Hybrid search - combine semantic and keyword approaches
-        const searchParams: any = {
+        const searchParams: unknown = {
           vector: embedding.length > 0 ? embedding : createZeroVector(this.config.dimension),
           topK: Math.min(1000, (options.limit || 10) * 5), // Fetch more for better hybrid results
           includeMetadata: true,
@@ -239,7 +239,7 @@ class PineconeDatabase extends VectorDatabase {
         
         // Calculate hybrid scores
         const hybridResults = allResults
-          .map((match: any) => {
+          .map((match: unknown) => {
             const content = match.metadata?.content || ""
             const semanticScore = embedding.length > 0 ? (match.score || 0) : 0
             const keywordScore = calculateKeywordScore(query, content)
@@ -383,7 +383,7 @@ class PineconeDatabase extends VectorDatabase {
   }
 }
 
-import type { WeaviateClient } from "weaviate-ts-client";
+import type { WeaviateClient } from "weaviate-ts-client"
 
 class WeaviateDatabase extends VectorDatabase {
   private client!: WeaviateClient
@@ -442,7 +442,7 @@ class WeaviateDatabase extends VectorDatabase {
         try {
           await this.client.schema.classCreator().withClass(schema).do()
           console.log(`Weaviate class '${className}' created`)
-        } catch (createError: any) {
+        } catch (createError: unknown) {
           // Only log if it's not an "already exists" error
           if (!createError?.message?.includes('already exists')) {
             console.error("Failed to create Weaviate class:", createError)
@@ -510,7 +510,7 @@ class WeaviateDatabase extends VectorDatabase {
 
       const result = await searchQuery.do()
 
-      const processedResults = result.data?.Get?.[className]?.map((item: any, index: number) => {
+      const processedResults = result.data?.Get?.[className]?.map((item: unknown, index: number) => {
         // Calculate a more realistic score based on search mode
         let finalScore = 1 - index / (options.limit || 10) // Base score from ranking
         
@@ -769,7 +769,7 @@ export function createVectorDatabase(config: VectorDBConfig): VectorDatabase {
 export interface VectorEntry {
   id: string
   vector: number[]
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
   text: string
 }
 

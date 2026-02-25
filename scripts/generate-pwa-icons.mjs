@@ -11,9 +11,10 @@
  * - Place your source icon (logo.png) in the public folder
  */
 
-const sharp = require('sharp');
-const fs = require('fs');
-const path = require('path');
+import sharp from "sharp";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const sizes = [
   { size: 72, name: 'icon-72.png' },
@@ -31,8 +32,10 @@ const sizes = [
   { size: 16, name: 'favicon-16x16.png' },
 ];
 
-const publicDir = path.join(__dirname, '..', 'public');
-const sourceImage = path.join(publicDir, 'logo.png');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.join(__dirname, "..", "public");
+const sourceImage = path.join(publicDir, "logo.png");
 
 async function generateIcons() {
   console.log('🎨 PWA Icon Generator\n');

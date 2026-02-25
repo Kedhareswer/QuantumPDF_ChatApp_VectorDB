@@ -1,19 +1,22 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Brain, Database, FileText, Zap } from "lucide-react"
 import Image from "next/image"
-import { Zap, FileText, Brain, Database } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 
 export default function Loading() {
   const [progress, setProgress] = useState(0)
   const [currentStep, setCurrentStep] = useState(0)
 
-  const loadingSteps = [
-    { icon: Brain, text: "Initializing AI Engine", delay: 0 },
-    { icon: Database, text: "Connecting Vector Database", delay: 800 },
-    { icon: FileText, text: "Loading Document Processor", delay: 1600 },
-    { icon: Zap, text: "Powering Up Quantum PDF", delay: 2400 },
-  ]
+  const loadingSteps = useMemo(
+    () => [
+      { icon: Brain, text: "Initializing AI Engine", delay: 0 },
+      { icon: Database, text: "Connecting Vector Database", delay: 800 },
+      { icon: FileText, text: "Loading Document Processor", delay: 1600 },
+      { icon: Zap, text: "Powering Up Quantum PDF", delay: 2400 },
+    ],
+    []
+  )
 
   useEffect(() => {
     // Animate progress bar
@@ -35,7 +38,7 @@ export default function Loading() {
     })
 
     return () => clearInterval(progressInterval)
-  }, [])
+  }, [loadingSteps])
 
   const CurrentIcon = loadingSteps[currentStep]?.icon || Brain
 

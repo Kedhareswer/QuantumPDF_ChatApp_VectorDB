@@ -212,7 +212,6 @@ class QueryResponseCache {
    * Invalidate entries for specific documents
    */
   invalidateForDocuments(documentIds: string[]): void {
-    const hash = this.generateDocumentHash(documentIds)
     let invalidated = 0
     
     for (const [key, entry] of this.cache.entries()) {
@@ -251,7 +250,7 @@ class QueryResponseCache {
 export class QueryProcessor {
   private cache: QueryResponseCache
   private config: QueryProcessorConfig
-  private aiClient: any // Will be injected
+  private aiClient: unknown // Will be injected
 
   constructor(config: Partial<QueryProcessorConfig> = {}) {
     this.config = {
@@ -271,7 +270,7 @@ export class QueryProcessor {
   /**
    * Set the AI client for LLM operations
    */
-  setAIClient(client: any): void {
+  setAIClient(client: unknown): void {
     this.aiClient = client
   }
 
@@ -598,25 +597,15 @@ Only output the formatted result, nothing else.`
       exploratory: 'Write an informative paragraph exploring the topic.'
     }
 
-    const prompt = `You are generating a hypothetical document passage that would answer a user's question.
-This will be used for semantic search, so write as if you're quoting from an authoritative document.
+    const prompt = `Question: "${query}"
 
-QUESTION: "${query}"
-
-TASK: ${typeInstructions[queryType]}
-
-IMPORTANT:
-- Write as if this is an excerpt from a real document
-- Include specific details, terms, and concepts that would appear in relevant documents
-- Keep it to 2-3 sentences (50-100 words)
-- Do NOT include phrases like "The document states" or "According to"
-- Write in a factual, informative tone
-
-OUTPUT: Write only the hypothetical passage, nothing else.`
+Write a 2–3 sentence passage from an authoritative document that directly answers this question.
+Style: ${typeInstructions[queryType]}
+Constraints: use domain-specific terms, include concrete details, write as document text (not "The document says...").`
 
     try {
       const messages = [
-        { role: "system" as const, content: "You generate hypothetical document passages for semantic search. Write authoritative, factual content." },
+        { role: "system" as const, content: "You write short authoritative document passages used for semantic search. Be specific and factual." },
         { role: "user" as const, content: prompt }
       ]
 
@@ -650,35 +639,20 @@ OUTPUT: Write only the hypothetical passage, nothing else.`
       throw new Error('AI client not available for step-back prompting')
     }
 
-    const prompt = `You are generating a "step-back" question for a complex query.
-A step-back question is a more general, foundational question that provides context for answering the specific query.
+    const prompt = `Specific question: "${query}"
+Question type: "${queryType}"
 
-SPECIFIC QUERY: "${query}"
-QUERY TYPE: ${queryType}
+Write one broader, foundational question whose answer would provide useful context for the specific question above.
+Keep it concise. Output only the question, nothing else.
 
-TASK: Generate a broader, more general question that would help provide context for answering the specific query.
-
-EXAMPLES:
-- Specific: "What is the half-life of Carbon-14?"
-  Step-back: "What are the principles of radioactive decay?"
-  
-- Specific: "How did the 2008 financial crisis affect housing prices in California?"
-  Step-back: "What were the causes and effects of the 2008 financial crisis?"
-  
-- Specific: "What is the time complexity of quicksort in the worst case?"
-  Step-back: "How do sorting algorithms work and what factors affect their performance?"
-
-GUIDELINES:
-1. The step-back question should be more general but still relevant
-2. It should provide foundational knowledge useful for the specific query
-3. Keep it concise (one question)
-4. Don't make it too broad or unrelated
-
-OUTPUT: Write only the step-back question, nothing else.`
+Examples:
+- "What is the half-life of Carbon-14?" → "What are the principles of radioactive decay?"
+- "How did the 2008 crisis affect California housing?" → "What caused the 2008 financial crisis?"
+- "What is quicksort's worst-case complexity?" → "How do sorting algorithms work?"`
 
     try {
       const messages = [
-        { role: "system" as const, content: "You generate step-back questions to provide broader context for specific queries." },
+        { role: "system" as const, content: "You generate step-back questions that retrieve broader context for specific queries." },
         { role: "user" as const, content: prompt }
       ]
 

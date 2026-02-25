@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
 import { createVectorDatabase, VectorDatabase } from "@/lib/vector-database";
+import type { VectorDBConfig } from "@/lib/vector-database-types";
+import { NextRequest, NextResponse } from "next/server";
 
 // This file handles server-side vector database operations
 
@@ -8,18 +9,36 @@ import { createVectorDatabase, VectorDatabase } from "@/lib/vector-database";
 const vectorDBCache = new Map<string, { instance: VectorDatabase; lastUsed: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isVectorDBConfig(config: unknown): config is VectorDBConfig {
+  if (!isRecord(config)) return false;
+  return config.provider === "pinecone" || config.provider === "weaviate" || config.provider === "local";
+}
+
 /**
  * Generate a hash key from config for caching
  */
-function getConfigHash(config: any): string {
+function getConfigHash(config: unknown): string {
+  const safeConfig = isRecord(config) ? config : {};
+  const provider = typeof safeConfig.provider === "string" ? safeConfig.provider : "unknown";
+  const apiKey = typeof safeConfig.apiKey === "string" ? safeConfig.apiKey : "";
+  const environment = typeof safeConfig.environment === "string" ? safeConfig.environment : undefined;
+  const indexName = typeof safeConfig.indexName === "string" ? safeConfig.indexName : undefined;
+  const url = typeof safeConfig.url === "string" ? safeConfig.url : undefined;
+  const collection = typeof safeConfig.collection === "string" ? safeConfig.collection : undefined;
+  const dimension = typeof safeConfig.dimension === "number" ? safeConfig.dimension : undefined;
+
   const key = JSON.stringify({
-    provider: config.provider,
-    apiKey: config.apiKey?.slice(-8) || '', // Only use last 8 chars of API key for privacy
-    environment: config.environment,
-    indexName: config.indexName,
-    url: config.url,
-    collection: config.collection,
-    dimension: config.dimension,
+    provider,
+    apiKey: apiKey.slice(-8), // Only use last 8 chars of API key for privacy
+    environment,
+    indexName,
+    url,
+    collection,
+    dimension,
   });
   // Simple hash function
   let hash = 0;
@@ -28,13 +47,13 @@ function getConfigHash(config: any): string {
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash;
   }
-  return `vdb_${config.provider}_${Math.abs(hash).toString(16)}`;
+  return `vdb_${provider}_${Math.abs(hash).toString(16)}`;
 }
 
 /**
  * Get or create vector database instance with caching
  */
-async function getVectorDB(config: any): Promise<VectorDatabase> {
+async function getVectorDB(config: VectorDBConfig): Promise<VectorDatabase> {
   const cacheKey = getConfigHash(config);
   const now = Date.now();
   
@@ -68,6 +87,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { action, config, data } = body;
+
+    if (!isVectorDBConfig(config)) {
+      return NextResponse.json(
+        { error: "Invalid vector database configuration" },
+        { status: 400 }
+      );
+    }
     
     // Get cached or create new vector database instance
     const vectorDB = await getVectorDB(config);
@@ -81,21 +107,21 @@ export async function POST(request: NextRequest) {
         break;
         
       case "addDocuments":
-        await vectorDB.addDocuments(data.documents);
+        await vectorDB.addDocuments(data?.documents ?? []);
         result = { success: true };
         break;
         
       case "search":
         const searchResults = await vectorDB.search(
-          data.query, 
-          data.embedding, 
-          data.options
+          data?.query,
+          data?.embedding,
+          data?.options
         );
         result = { success: true, results: searchResults };
         break;
         
       case "deleteDocument":
-        await vectorDB.deleteDocument(data.documentId);
+        await vectorDB.deleteDocument(data?.documentId);
         result = { success: true };
         break;
         

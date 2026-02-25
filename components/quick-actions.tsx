@@ -1,19 +1,19 @@
 "use client"
 
-import { useState, useRef } from "react"
-import { RotateCcw, Trash2, Download, Share, FileText, Link2, Mail } from "lucide-react"
+import { QuickActionsLoadingSkeleton } from "@/components/skeleton-loaders"
 import { Button } from "@/components/ui/button"
-import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useAppStore } from "@/lib/store"
-import { QuickActionsLoadingSkeleton } from "@/components/skeleton-loaders"
+import { Download, FileText, Link2, Mail, RotateCcw, Share, Trash2 } from "lucide-react"
+import { useState } from "react"
 
 interface QuickActionsProps {
   onClearChat: () => void
@@ -26,7 +26,6 @@ export function QuickActions({ onClearChat, onNewSession, disabled = false }: Qu
   const { messages, documents, aiConfig, vectorDBConfig } = useAppStore()
   const [isExporting, setIsExporting] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
-  const [loadingOperation, setLoadingOperation] = useState<string | null>(null)
 
   const handleExportChat = async (format: 'json' | 'markdown' | 'txt' | 'pdf') => {
     if (!messages.length) {
@@ -38,7 +37,6 @@ export function QuickActions({ onClearChat, onNewSession, disabled = false }: Qu
       return
     }
 
-    setLoadingOperation(format)
     setIsExporting(true)
 
     try {
@@ -84,7 +82,7 @@ export function QuickActions({ onClearChat, onNewSession, disabled = false }: Qu
           content += `**AI Provider:** ${aiConfig.provider} (${aiConfig.model})\n\n`
           content += `---\n\n`
           
-          messages.forEach((msg, index) => {
+          messages.forEach((msg) => {
             content += `## ${msg.role === 'user' ? '👤 User' : '🤖 Assistant'} - ${msg.timestamp.toLocaleTimeString()}\n\n`
             content += `${msg.content}\n\n`
             
@@ -113,7 +111,7 @@ export function QuickActions({ onClearChat, onNewSession, disabled = false }: Qu
           content += `Documents: ${documents.map(d => d.name).join(', ')}\n`
           content += `AI Provider: ${aiConfig.provider} (${aiConfig.model})\n\n`
           
-          messages.forEach((msg, index) => {
+          messages.forEach((msg) => {
             content += `[${msg.timestamp.toLocaleTimeString()}] ${msg.role.toUpperCase()}:\n`
             content += `${msg.content}\n`
             
@@ -220,7 +218,6 @@ export function QuickActions({ onClearChat, onNewSession, disabled = false }: Qu
       })
     } finally {
       setIsExporting(false)
-      setLoadingOperation(null)
     }
   }
 
@@ -234,7 +231,6 @@ export function QuickActions({ onClearChat, onNewSession, disabled = false }: Qu
       return
     }
 
-    setLoadingOperation(method)
     setIsSharing(true)
 
     try {
@@ -279,9 +275,6 @@ Powered by QuantumPDF ChatApp`
         case 'link':
           // In a real app, you'd save to a database and create a shareable link
           // For now, we'll create a data URL
-          const sessionBlob = new Blob([JSON.stringify(sessionData, null, 2)], { type: 'application/json' })
-          const sessionUrl = URL.createObjectURL(sessionBlob)
-          
           // Copy the blob URL to clipboard (in production, this would be a real URL)
           await navigator.clipboard.writeText(`${window.location.origin}?session=${btoa(JSON.stringify(sessionData))}`)
           
@@ -300,7 +293,6 @@ Powered by QuantumPDF ChatApp`
       })
     } finally {
       setIsSharing(false)
-      setLoadingOperation(null)
     }
   }
 

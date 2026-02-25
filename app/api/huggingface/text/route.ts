@@ -1,19 +1,19 @@
-import { type NextRequest } from "next/server"
-import { InferenceClient } from "@huggingface/inference"
+import { InferenceClient } from "@huggingface/inference";
+import { type NextRequest } from "next/server";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
 
   // Helper to stream events
-  function streamEvent(controller: ReadableStreamDefaultController, event: any) {
+  function streamEvent(controller: ReadableStreamDefaultController, event: unknown) {
     controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
   }
 
   // Parse request
   let textModel: string = "meta-llama/Meta-Llama-3.3-70B-Instruct";
-  let apiKey = process.env.HUGGINGFACE_API_KEY;
+  const apiKey = process.env.HUGGINGFACE_API_KEY;
   let prompt = "";
   let context = "";
   let model = "";
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
       return new Response(JSON.stringify({ error: "Invalid prompt input" }), { status: 400 });
     }
-  } catch (err) {
+  } catch {
     return new Response(JSON.stringify({ error: "Invalid request body" }), { status: 400 });
   }
 

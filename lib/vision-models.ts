@@ -1,6 +1,6 @@
 'use client';
 
-import type { ImageAnalysisResult, DetectedObject, OCRText } from "@/types/multimodal-types"
+import type { ImageAnalysisResult } from "@/types/multimodal-types";
 
 export interface VisionModelConfig {
   provider: 'openai' | 'anthropic' | 'huggingface' | 'transformers-js'
@@ -230,6 +230,7 @@ export class VisionModelService {
     prompt?: string,
     options: VisionAnalysisOptions = {},
   ): Promise<ImageAnalysisResult> {
+    void options
     if (!this.apiKey) {
       throw new Error('Hugging Face API key required')
     }
@@ -284,6 +285,7 @@ export class VisionModelService {
     prompt?: string,
     options: VisionAnalysisOptions = {},
   ): Promise<ImageAnalysisResult> {
+    void options
     try {
       // Dynamically import Transformers.js
       const { pipeline } = await import('@xenova/transformers')

@@ -1,9 +1,9 @@
 "use client"
 
-import React from "react"
-import { FileText } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { FileText } from "lucide-react"
+import React from "react"
 
 interface CitationBadgeProps {
   source: string
@@ -13,6 +13,32 @@ interface CitationBadgeProps {
   preview?: string
   onClick?: (documentId: string, page: number) => void
   className?: string
+}
+
+function parseSourceLabel(source: string): { name: string; page?: number } {
+  const trimmed = source.trim()
+
+  const sourceTagMatch = trimmed.match(/^\[?SOURCE:\s*(.+?)(?:\s*\|\s*Page\s*(\d+))?\]?$/i)
+  if (sourceTagMatch) {
+    return {
+      name: sourceTagMatch[1].trim(),
+      page: sourceTagMatch[2] ? parseInt(sourceTagMatch[2], 10) : undefined,
+    }
+  }
+
+  const legacyMatch = trimmed.match(/^(.+?)(?:\s*·\s*p\.(\d+))?/i)
+  return {
+    name: legacyMatch?.[1]?.trim() || source,
+    page: legacyMatch?.[2] ? parseInt(legacyMatch[2], 10) : undefined,
+  }
+}
+
+function normalizeSourceName(name: string): string {
+  return name
+    .replace(/^\[?SOURCE:\s*/i, "")
+    .replace(/\]?$/, "")
+    .trim()
+    .toLowerCase()
 }
 
 export function CitationBadge({
@@ -25,9 +51,9 @@ export function CitationBadge({
   className = ""
 }: CitationBadgeProps) {
   // Parse source to extract page if not provided
-  const parsedSource = source.match(/^(.+?)(?:\s*·\s*p\.(\d+))?/i)
-  const displayName = documentName || parsedSource?.[1] || source
-  const displayPage = page || (parsedSource?.[2] ? parseInt(parsedSource[2]) : undefined)
+  const parsedSource = parseSourceLabel(source)
+  const displayName = documentName || parsedSource.name || source
+  const displayPage = page || parsedSource.page
   
   const isClickable = documentId && displayPage && onClick
   
@@ -109,11 +135,15 @@ export function parseCitations(
     }
     
     const citationText = match[1]
+    const parsedCitation = parseSourceLabel(citationText)
+    const citationName = normalizeSourceName(parsedCitation.name || citationText)
     // Find matching chunk
     const chunk = chunks.find(c => 
-      c.source.includes(citationText) || 
-      citationText.includes(c.documentName || '') ||
-      citationText.includes(`p.${c.page}`)
+      c.source.includes(citationText) ||
+      normalizeSourceName(c.source).includes(citationName) ||
+      citationName.includes(normalizeSourceName(c.documentName || "")) ||
+      citationText.includes(`p.${c.page}`) ||
+      (parsedCitation.page !== undefined && c.page === parsedCitation.page)
     )
     
     if (chunk) {

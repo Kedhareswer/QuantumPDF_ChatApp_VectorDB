@@ -461,11 +461,11 @@ export class RAGConfigManager {
       const value = updates[key as keyof RAGConfiguration]
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         merged[key as keyof RAGConfiguration] = {
-          ...(base[key as keyof RAGConfiguration] as any),
-          ...(value as any),
+          ...(base[key as keyof RAGConfiguration] as unknown),
+          ...(value as unknown),
         }
       } else {
-        merged[key as keyof RAGConfiguration] = value as any
+        merged[key as keyof RAGConfiguration] = value as unknown
       }
     }
 

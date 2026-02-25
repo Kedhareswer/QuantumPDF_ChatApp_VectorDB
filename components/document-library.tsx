@@ -1,23 +1,23 @@
 "use client"
 
-import { useState } from "react"
-import { FileText, Trash2, Eye, Download, Calendar, Hash, Zap, ChevronDown, ChevronRight, Archive, FileArchive, Folder, BarChart3, ChevronUp, Loader2, FileJson } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { BulkExportLoadingSkeleton, DocumentLibrarySkeleton } from "@/components/skeleton-loaders"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
-import { DocumentLibrarySkeleton, BulkExportLoadingSkeleton, DocumentCardSkeleton } from "@/components/skeleton-loaders"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
+import { Archive, Calendar, ChevronDown, ChevronRight, Download, Eye, FileArchive, FileJson, FileText, Folder, Hash, Loader2, Trash2, Zap } from "lucide-react"
+import { useState } from "react"
 
 interface Document {
   id: string
@@ -26,7 +26,7 @@ interface Document {
   chunks: string[]
   embeddings: number[][]
   uploadedAt: Date
-  metadata?: any
+  metadata?: unknown
 }
 
 interface DocumentLibraryProps {
@@ -89,18 +89,6 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
     }, 0)
   }
 
-  const getQualityBadgeColor = (quality: string) => {
-    switch (quality) {
-      case "high":
-        return "border-green-600 text-green-600 bg-green-50"
-      case "medium":
-        return "border-yellow-600 text-yellow-600 bg-yellow-50"
-      case "low":
-        return "border-red-600 text-red-600 bg-red-50"
-      default:
-        return "border-gray-600 text-gray-600 bg-gray-50"
-    }
-  }
 
   const handlePreview = (doc: Document) => {
     setSelectedDocument(selectedDocument === doc.id ? null : doc.id)
@@ -219,7 +207,7 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
         title: "Library Exported",
         description: "Document library exported as JSON successfully.",
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "Export Failed",
         description: "Failed to export document library.",
@@ -275,7 +263,7 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
         title: "Library Exported",
         description: "Document library exported as Markdown successfully.",
       })
-    } catch (error) {
+    } catch {
       toast({
         title: "Export Failed",
         description: "Failed to export as Markdown.",
@@ -383,24 +371,24 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
       <Collapsible open={expandedStats} onOpenChange={setExpandedStats}>
         <Card className="border-2 border-black shadow-sm">
           <CollapsibleTrigger asChild>
-            <CardHeader className="cursor-pointer hover:bg-gray-50 transition-colors p-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-bold flex items-center space-x-2">
+            <CardHeader className="cursor-pointer hover:bg-gray-50 transition-colors p-3">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-xs font-bold flex items-center space-x-2 min-w-0">
                   <Archive className="w-4 h-4" />
-                  <span>LIBRARY OVERVIEW</span>
+                  <span className="truncate">LIBRARY OVERVIEW</span>
                 </CardTitle>
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   {/* Bulk Export Options */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-gray-300 text-gray-700 hover:bg-gray-900 hover:text-white h-7 px-3 text-xs"
+                        className="border-gray-300 text-gray-700 hover:bg-gray-900 hover:text-white h-7 px-2 text-[11px] shrink-0"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Download className="w-3 h-3 mr-1" />
-                        Bulk Export
+                        <span>Export</span>
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
@@ -427,45 +415,45 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
             </CardHeader>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <CardContent className="p-4 space-y-4">
-              {/* Main Statistics Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-3 rounded-lg border border-blue-200">
+              <CardContent className="p-2.5 space-y-3">
+                {/* Main Statistics Grid */}
+                <div className="grid grid-cols-2 gap-2.5">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-2 rounded-lg border border-blue-200 min-w-0 overflow-hidden">
                   <div className="flex items-center justify-center mb-1">
                     <FileText className="w-4 h-4 text-blue-600 mr-1" />
-                    <span className="text-xs font-bold text-blue-600 uppercase">DOCS</span>
+                    <span className="text-[10px] font-bold text-blue-600 uppercase">DOCS</span>
                 </div>
-                  <div className="text-xl font-bold text-blue-700 text-center">{documents.length}</div>
-                  <div className="text-xs text-blue-600 text-center">Files</div>
+                  <div className="text-base leading-tight font-bold text-blue-700 text-center whitespace-nowrap">{documents.length}</div>
+                  <div className="text-[11px] text-blue-600 text-center">Files</div>
                 </div>
                 
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-3 rounded-lg border border-green-200">
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-2 rounded-lg border border-green-200 min-w-0 overflow-hidden">
                   <div className="flex items-center justify-center mb-1">
                     <Hash className="w-4 h-4 text-green-600 mr-1" />
-                    <span className="text-xs font-bold text-green-600 uppercase">CHUNKS</span>
+                    <span className="text-[10px] font-bold text-green-600 uppercase">CHUNKS</span>
                   </div>
-                  <div className="text-xl font-bold text-green-700 text-center">{getTotalChunks()}</div>
-                  <div className="text-xs text-green-600 text-center">Segments</div>
+                  <div className="text-base leading-tight font-bold text-green-700 text-center whitespace-nowrap">{getTotalChunks()}</div>
+                  <div className="text-[11px] text-green-600 text-center">Segments</div>
                 </div>
                 
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-3 rounded-lg border border-purple-200">
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-2 rounded-lg border border-purple-200 min-w-0 overflow-hidden">
                   <div className="flex items-center justify-center mb-1">
                     <Archive className="w-4 h-4 text-purple-600 mr-1" />
-                    <span className="text-xs font-bold text-purple-600 uppercase">SIZE</span>
+                    <span className="text-[10px] font-bold text-purple-600 uppercase">SIZE</span>
                   </div>
-                  <div className="text-xl font-bold text-purple-700 text-center">{formatFileSize(getTotalSize())}</div>
-                  <div className="text-xs text-purple-600 text-center">Total</div>
+                  <div className="text-base leading-tight font-bold text-purple-700 text-center break-words">{formatFileSize(getTotalSize())}</div>
+                  <div className="text-[11px] text-purple-600 text-center">Total</div>
                 </div>
                 
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-3 rounded-lg border border-orange-200">
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-2 rounded-lg border border-orange-200 min-w-0 overflow-hidden">
                   <div className="flex items-center justify-center mb-1">
                     <Zap className="w-4 h-4 text-orange-600 mr-1" />
-                    <span className="text-xs font-bold text-orange-600 uppercase">QUALITY</span>
+                    <span className="text-[10px] font-bold text-orange-600 uppercase">QUALITY</span>
                   </div>
-                  <div className="text-xl font-bold text-orange-700 text-center">
+                  <div className="text-base leading-tight font-bold text-orange-700 text-center whitespace-nowrap">
                     {documents.length > 0 ? Math.round(documents.reduce((sum, doc) => sum + getConfidenceScore(doc), 0) / documents.length * 100) : 0}%
                   </div>
-                  <div className="text-xs text-orange-600 text-center">Confidence</div>
+                  <div className="text-[11px] text-orange-600 text-center">Confidence</div>
                 </div>
               </div>
               
@@ -477,13 +465,13 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
                       {documents.length} docs
                     </Badge>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="grid grid-cols-1 gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleBulkExportJSON}
                       disabled={exportOperation === "json"}
-                      className="border border-gray-300 hover:bg-gray-900 hover:text-white text-xs h-7 px-3"
+                      className="border border-gray-300 hover:bg-gray-900 hover:text-white text-xs h-8 px-3 w-full"
                     >
                       {exportOperation === "json" ? (
                         <Loader2 className="w-3 h-3 animate-spin mr-1" />
@@ -497,7 +485,7 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
                       size="sm"
                       onClick={handleBulkExportMarkdown}
                       disabled={exportOperation === "markdown"}
-                      className="border border-gray-300 hover:bg-gray-900 hover:text-white text-xs h-7 px-3"
+                      className="border border-gray-300 hover:bg-gray-900 hover:text-white text-xs h-8 px-3 w-full"
                     >
                       {exportOperation === "markdown" ? (
                         <Loader2 className="w-3 h-3 animate-spin mr-1" />

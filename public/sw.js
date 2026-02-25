@@ -6,7 +6,6 @@
 const CACHE_VERSION = 'v0.1.0';
 const CACHE_NAME = `quantumpdf-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
-const IMAGE_CACHE = `images-${CACHE_VERSION}`;
 
 // Resources to cache immediately on install
 const PRECACHE_URLS = [
@@ -142,7 +141,7 @@ async function networkFirst(request) {
       cache.put(request, response.clone());
     }
     return response;
-  } catch (error) {
+  } catch {
     console.log('[ServiceWorker] Network failed, trying cache:', request.url);
     const cached = await cache.match(request);
 

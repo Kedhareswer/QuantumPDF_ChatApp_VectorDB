@@ -1,6 +1,5 @@
-import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import { AdvancedChunker } from './advanced-chunking'
-import { BrowserOCRProcessor } from './ocr-processor'
+import { AdvancedChunker } from './advanced-chunking';
+import { BrowserOCRProcessor } from './ocr-processor';
 
 export interface PDFContent {
   text: string
@@ -21,7 +20,7 @@ export interface PDFContent {
 }
 
 export class PDFParser {
-  private pdfjsLib: any = null
+  private pdfjsLib: unknown = null
   private isInitialized = false
   private ocrProcessor: BrowserOCRProcessor | null = null
   private ocrAvailable: boolean = false
