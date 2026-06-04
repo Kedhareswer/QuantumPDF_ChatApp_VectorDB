@@ -58,7 +58,7 @@
     "lucide-react": "^0.554.0",
     "mammoth": "^1.11.0",
     "mermaid": "^11.12.1",
-    "next": "^16.1.6",
+    "next": "^16.2.7",
     "next-themes": "^0.4.6",
     "papaparse": "^5.4.1",
     "pdfjs-dist": "latest",
@@ -95,12 +95,15 @@
     "@vitejs/plugin-react": "^5.1.4",
     "baseline-browser-mapping": "^2.10.0",
     "eslint": "^9.39.3",
-    "eslint-config-next": "^16.1.6",
+    "eslint-config-next": "^16.2.7",
     "jsdom": "^28.1.0",
-    "postcss": "^8.5",
+    "postcss": "^8.5.10",
     "tailwindcss": "^4.1.17",
     "ts-morph": "^27.0.2",
     "typescript": "^5",
     "vitest": "^4.0.18"
+  },
+  "overrides": {
+    "postcss": "$postcss"
   }
 }
