@@ -13,7 +13,7 @@ import {
     Settings,
     X
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { ChatInterface } from "@/components/chat-interface"
 import { DocumentLibrary } from "@/components/document-library"
@@ -28,6 +28,18 @@ import { AIClient } from "@/lib/ai-client"
 import { RAGEngine } from "@/lib/rag-engine"
 import { useAppStore } from "@/lib/store"
 import { VectorDatabaseClient } from "@/lib/vector-database-client"
+
+/**
+ * Generates a unique id for chat messages. Defined at module scope so the
+ * impure time/random calls are not flagged by the react-hooks purity rule
+ * (and to avoid the previous `Date.now() + 1` collision hack).
+ */
+function createId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
 
 export default function QuantumPDFChatbot() {
   const {
@@ -60,7 +72,7 @@ export default function QuantumPDFChatbot() {
   } = useAppStore()
 
   const [ragEngine] = useState(() => new RAGEngine())
-  const [vectorDB, setVectorDB] = useState(() => new VectorDatabaseClient(vectorDBConfig))
+  const vectorDB = useMemo(() => new VectorDatabaseClient(vectorDBConfig), [vectorDBConfig])
   const [embeddingStatus, setEmbeddingStatus] = useState<{
     active: boolean
     stage: "idle" | "embedding" | "indexing"
@@ -132,11 +144,8 @@ export default function QuantumPDFChatbot() {
   }, [addError, aiConfig, ragEngine, setModelStatus]) // Re-initialize when config changes
 
   useEffect(() => {
-    // Initialize vector database when config changes
-    const newVectorDB = new VectorDatabaseClient(vectorDBConfig)
-    setVectorDB(newVectorDB)
-
-    newVectorDB.initialize().catch((error) => {
+    // Initialize the (memoized) vector database client whenever it is recreated.
+    vectorDB.initialize().catch((error) => {
       console.error("Failed to initialize vector database:", error)
       addError({
         type: "warning",
@@ -144,7 +153,7 @@ export default function QuantumPDFChatbot() {
         message: `Using local storage: ${error.message}`,
       })
     })
-  }, [vectorDBConfig, addError])
+  }, [vectorDB, addError])
 
   const handleSendMessage = async (content: string, options?: {
     showThinking?: boolean,
@@ -163,7 +172,7 @@ export default function QuantumPDFChatbot() {
     }
 
     const userMessage = {
-      id: Date.now().toString(),
+      id: createId(),
       role: "user" as const,
       content,
       timestamp: new Date(),
@@ -185,7 +194,7 @@ export default function QuantumPDFChatbot() {
 
       if (options?.useContext === false) {
         const client = new AIClient(aiConfig)
-        const assistantId = (Date.now() + 1).toString()
+        const assistantId = createId()
         // Track content locally to avoid stale closure issue with messages array
         let accumulatedContent = ""
         addMessage({
@@ -228,7 +237,7 @@ export default function QuantumPDFChatbot() {
       }
 
       const assistantMessage = {
-        id: (Date.now() + 1).toString(),
+        id: createId(),
         role: "assistant" as const,
         content: responseAnswer,
         timestamp: new Date(),
@@ -265,7 +274,7 @@ export default function QuantumPDFChatbot() {
       console.error("Error sending message:", error)
 
       const errorMessage = {
-        id: (Date.now() + 1).toString(),
+        id: createId(),
         role: "assistant" as const,
         content: "I'm sorry, I encountered an error while processing your request. Please try again.",
         timestamp: new Date(),
