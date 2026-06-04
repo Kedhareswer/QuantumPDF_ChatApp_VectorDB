@@ -30,7 +30,6 @@ next-env.d.ts
 .next
 .vscode
 .kiro
-__tests__/
 nul
 .claude
 .tmp-strict-lint-after.json
