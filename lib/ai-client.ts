@@ -1,5 +1,6 @@
 // lib/ai-client.ts
 
+import { logger } from "./logger"
 import { DEFAULT_EMBEDDING_DIMENSION } from "./vector-dimensions"
 
 // Simplified AIConfig for text-only focus
@@ -201,7 +202,7 @@ export class AIClient {
       const cached = embeddingCache.get(cacheKey)
       
       if (cached && Date.now() - cached.timestamp < EMBEDDING_CACHE_TTL) {
-        console.log(`AIClient: Using cached embedding for text (${text.substring(0, 30)}...)`)
+        logger.debug(`AIClient: Using cached embedding for text (${text.substring(0, 30)}...)`)
         return cached.embedding
       }
 
@@ -245,7 +246,7 @@ export class AIClient {
    */
   static clearEmbeddingCache(): void {
     embeddingCache.clear()
-    console.log("AIClient: Embedding cache cleared")
+    logger.debug("AIClient: Embedding cache cleared")
   }
 
   /**
@@ -324,7 +325,7 @@ export class AIClient {
   }
 
   private async generateHuggingFaceEmbedding(text: string): Promise<number[]> {
-    console.log("AIClient: [Direct Text] Calling backend /api/huggingface/embedding")
+    logger.debug("AIClient: [Direct Text] Calling backend /api/huggingface/embedding")
     try {
       const requestBody: { text: string; model?: string; apiKey?: string } = {
         text: text,
@@ -359,7 +360,7 @@ export class AIClient {
 
   private async generateOpenAIEmbedding(text: string): Promise<number[]> {
     const baseUrl = this.config.baseUrl || "https://api.openai.com/v1"
-    console.log(`AIClient: [Direct Text] Making OpenAI API request to: ${baseUrl}/embeddings`)
+    logger.debug(`AIClient: [Direct Text] Making OpenAI API request to: ${baseUrl}/embeddings`)
     try {
       const modelToUse = this.getModelForPurpose("embedding")
       const response = await fetch(`${baseUrl}/embeddings`, {
@@ -397,7 +398,7 @@ export class AIClient {
   // Fixed AIML embedding with proper request format and validation
   private async generateAIMLEmbedding(text: string): Promise<number[]> {
     const baseUrl = this.config.baseUrl || "https://api.aimlapi.com/v1"
-    console.log(`AIClient: [Direct Text] Making AIML API request to: ${baseUrl}/embeddings`)
+    logger.debug(`AIClient: [Direct Text] Making AIML API request to: ${baseUrl}/embeddings`)
 
     try {
       // Validate input text
@@ -427,7 +428,7 @@ export class AIClient {
         embeddingModel = "text-embedding-3-small"
       }
 
-      console.log(`Using AIML embedding model: ${embeddingModel}`)
+      logger.debug(`Using AIML embedding model: ${embeddingModel}`)
 
       // Prepare request body with proper validation
       const requestBody = {
@@ -507,7 +508,7 @@ export class AIClient {
         throw new Error("Invalid embedding values from AIML API")
       }
 
-      console.log(`AIML embedding generated successfully: ${embedding.length} dimensions`)
+      logger.debug(`AIML embedding generated successfully: ${embedding.length} dimensions`)
       return embedding
     } catch (error) {
       console.error(`AIML embedding generation failed: ${error instanceof Error ? error.message : "Unknown error"}`)
@@ -522,7 +523,7 @@ export class AIClient {
   // New embedding methods for additional providers
   private async generateFireworksEmbedding(text: string): Promise<number[]> {
     const baseUrl = this.config.baseUrl || "https://api.fireworks.ai/inference/v1"
-    console.log(`AIClient: [Direct Text] Making Fireworks API request to: ${baseUrl}/embeddings`)
+    logger.debug(`AIClient: [Direct Text] Making Fireworks API request to: ${baseUrl}/embeddings`)
 
     try {
       // Use appropriate embedding model for Fireworks
@@ -565,7 +566,7 @@ export class AIClient {
 
   private async generateDeepInfraEmbedding(text: string): Promise<number[]> {
     const baseUrl = this.config.baseUrl || "https://api.deepinfra.com/v1/openai"
-    console.log(`AIClient: [Direct Text] Making DeepInfra API request to: ${baseUrl}/embeddings`)
+    logger.debug(`AIClient: [Direct Text] Making DeepInfra API request to: ${baseUrl}/embeddings`)
 
     try {
       // Use appropriate embedding model for DeepInfra
@@ -602,7 +603,7 @@ export class AIClient {
 
   private async generateGoogleAIEmbedding(text: string): Promise<number[]> {
     const baseUrl = this.config.baseUrl || "https://generativelanguage.googleapis.com/v1beta"
-    console.log(`AIClient: [Direct Text] Making Google AI API request to: ${baseUrl}`)
+    logger.debug(`AIClient: [Direct Text] Making Google AI API request to: ${baseUrl}`)
 
     try {
       // Normalize model naming to Gemini embeddings and avoid deprecated legacy model IDs.
@@ -739,7 +740,7 @@ export class AIClient {
       }
 
       // Fallback to non-streaming
-      console.log(`Using non-streaming fallback for provider: ${this.config.provider}`)
+      logger.debug(`Using non-streaming fallback for provider: ${this.config.provider}`)
       try {
         const response = await this.generateText(messages)
         onChunk(response)
@@ -1002,7 +1003,7 @@ export class AIClient {
 
   async testConnection(): Promise<boolean> {
     try {
-      console.log(`Testing connection for provider: ${this.config.provider}`)
+      logger.debug(`Testing connection for provider: ${this.config.provider}`)
       switch (this.config.provider) {
         case "huggingface":
           return await this.testHuggingFaceConnection()
@@ -1097,7 +1098,7 @@ export class AIClient {
         for (let i = 0; i < dimension; i++) {
           normalized[i] = embedding[i] / magnitude
         }
-        console.log(`Generated optimized fallback embedding with dimension: ${normalized.length}`)
+        logger.debug(`Generated optimized fallback embedding with dimension: ${normalized.length}`)
         return normalized
       } else {
         // If magnitude is 0, create a small random vector
@@ -1431,7 +1432,7 @@ export class AIClient {
         throw new Error("Groq API key is not configured")
       }
 
-      console.log("Sending request to Groq API with model:", model)
+      logger.debug("Sending request to Groq API with model:", model)
       
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
@@ -1562,7 +1563,7 @@ export class AIClient {
         return false
       }
       
-      console.log("Successfully connected to Groq API")
+      logger.debug("Successfully connected to Groq API")
       return true
     } catch (error) {
       console.error("Groq connection test failed:", error)
@@ -1582,7 +1583,7 @@ export class AIClient {
       if (!apiKey) throw new Error("Fireworks API key is not configured")
 
       const url = `${baseUrl}/chat/completions`
-      console.log("Sending request to Fireworks API:", url)
+      logger.debug("Sending request to Fireworks API:", url)
 
       const response = await fetch(url, {
         method: "POST",
@@ -2064,7 +2065,7 @@ export class AIClient {
 
   private async simpleTestConnection(provider: string): Promise<boolean> {
     try {
-      console.log(`Testing ${provider} connection...`)
+      logger.debug(`Testing ${provider} connection...`)
       
       if (!this.config.apiKey) {
         console.warn(`${provider} API key not provided`)

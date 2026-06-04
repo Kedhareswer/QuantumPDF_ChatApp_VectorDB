@@ -1,3 +1,4 @@
+import { logger } from "./logger"
 /**
  * Performance Monitoring System for QuantumPDF ChatApp
  *
@@ -37,7 +38,7 @@ export class PerformanceMonitor {
 
       if (this.enableLogging) {
         const metadataStr = metadata ? ` | ${JSON.stringify(metadata)}` : ''
-        console.log(`⏱️  ${operationName}: ${duration.toFixed(2)}ms${metadataStr}`)
+        logger.debug(`⏱️  ${operationName}: ${duration.toFixed(2)}ms${metadataStr}`)
       }
     }
   }

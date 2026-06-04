@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/logger"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -115,7 +116,7 @@ export default function QuantumPDFChatbot() {
       try {
         if (aiConfig.apiKey && aiConfig.provider) {
       setModelStatus("loading")
-          console.log("Initializing RAG engine with config:", {
+          logger.debug("Initializing RAG engine with config:", {
             provider: aiConfig.provider,
             model: aiConfig.model,
             hasApiKey: !!aiConfig.apiKey
@@ -123,10 +124,10 @@ export default function QuantumPDFChatbot() {
           
           await ragEngine.initialize(aiConfig)
           setModelStatus("ready")
-          console.log("RAG engine initialized successfully")
+          logger.debug("RAG engine initialized successfully")
         } else {
           setModelStatus("config")
-          console.log("RAG engine waiting for configuration")
+          logger.debug("RAG engine waiting for configuration")
         }
       } catch (error) {
           console.error("Failed to initialize RAG engine:", error)
@@ -186,7 +187,7 @@ export default function QuantumPDFChatbot() {
       const detectedComplexity = options?.complexityLevel || detectQuestionComplexity(content)
       const showThinking = options?.showThinking || detectedComplexity === 'complex'
 
-      console.log(`Processing query with complexity: ${detectedComplexity}, thinking: ${showThinking}`)
+      logger.debug(`Processing query with complexity: ${detectedComplexity}, thinking: ${showThinking}`)
 
       let responseAnswer = ""
       let responseSources: string[] = []
@@ -312,8 +313,8 @@ export default function QuantumPDFChatbot() {
 
   const handleDocumentUpload = async (document: unknown) => {
     try {
-      console.log("=== Page: Document upload started ===")
-      console.log("Received document:", {
+      logger.debug("=== Page: Document upload started ===")
+      logger.debug("Received document:", {
         name: document.name,
         id: document.id,
         hasChunks: !!document.chunks,
@@ -324,18 +325,18 @@ export default function QuantumPDFChatbot() {
       })
 
       // Check RAG engine status before adding document
-      console.log("RAG Engine status before adding document:")
-      console.log("- RAG Engine available:", !!ragEngine)
-      console.log("- RAG Engine healthy:", ragEngine ? ragEngine.isHealthy() : false)
+      logger.debug("RAG Engine status before adding document:")
+      logger.debug("- RAG Engine available:", !!ragEngine)
+      logger.debug("- RAG Engine healthy:", ragEngine ? ragEngine.isHealthy() : false)
       if (ragEngine) {
         const status = ragEngine.getStatus()
-        console.log("- RAG Engine initialized:", status.initialized)
-        console.log("- Current document count:", status.documentCount)
-        console.log("- Current provider:", status.currentProvider)
-        console.log("- Current model:", status.currentModel)
+        logger.debug("- RAG Engine initialized:", status.initialized)
+        logger.debug("- Current document count:", status.documentCount)
+        logger.debug("- Current provider:", status.currentProvider)
+        logger.debug("- Current model:", status.currentModel)
       }
 
-      console.log("🔄 Adding document to RAG engine...")
+      logger.debug("🔄 Adding document to RAG engine...")
       setEmbeddingStatus({
         active: true,
         stage: "embedding",
@@ -357,14 +358,14 @@ export default function QuantumPDFChatbot() {
           textPreview: progress.textPreview,
         }))
       })
-      console.log("✅ Document successfully added to RAG engine")
+      logger.debug("✅ Document successfully added to RAG engine")
       
-      console.log("🔄 Adding document to store...")
+      logger.debug("🔄 Adding document to store...")
       addDocument(document)
-      console.log("✅ Document successfully added to store")
+      logger.debug("✅ Document successfully added to store")
 
       // Add to vector database
-      console.log("🔄 Preparing vector database documents...")
+      logger.debug("🔄 Preparing vector database documents...")
       const vectorDocuments = document.chunks.map((chunk: string, index: number) => ({
         id: `${document.id}_${index}`,
         content: chunk,
@@ -376,27 +377,27 @@ export default function QuantumPDFChatbot() {
           timestamp: document.uploadedAt,
         },
       }))
-      console.log("- Vector documents prepared:", vectorDocuments.length)
+      logger.debug("- Vector documents prepared:", vectorDocuments.length)
 
-      console.log("🔄 Adding documents to vector database...")
+      logger.debug("🔄 Adding documents to vector database...")
       setEmbeddingStatus((prev) => ({ ...prev, stage: "indexing" }))
       await vectorDB.addDocuments(vectorDocuments)
-      console.log("✅ Documents successfully added to vector database")
+      logger.debug("✅ Documents successfully added to vector database")
 
       // If this is the first document and AI is configured, keep sidebar focused on docs
       if (documents.length === 0 && modelStatus === "ready") {
-        console.log("🔄 First document added - keeping document tab active")
+        logger.debug("🔄 First document added - keeping document tab active")
         setTimeout(() => setActiveTab("documents"), 1000)
       }
 
       // Final status check
-      console.log("Final status after document upload:")
+      logger.debug("Final status after document upload:")
       if (ragEngine) {
         const finalStatus = ragEngine.getStatus()
-        console.log("- RAG Engine document count:", finalStatus.documentCount)
-        console.log("- RAG Engine total chunks:", finalStatus.totalChunks)
+        logger.debug("- RAG Engine document count:", finalStatus.documentCount)
+        logger.debug("- RAG Engine total chunks:", finalStatus.totalChunks)
       }
-      console.log("- Store document count:", documents.length + 1) // +1 because state update is async
+      logger.debug("- Store document count:", documents.length + 1) // +1 because state update is async
 
       addError({
         type: "success",
@@ -404,7 +405,7 @@ export default function QuantumPDFChatbot() {
         message: `Successfully processed ${document.name} with ${document.chunks?.length || 0} chunks`,
       })
       
-      console.log("=== Page: Document upload completed successfully ===")
+      logger.debug("=== Page: Document upload completed successfully ===")
     } catch (error) {
       console.error("❌ Error in handleDocumentUpload:", error)
       console.error("Document that failed:", {

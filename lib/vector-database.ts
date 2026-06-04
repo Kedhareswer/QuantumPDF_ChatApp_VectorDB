@@ -1,3 +1,4 @@
+import { logger } from "./logger"
 import { calculateKeywordScore, enhancedKeywordSimilarity } from "./keyword-scoring"
 import { createZeroVector, getEmbeddingDimension } from "./vector-dimensions"
 
@@ -89,7 +90,7 @@ class PineconeDatabase extends VectorDatabase {
         await this.index.describeIndexStats()
       } catch {
         // Index doesn't exist, create it
-        console.log(`Creating Pinecone index: ${indexName}`)
+        logger.debug(`Creating Pinecone index: ${indexName}`)
         await this.pinecone.createIndex({
           name: indexName,
           dimension: getEmbeddingDimension(this.config.dimension),
@@ -333,7 +334,7 @@ class PineconeDatabase extends VectorDatabase {
     semanticWeight /= total
     keywordWeight /= total
     
-    console.log(`Adaptive weights for "${query.substring(0, 30)}...": semantic=${semanticWeight.toFixed(2)}, keyword=${keywordWeight.toFixed(2)}`)
+    logger.debug(`Adaptive weights for "${query.substring(0, 30)}...": semantic=${semanticWeight.toFixed(2)}, keyword=${keywordWeight.toFixed(2)}`)
     
     return { semantic: semanticWeight, keyword: keywordWeight }
   }
@@ -430,18 +431,18 @@ class WeaviateDatabase extends VectorDatabase {
         )
         
         if (classExists) {
-          console.log(`Weaviate class '${className}' already exists, skipping creation`)
+          logger.debug(`Weaviate class '${className}' already exists, skipping creation`)
         } else {
-          console.log(`Creating Weaviate class '${className}'...`)
+          logger.debug(`Creating Weaviate class '${className}'...`)
           await this.client.schema.classCreator().withClass(schema).do()
-          console.log(`Weaviate class '${className}' created successfully`)
+          logger.debug(`Weaviate class '${className}' created successfully`)
         }
       } catch (schemaError) {
         // If we can't check the schema, try to create (will fail silently if exists)
         console.warn("Could not check existing schema, attempting to create class:", schemaError)
         try {
           await this.client.schema.classCreator().withClass(schema).do()
-          console.log(`Weaviate class '${className}' created`)
+          logger.debug(`Weaviate class '${className}' created`)
         } catch (createError: unknown) {
           // Only log if it's not an "already exists" error
           if (!createError?.message?.includes('already exists')) {
@@ -600,7 +601,7 @@ class LocalVectorDatabase extends VectorDatabase {
 
   async initialize(): Promise<void> {
     this.isInitialized = true
-    console.log("Local vector database initialized")
+    logger.debug("Local vector database initialized")
   }
 
   async addDocuments(documents: VectorDocument[]): Promise<void> {

@@ -1,3 +1,4 @@
+import { logger } from "./logger"
 // lib/telemetry.ts - Monitoring and telemetry system for RAG pipeline
 
 export interface TelemetryEvent {
@@ -221,7 +222,7 @@ export class TelemetryCollector {
     // This allows RAG engine to sync its state with telemetry
     const currentDocCount = this.documentStats.documents.size
     if (total !== currentDocCount || totalChunks !== this.documentStats.totalChunks) {
-      console.log(`Telemetry: Syncing document stats (${currentDocCount} -> ${total} docs, ${this.documentStats.totalChunks} -> ${totalChunks} chunks)`)
+      logger.debug(`Telemetry: Syncing document stats (${currentDocCount} -> ${total} docs, ${this.documentStats.totalChunks} -> ${totalChunks} chunks)`)
     }
   }
 

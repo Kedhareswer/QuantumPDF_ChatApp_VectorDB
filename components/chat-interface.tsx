@@ -1,5 +1,6 @@
 "use client"
 
+import { logger } from "@/lib/logger"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from 'react-markdown'
@@ -567,7 +568,7 @@ export function ChatInterface({
 
     setIsRunningDiagnostics(true)
     try {
-      console.log("🔍 Running system diagnostics...")
+      logger.debug("🔍 Running system diagnostics...")
       const diagnostics = await ragEngine.runDiagnostics()
       
       // Create a diagnostic report message
@@ -615,7 +616,7 @@ ${diagnostics.documents.length === 0
 
       // This would need to be passed up to the parent component
       // For now, just log the results
-      console.log("Diagnostic report generated:", diagnosticReport)
+      logger.debug("Diagnostic report generated:", diagnosticReport)
       
     } catch (error) {
       console.error("Diagnostic failed:", error)

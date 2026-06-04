@@ -1,5 +1,6 @@
 // lib/diversity-algorithm.ts - Enhanced multi-document diversity with MMR, temporal, position, and topic analysis
 
+import { logger } from "./logger"
 import type { RAGConfiguration } from './rag-config'
 
 export interface DiversityChunk {
@@ -345,7 +346,7 @@ export class EnhancedDiversityAlgorithm {
     if (chunks.length === 0) return []
     if (chunks.length <= topK) return chunks
 
-    console.log(`Enhanced Diversity: Processing ${chunks.length} chunks for top-${topK}`)
+    logger.debug(`Enhanced Diversity: Processing ${chunks.length} chunks for top-${topK}`)
 
     // Filter by minimum similarity
     const filtered = chunks.filter((c) => c.similarity >= minSimilarity)
@@ -492,12 +493,12 @@ export class EnhancedDiversityAlgorithm {
       )
     }
 
-    console.log(`Diversity Metrics:`)
-    console.log(`- Documents represented: ${docDistribution.size}`)
-    console.log(`- Topic diversity: ${topicDiversity.toFixed(2)}`)
-    console.log(`- Document distribution:`)
+    logger.debug(`Diversity Metrics:`)
+    logger.debug(`- Documents represented: ${docDistribution.size}`)
+    logger.debug(`- Topic diversity: ${topicDiversity.toFixed(2)}`)
+    logger.debug(`- Document distribution:`)
     docDistribution.forEach((count, name) => {
-      console.log(`  ${name}: ${count} chunks`)
+      logger.debug(`  ${name}: ${count} chunks`)
     })
   }
 }

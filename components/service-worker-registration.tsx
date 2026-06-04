@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from "@/lib/logger"
 import { useEffect } from 'react'
 
 export function ServiceWorkerRegistration() {
@@ -13,7 +14,7 @@ export function ServiceWorkerRegistration() {
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
-          console.log('Service Worker registered:', registration)
+          logger.debug('Service Worker registered:', registration)
 
           // Check for updates periodically
           setInterval(() => {
@@ -55,7 +56,7 @@ export function ServiceWorkerRegistration() {
 
       // Listen for messages from service worker
       navigator.serviceWorker.addEventListener('message', (event) => {
-        console.log('Message from service worker:', event.data)
+        logger.debug('Message from service worker:', event.data)
       })
     }
   }, [])
@@ -63,12 +64,12 @@ export function ServiceWorkerRegistration() {
   // Development mode notification
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
-      console.log(
+      logger.debug(
         '%c⚠️ PWA Features',
         'color: orange; font-size: 14px; font-weight: bold',
         '\nService Worker is disabled in development mode.'
       )
-      console.log(
+      logger.debug(
         '%cTo test PWA features:',
         'color: blue; font-size: 12px',
         '\n1. Run: npm run build\n2. Run: npm start\n3. Open http://localhost:3000'

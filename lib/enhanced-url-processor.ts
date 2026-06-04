@@ -3,6 +3,7 @@
  * Handles fetching and processing content from various URL types including PDFs, arXiv papers, and web pages
  */
 
+import { logger } from "./logger"
 import { AIClient } from './ai-client'
 
 // PDF.js will be dynamically imported only in browser context to avoid server-side DOMMatrix issues
@@ -181,7 +182,7 @@ export class EnhancedURLProcessor {
     }
 
     try {
-      console.log(`Processing PDF from URL: ${url}`)
+      logger.debug(`Processing PDF from URL: ${url}`)
       
       // Fetch the PDF file
       const response = await fetch(url, {
@@ -202,7 +203,7 @@ export class EnhancedURLProcessor {
       const contentLength = pdfData.byteLength
       const title = this.extractTitleFromUrl(url)
 
-      console.log(`PDF downloaded: ${Math.round(contentLength / 1024)} KB`)
+      logger.debug(`PDF downloaded: ${Math.round(contentLength / 1024)} KB`)
 
       // Extract text using PDF.js
       let extractedText = ''
@@ -236,7 +237,7 @@ export class EnhancedURLProcessor {
 
         const pdf = await loadingTask.promise
         pageCount = pdf.numPages
-        console.log(`PDF has ${pageCount} pages`)
+        logger.debug(`PDF has ${pageCount} pages`)
 
         // Get metadata
         try {

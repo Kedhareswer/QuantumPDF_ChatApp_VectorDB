@@ -60,6 +60,7 @@ interface EnhancedQueryResponse {
 
 
 
+import { logger } from "./logger"
 import type { TextChunk } from "./advanced-chunking"
 import { AIClient } from "./ai-client"
 import {
@@ -208,10 +209,10 @@ export class RAGEngine {
         throw new Error("AI client not available - configuration required")
       }
       
-      console.log(`RAGEngine: Initializing with AI provider`)
+      logger.debug(`RAGEngine: Initializing with AI provider`)
       
       // Test AI client connection first
-      console.log("RAGEngine: Testing AI provider connection...")
+      logger.debug("RAGEngine: Testing AI provider connection...")
       const connectionTest = await this.aiClient.testConnection()
       if (!connectionTest) {
         console.warn("RAGEngine: AI provider connection test failed, entering degraded mode")
@@ -219,18 +220,18 @@ export class RAGEngine {
         this.engineStatus.degradedReasons.push("Connection test failed - provider may be unavailable")
         this.engineStatus.connectionHealthy = false
       } else {
-        console.log("RAGEngine: AI provider connection test successful")
+        logger.debug("RAGEngine: AI provider connection test successful")
         this.engineStatus.connectionHealthy = true
       }
 
       // Test embedding generation with error handling
-      console.log("RAGEngine: Testing embedding generation...")
+      logger.debug("RAGEngine: Testing embedding generation...")
       try {
         const testEmbedding = await this.aiClient.generateEmbedding("test connection")
         if (!testEmbedding || !Array.isArray(testEmbedding) || testEmbedding.length === 0) {
           throw new Error("Invalid embedding response during initialization")
         }
-        console.log(`RAGEngine: Embedding test successful, dimension: ${testEmbedding.length}`)
+        logger.debug(`RAGEngine: Embedding test successful, dimension: ${testEmbedding.length}`)
         this.engineStatus.embeddingAvailable = true
       } catch (embeddingError) {
         const errorMessage = embeddingError instanceof Error ? embeddingError.message : "Unknown embedding error"
@@ -244,7 +245,7 @@ export class RAGEngine {
       }
 
       // Test text generation - this is critical
-      console.log("RAGEngine: Testing text generation...")
+      logger.debug("RAGEngine: Testing text generation...")
       try {
         const testResponse = await this.aiClient.generateText([
           { role: "user", content: "Hi" }
@@ -252,7 +253,7 @@ export class RAGEngine {
         if (!testResponse || typeof testResponse !== 'string') {
           throw new Error("Invalid text generation response during initialization")
         }
-        console.log("RAGEngine: Text generation test successful")
+        logger.debug("RAGEngine: Text generation test successful")
         this.engineStatus.textGenerationAvailable = true
       } catch (textError) {
         const errorMessage = textError instanceof Error ? textError.message : "Unknown text generation error"
@@ -270,13 +271,13 @@ export class RAGEngine {
       
       // Initialize QueryProcessor with AI client
       this.queryProcessor.setAIClient(this.aiClient)
-      console.log("RAGEngine: QueryProcessor initialized with AI client")
+      logger.debug("RAGEngine: QueryProcessor initialized with AI client")
       
       if (this.engineStatus.degraded) {
         console.warn("RAGEngine: Initialized in DEGRADED mode:")
         this.engineStatus.degradedReasons.forEach(reason => console.warn(`  - ${reason}`))
       } else {
-        console.log("RAGEngine: Initialization completed successfully (FULL mode)")
+        logger.debug("RAGEngine: Initialization completed successfully (FULL mode)")
       }
       
     } catch (error) {
@@ -300,19 +301,19 @@ export class RAGEngine {
 
   async updateConfig(config: AIConfig) {
     try {
-      console.log("Updating RAG Engine configuration")
+      logger.debug("Updating RAG Engine configuration")
       await this.initialize(config)
 
       // Re-generate embeddings for existing documents if provider changed
       if (this.documents.length > 0 && this.aiClient) {
-        console.log("Re-generating embeddings for existing documents...")
+        logger.debug("Re-generating embeddings for existing documents...")
         for (const document of this.documents) {
           if (document.chunks && document.chunks.length > 0) {
             const plainChunks = this.toPlainChunks(document.chunks as unknown)
             document.embeddings = await this.aiClient.generateEmbeddings(plainChunks)
           }
         }
-        console.log("Embeddings updated for all documents")
+        logger.debug("Embeddings updated for all documents")
       }
     } catch (error) {
       console.error("Failed to update RAG Engine configuration:", error)
@@ -421,7 +422,7 @@ export class RAGEngine {
         },
       }
 
-      console.log(`Document processed successfully: ${chunks.length} chunks, ${embeddings.length} embeddings`)
+      logger.debug(`Document processed successfully: ${chunks.length} chunks, ${embeddings.length} embeddings`)
       return document
     } catch (error) {
       console.error("Error processing document:", error)
@@ -439,9 +440,9 @@ export class RAGEngine {
     }) => void,
   ) {
     try {
-      console.log("=== RAG Engine: Adding document ===")
-      console.log("Document name:", document.name)
-      console.log("Document ID:", document.id)
+      logger.debug("=== RAG Engine: Adding document ===")
+      logger.debug("Document name:", document.name)
+      logger.debug("Document ID:", document.id)
       
       // Validate document structure
       if (!document || typeof document !== "object") {
@@ -449,13 +450,13 @@ export class RAGEngine {
         throw new Error("Invalid document object")
       }
 
-      console.log("Document structure validation:")
-      console.log("- Has chunks:", !!document.chunks)
-      console.log("- Chunks is array:", Array.isArray(document.chunks))
-      console.log("- Chunks length:", document.chunks?.length)
-      console.log("- Has embeddings:", !!document.embeddings)
-      console.log("- Embeddings is array:", Array.isArray(document.embeddings))
-      console.log("- Embeddings length:", document.embeddings?.length)
+      logger.debug("Document structure validation:")
+      logger.debug("- Has chunks:", !!document.chunks)
+      logger.debug("- Chunks is array:", Array.isArray(document.chunks))
+      logger.debug("- Chunks length:", document.chunks?.length)
+      logger.debug("- Has embeddings:", !!document.embeddings)
+      logger.debug("- Embeddings is array:", Array.isArray(document.embeddings))
+      logger.debug("- Embeddings length:", document.embeddings?.length)
 
       if (!document.chunks || !Array.isArray(document.chunks)) {
         console.error("Document chunks are missing or invalid:", document.chunks)
@@ -467,16 +468,16 @@ export class RAGEngine {
         throw new Error("Document has no chunks")
       }
 
-      console.log("First few chunks preview:")
+      logger.debug("First few chunks preview:")
       document.chunks.slice(0, 3).forEach((chunk, i) => {
         const preview = typeof chunk === 'string' ? chunk.substring(0, 100) : (chunk as unknown).content?.substring(0, 100) || ''
-        console.log(`  Chunk ${i}: ${preview}...`)
+        logger.debug(`  Chunk ${i}: ${preview}...`)
       })
 
       // Check AI client status
-      console.log("AI Client status:")
-      console.log("- AI Client available:", !!this.aiClient)
-      console.log("- RAG Engine initialized:", this.isInitialized)
+      logger.debug("AI Client status:")
+      logger.debug("- AI Client available:", !!this.aiClient)
+      logger.debug("- RAG Engine initialized:", this.isInitialized)
 
       // Generate embeddings if they don't exist or are invalid
       if (
@@ -489,8 +490,8 @@ export class RAGEngine {
           throw new Error("AI client not initialized")
         }
 
-        console.log("🔄 Generating missing embeddings for document:", document.name)
-        console.log("- Need to generate embeddings for", document.chunks.length, "chunks")
+        logger.debug("🔄 Generating missing embeddings for document:", document.name)
+        logger.debug("- Need to generate embeddings for", document.chunks.length, "chunks")
         
         try {
           const startTime = Date.now()
@@ -502,18 +503,18 @@ export class RAGEngine {
             })
           })
           const endTime = Date.now()
-          console.log(`✅ Embeddings generated successfully in ${endTime - startTime}ms`)
-          console.log("- Generated embeddings count:", document.embeddings.length)
+          logger.debug(`✅ Embeddings generated successfully in ${endTime - startTime}ms`)
+          logger.debug("- Generated embeddings count:", document.embeddings.length)
           if (document.embeddings.length > 0) {
-            console.log("- First embedding dimensions:", document.embeddings[0]?.length)
+            logger.debug("- First embedding dimensions:", document.embeddings[0]?.length)
           }
         } catch (embeddingError) {
           console.error("❌ Failed to generate embeddings:", embeddingError)
           throw new Error(`Failed to generate embeddings: ${embeddingError instanceof Error ? embeddingError.message : 'Unknown error'}`)
         }
       } else {
-        console.log("✅ Document already has valid embeddings")
-        console.log("- Embedding dimensions:", document.embeddings[0]?.length)
+        logger.debug("✅ Document already has valid embeddings")
+        logger.debug("- Embedding dimensions:", document.embeddings[0]?.length)
         onEmbeddingProgress?.({
           completed: document.embeddings.length,
           total: document.chunks.length,
@@ -532,7 +533,7 @@ export class RAGEngine {
       }
 
       // Check if embeddings are properly formatted
-      console.log("Validating embedding format...")
+      logger.debug("Validating embedding format...")
       for (let i = 0; i < document.embeddings.length; i++) {
         if (!Array.isArray(document.embeddings[i]) || document.embeddings[i].length === 0) {
           console.error(`Invalid embedding at index ${i}:`, document.embeddings[i])
@@ -541,7 +542,7 @@ export class RAGEngine {
         
         // Log first few embedding details
         if (i < 3) {
-          console.log(`  Embedding ${i}: ${document.embeddings[i].length} dimensions`)
+          logger.debug(`  Embedding ${i}: ${document.embeddings[i].length} dimensions`)
         }
       }
 
@@ -550,17 +551,17 @@ export class RAGEngine {
       this.documents.push(document)
       const afterCount = this.documents.length
       
-      console.log("✅ Document added successfully to RAG engine")
-      console.log("- Documents before:", beforeCount)
-      console.log("- Documents after:", afterCount)
-      console.log("- Document name:", document.name)
-      console.log("- Chunks:", document.chunks.length)
-      console.log("- Total documents in RAG engine:", this.documents.length)
+      logger.debug("✅ Document added successfully to RAG engine")
+      logger.debug("- Documents before:", beforeCount)
+      logger.debug("- Documents after:", afterCount)
+      logger.debug("- Document name:", document.name)
+      logger.debug("- Chunks:", document.chunks.length)
+      logger.debug("- Total documents in RAG engine:", this.documents.length)
       
       // Verify the document was actually added
       const addedDoc = this.documents.find(d => d.id === document.id)
       if (addedDoc) {
-        console.log("✅ Document verification: Successfully found in RAG engine documents array")
+        logger.debug("✅ Document verification: Successfully found in RAG engine documents array")
       } else {
         console.error("❌ Document verification: NOT found in RAG engine documents array")
       }
@@ -573,7 +574,7 @@ export class RAGEngine {
         console.warn("Failed to track document in telemetry:", telemetryError)
       }
       
-      console.log("=== RAG Engine: Document addition complete ===")
+      logger.debug("=== RAG Engine: Document addition complete ===")
       
     } catch (error) {
       console.error("❌ Error adding document to RAG engine:", error)
@@ -628,11 +629,11 @@ export class RAGEngine {
       : { tableBoost: 1.0, imageBoost: 1.0, equationBoost: 1.0, dataBoost: 1.0 }
     
     if (question) {
-      console.log("Content type boosts for query:", contentTypeBoosts)
+      logger.debug("Content type boosts for query:", contentTypeBoosts)
     }
 
     try {
-      console.log("Enhanced findRelevantChunks: Starting multi-document search")
+      logger.debug("Enhanced findRelevantChunks: Starting multi-document search")
 
       // Validate inputs
       if (!Array.isArray(questionEmbedding) || questionEmbedding.length === 0) {
@@ -650,26 +651,26 @@ export class RAGEngine {
         return [];
       }
 
-      console.log(`Processing ${this.documents.length} documents for enhanced similarity search`)
+      logger.debug(`Processing ${this.documents.length} documents for enhanced similarity search`)
 
       // Enhanced multi-document processing with better fairness
       const documentMetrics = new Map<string, { avgSimilarity: number; chunkCount: number; bestSimilarity: number }>()
 
       this.documents.forEach((doc, docIndex) => {
         try {
-          console.log(`Processing document ${docIndex}: ${doc.name}`)
+          logger.debug(`Processing document ${docIndex}: ${doc.name}`)
 
           // Apply document-level filters first
           if (filters) {
             if (filters.documentIds && filters.documentIds.length > 0 && !filters.documentIds.includes(doc.id)) {
-              console.log(`Skipping document ${doc.name} - not in document ID filter`)
+              logger.debug(`Skipping document ${doc.name} - not in document ID filter`)
               return // Skip – ID not in whitelist
             }
             if (filters.authors && filters.authors.length > 0) {
               const author = (doc.metadata?.author || '').toString().toLowerCase()
               const matchesAuthor = filters.authors.some((a) => a.toLowerCase() === author)
               if (!matchesAuthor) {
-                console.log(`Skipping document ${doc.name} - author filter mismatch`)
+                logger.debug(`Skipping document ${doc.name} - author filter mismatch`)
                 return
               }
             }
@@ -677,7 +678,7 @@ export class RAGEngine {
               const docTags: string[] = Array.isArray(doc.metadata?.tags) ? doc.metadata!.tags : []
               const tagMatch = docTags.some((t) => filters.tags!.includes(t))
               if (!tagMatch) {
-                console.log(`Skipping document ${doc.name} - tag filter mismatch`)
+                logger.debug(`Skipping document ${doc.name} - tag filter mismatch`)
                 return
               }
             }
@@ -685,7 +686,7 @@ export class RAGEngine {
               const docDate = doc.metadata?.creationDate || doc.uploadedAt
               if (docDate instanceof Date) {
                 if (docDate < filters.dateRange.start || docDate > filters.dateRange.end) {
-                  console.log(`Skipping document ${doc.name} - date range filter mismatch`)
+                  logger.debug(`Skipping document ${doc.name} - date range filter mismatch`)
                   return
                 }
               }
@@ -723,7 +724,7 @@ export class RAGEngine {
             return;
           }
 
-          console.log(`Document ${docIndex} has ${doc.chunks.length} valid chunks`)
+          logger.debug(`Document ${docIndex} has ${doc.chunks.length} valid chunks`)
 
           doc.chunks.forEach((chunk, chunkIndex) => {
             try {
@@ -804,11 +805,11 @@ export class RAGEngine {
                   // Log high-similarity chunks with exact match info
                   if (hybridSimilarity > 0.2) {
                     const matchInfo = exactMatchBoost > 0.5 ? ` [EXACT MATCH: ${exactMatchBoost.toFixed(2)}]` : ''
-                    console.log(`Strong similarity chunk found: ${hybridSimilarity.toFixed(3)} (semantic: ${semanticSimilarity.toFixed(3)}${matchInfo}) from ${sourceString} (importance: ${semanticImportance.toFixed(2)})`)
+                    logger.debug(`Strong similarity chunk found: ${hybridSimilarity.toFixed(3)} (semantic: ${semanticSimilarity.toFixed(3)}${matchInfo}) from ${sourceString} (importance: ${semanticImportance.toFixed(2)})`)
                   }
                 } else if (hybridSimilarity > 0.01) {
                   // Even low-similarity chunks are tracked for diversity purposes
-                  console.log(`Low similarity chunk: ${hybridSimilarity.toFixed(3)} from ${doc.name} (below threshold but tracked)`)
+                  logger.debug(`Low similarity chunk: ${hybridSimilarity.toFixed(3)} from ${doc.name} (below threshold but tracked)`)
                 }
               } else {
                 console.warn(`Invalid similarity calculated for chunk ${chunkIndex} in document ${docIndex}:`, semanticSimilarity);
@@ -825,14 +826,14 @@ export class RAGEngine {
               chunkCount: validChunks,
               bestSimilarity: docBestHybridSimilarity // Use hybrid similarity for best match
             })
-            console.log(`Document ${doc.name} metrics - Avg: ${(docSimilaritySum / validChunks).toFixed(3)}, Best: ${docBestHybridSimilarity.toFixed(3)}, Chunks: ${validChunks}`)
+            logger.debug(`Document ${doc.name} metrics - Avg: ${(docSimilaritySum / validChunks).toFixed(3)}, Best: ${docBestHybridSimilarity.toFixed(3)}, Chunks: ${validChunks}`)
           }
         } catch (docError) {
           console.error(`Error processing document ${docIndex}:`, docError);
         }
       });
 
-      console.log(`Total chunks processed: ${allChunks.length} from ${documentMetrics.size} documents`)
+      logger.debug(`Total chunks processed: ${allChunks.length} from ${documentMetrics.size} documents`)
 
       if (allChunks.length === 0) {
         console.warn("No chunks were successfully processed")
@@ -864,7 +865,7 @@ export class RAGEngine {
         }
 
         candidateChunks = allChunks.filter((chunk) => eligibleDocIds.has(chunk.documentId))
-        console.log(
+        logger.debug(
           `Single-doc gating: ${candidateChunks.length}/${allChunks.length} chunks retained from ${eligibleDocIds.size} document(s); floor=${scoreFloor.toFixed(3)}`
         )
       }
@@ -875,15 +876,15 @@ export class RAGEngine {
       if (useRRF && question) {
         // If alternative embeddings are provided, use multi-query RRF
         if (alternativeEmbeddings.length > 0) {
-          console.log(`Using Multi-Query Reciprocal Rank Fusion with ${alternativeEmbeddings.length + 1} query variations`)
+          logger.debug(`Using Multi-Query Reciprocal Rank Fusion with ${alternativeEmbeddings.length + 1} query variations`)
           finalChunks = this.applyMultiQueryRRF(candidateChunks, questionEmbedding, alternativeEmbeddings, question, topK)
         } else {
-          console.log("Using Reciprocal Rank Fusion (RRF) with multiple retrieval strategies")
+          logger.debug("Using Reciprocal Rank Fusion (RRF) with multiple retrieval strategies")
           finalChunks = this.applyReciprocalRankFusion(candidateChunks, questionEmbedding, question, topK)
         }
       } else {
         // Fallback to single strategy with diversity algorithm
-        console.log("Using single retrieval strategy with diversity algorithm")
+        logger.debug("Using single retrieval strategy with diversity algorithm")
         finalChunks = this.applyEnhancedDiversityAlgorithm(
           candidateChunks,
           documentMetrics,
@@ -895,7 +896,7 @@ export class RAGEngine {
 
       // Step 2: Re-ranking (if enabled)
       if (useReranking && question && finalChunks.length > 0) {
-        console.log("Applying re-ranking to improve result quality")
+        logger.debug("Applying re-ranking to improve result quality")
         finalChunks = this.rerankChunks(finalChunks, question, topK)
       }
 
@@ -1102,7 +1103,7 @@ export class RAGEngine {
     question: string,
     topK: number
   ): typeof allChunks {
-    console.log("=== Reciprocal Rank Fusion (RRF) ===")
+    logger.debug("=== Reciprocal Rank Fusion (RRF) ===")
     const k = 60 // RRF constant (standard value)
 
     // Strategy 1: Semantic similarity ranking
@@ -1187,13 +1188,13 @@ export class RAGEngine {
       ? this.applyCrossDocumentDiversity(sortedByRRF, topK, isMultiDoc)
       : sortedByRRF.slice(0, topK)
 
-    console.log(`RRF: Combined ${chunkMap.size} unique chunks from 4 strategies, returning top ${rrfResults.length}`)
+    logger.debug(`RRF: Combined ${chunkMap.size} unique chunks from 4 strategies, returning top ${rrfResults.length}`)
     if (rrfResults.length > 0) {
-      console.log(`Best RRF score: ${rrfResults[0].rrfScore?.toFixed(4) || 'N/A'}`)
+      logger.debug(`Best RRF score: ${rrfResults[0].rrfScore?.toFixed(4) || 'N/A'}`)
       // Log document distribution
       const docCounts = new Map<string, number>()
       rrfResults.forEach(r => docCounts.set(r.documentName, (docCounts.get(r.documentName) || 0) + 1))
-      console.log(`Document distribution: ${Array.from(docCounts.entries()).map(([n, c]) => `${n}:${c}`).join(', ')}`)
+      logger.debug(`Document distribution: ${Array.from(docCounts.entries()).map(([n, c]) => `${n}:${c}`).join(', ')}`)
     }
 
     return rrfResults
@@ -1225,7 +1226,7 @@ export class RAGEngine {
     
     const minPerDoc = isMultiDocQuery && numDocs <= topK ? 1 : 0
 
-    console.log(`Cross-doc diversity: ${numDocs} docs, max ${maxPerDoc}/doc, multiDoc: ${isMultiDocQuery}`)
+    logger.debug(`Cross-doc diversity: ${numDocs} docs, max ${maxPerDoc}/doc, multiDoc: ${isMultiDocQuery}`)
 
     const selected: T[] = []
     const docCounts = new Map<string, number>()
@@ -1294,7 +1295,7 @@ export class RAGEngine {
     question: string,
     topK: number
   ): typeof allChunks {
-    console.log("=== Multi-Query Reciprocal Rank Fusion ===")
+    logger.debug("=== Multi-Query Reciprocal Rank Fusion ===")
     const k = 60 // RRF constant
     
     // Combine all embeddings (original + alternatives)
@@ -1400,12 +1401,12 @@ export class RAGEngine {
     const isMultiDoc = this.isMultiDocumentQuery(question)
     const diverseResults = this.applyCrossDocumentDiversity(finalRankedChunks, topK, isMultiDoc)
     
-    console.log(`Multi-Query RRF: Combined ${allEmbeddings.length} query variations, top chunk RRF score: ${diverseResults[0]?.similarity?.toFixed(4) || 'N/A'}`)
+    logger.debug(`Multi-Query RRF: Combined ${allEmbeddings.length} query variations, top chunk RRF score: ${diverseResults[0]?.similarity?.toFixed(4) || 'N/A'}`)
     
     // Log document distribution
     const docCounts = new Map<string, number>()
     diverseResults.forEach(r => docCounts.set(r.documentName, (docCounts.get(r.documentName) || 0) + 1))
-    console.log(`Document distribution: ${Array.from(docCounts.entries()).map(([n, c]) => `${n}:${c}`).join(', ')}`)
+    logger.debug(`Document distribution: ${Array.from(docCounts.entries()).map(([n, c]) => `${n}:${c}`).join(', ')}`)
     
     return diverseResults
   }
@@ -1503,8 +1504,8 @@ export class RAGEngine {
     question: string,
     topK: number
   ): typeof chunks {
-    console.log("=== Re-ranking Chunks ===")
-    console.log(`Re-ranking ${chunks.length} chunks for question: "${question.substring(0, 100)}"`)
+    logger.debug("=== Re-ranking Chunks ===")
+    logger.debug(`Re-ranking ${chunks.length} chunks for question: "${question.substring(0, 100)}"`)
 
     const reranked = chunks.map(chunk => {
       // Calculate multiple relevance signals
@@ -1556,15 +1557,15 @@ export class RAGEngine {
         return cleaned as typeof chunks[0]
       }) // Remove temporary fields
 
-    console.log(`Re-ranking complete: ${finalReranked.length} chunks selected`)
+    logger.debug(`Re-ranking complete: ${finalReranked.length} chunks selected`)
     if (finalReranked.length > 0) {
       const topChunk = reranked.find(c => c.content === finalReranked[0].content)
       if (topChunk) {
-        console.log(`Top reranked chunk score: ${topChunk.rerankScore?.toFixed(4)}`)
-        console.log(`  - Exact match: ${topChunk.rerankSignals?.exactMatch.toFixed(3)}`)
-        console.log(`  - Keyword: ${topChunk.rerankSignals?.keyword.toFixed(3)}`)
-        console.log(`  - Semantic: ${topChunk.rerankSignals?.semantic.toFixed(3)}`)
-        console.log(`  - Importance: ${topChunk.rerankSignals?.importance.toFixed(3)}`)
+        logger.debug(`Top reranked chunk score: ${topChunk.rerankScore?.toFixed(4)}`)
+        logger.debug(`  - Exact match: ${topChunk.rerankSignals?.exactMatch.toFixed(3)}`)
+        logger.debug(`  - Keyword: ${topChunk.rerankSignals?.keyword.toFixed(3)}`)
+        logger.debug(`  - Semantic: ${topChunk.rerankSignals?.semantic.toFixed(3)}`)
+        logger.debug(`  - Importance: ${topChunk.rerankSignals?.importance.toFixed(3)}`)
       }
     }
 
@@ -1611,7 +1612,7 @@ export class RAGEngine {
   }): Promise<EnhancedQueryResponse> {
     const queryStartTime = Date.now()
     const queryId = `query_${queryStartTime}_${Math.random().toString(36).substring(7)}`
-    console.log(`Enhanced RAG query started [${queryId}]:`, question);
+    logger.debug(`Enhanced RAG query started [${queryId}]:`, question);
 
     // Initialize processing options
     const showThinking = options?.showThinking ?? false
@@ -1665,7 +1666,7 @@ export class RAGEngine {
           answer: `Rate limit exceeded. Please wait ${Math.ceil((rateLimitResult.retryAfterMs || 0) / 1000)} seconds before trying again.`,
         }
       }
-      console.log(`[${queryId}] Rate limit: ${rateLimitResult.remaining} requests remaining`)
+      logger.debug(`[${queryId}] Rate limit: ${rateLimitResult.remaining} requests remaining`)
 
       // Validate system state
       if (!this.isInitialized || !this.aiClient) {
@@ -1687,7 +1688,7 @@ export class RAGEngine {
       const documentIds = this.documents.map(d => d.id)
       const cachedResponse = this.queryProcessor.getCachedResponse(sanitizedQuestion, documentIds)
       if (cachedResponse) {
-        console.log(`[${queryId}] Cache HIT - returning cached response`)
+        logger.debug(`[${queryId}] Cache HIT - returning cached response`)
         return {
           answer: cachedResponse.answer,
           sources: cachedResponse.sources,
@@ -1699,12 +1700,12 @@ export class RAGEngine {
           hallucinationDetected: false
         }
       }
-      console.log(`[${queryId}] Cache MISS - processing query`)
+      logger.debug(`[${queryId}] Cache MISS - processing query`)
 
       // ==================== ADVANCED QUERY ANALYSIS ====================
-      console.log(`[${queryId}] Analyzing query with advanced processing...`)
+      logger.debug(`[${queryId}] Analyzing query with advanced processing...`)
       const queryAnalysis = await this.queryProcessor.analyzeQuery(sanitizedQuestion)
-      console.log(`[${queryId}] Query analysis:`, {
+      logger.debug(`[${queryId}] Query analysis:`, {
         type: queryAnalysis.queryType,
         complexity: queryAnalysis.complexity,
         requiresHyDE: queryAnalysis.requiresHyDE,
@@ -1740,7 +1741,7 @@ export class RAGEngine {
           retrievedChunks: response.retrievedChunks,
           qualityMetrics: response.qualityMetrics
         }, documentIds)
-        console.log(`[${queryId}] Response cached for future queries`)
+        logger.debug(`[${queryId}] Response cached for future queries`)
       }
 
       return {
@@ -1848,7 +1849,7 @@ export class RAGEngine {
       storeEvaluation(evaluation)
       
       // Log evaluation summary
-      console.log(`[${queryId}] Evaluation: overall=${(evaluation.overallScore * 100).toFixed(1)}%, ` +
+      logger.debug(`[${queryId}] Evaluation: overall=${(evaluation.overallScore * 100).toFixed(1)}%, ` +
         `retrieval=${retrievalLatencyMs}ms, generation=${generationLatencyMs}ms, ` +
         `groundedness=${(evaluation.generation.groundednessScore * 100).toFixed(1)}%`)
       
@@ -1885,13 +1886,13 @@ export class RAGEngine {
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     queryAnalysis?: QueryAnalysis
   ) {
-    console.log("Phase 1: Context Analysis and Initial Response")
+    logger.debug("Phase 1: Context Analysis and Initial Response")
     
     // Debug: Check system state
-    console.log("RAG Engine Debug:")
-    console.log("- Documents available:", this.documents.length)
-    console.log("- AI Client available:", !!this.aiClient)
-    console.log("- Is initialized:", this.isInitialized)
+    logger.debug("RAG Engine Debug:")
+    logger.debug("- Documents available:", this.documents.length)
+    logger.debug("- AI Client available:", !!this.aiClient)
+    logger.debug("- Is initialized:", this.isInitialized)
     
     if (this.documents.length === 0) {
       console.warn("No documents available for retrieval")
@@ -1907,7 +1908,7 @@ export class RAGEngine {
 
     // Debug: Log documents info
     this.documents.forEach((doc, index) => {
-      console.log(`Document ${index}: ${doc.name}, chunks: ${doc.chunks?.length || 0}, embeddings: ${doc.embeddings?.length || 0}`)
+      logger.debug(`Document ${index}: ${doc.name}, chunks: ${doc.chunks?.length || 0}, embeddings: ${doc.embeddings?.length || 0}`)
     })
     
     try {
@@ -1915,30 +1916,30 @@ export class RAGEngine {
       const vaguenessScore = queryAnalysis ? 
         (queryAnalysis.complexity === 'complex' ? 0.5 : 0.2) : 
         this.detectVagueness(question)
-      console.log(`Vagueness score: ${vaguenessScore.toFixed(2)} (0=clear, 1=very vague)`)
+      logger.debug(`Vagueness score: ${vaguenessScore.toFixed(2)} (0=clear, 1=very vague)`)
       
       let processedQuestion = queryAnalysis?.rewrittenQuery || question
       let expandedQueries: string[] = queryAnalysis?.alternativeQueries || []
       
       // If question is vague and no query analysis, expand it
       if (vaguenessScore > 0.4 && !queryAnalysis) {
-        console.log("⚠️ Vague question detected - expanding query...")
+        logger.debug("⚠️ Vague question detected - expanding query...")
         const expansionResult = await this.expandVagueQuery(question)
         processedQuestion = expansionResult.expandedQuery
         expandedQueries = expansionResult.alternativeQueries
         
-        console.log(`Expanded query: "${processedQuestion}"`)
-        console.log(`Alternative queries: ${expandedQueries.length}`)
+        logger.debug(`Expanded query: "${processedQuestion}"`)
+        logger.debug(`Alternative queries: ${expandedQueries.length}`)
       }
       
       // ==================== HyDE: Hypothetical Document Embeddings ====================
       // If HyDE is enabled and we have a hypothetical answer, use it for retrieval
       let hydeEmbedding: number[] | null = null
       if (queryAnalysis?.hypotheticalAnswer) {
-        console.log("🔮 Using HyDE (Hypothetical Document Embeddings) for retrieval...")
+        logger.debug("🔮 Using HyDE (Hypothetical Document Embeddings) for retrieval...")
         try {
           hydeEmbedding = await this.aiClient!.generateEmbedding(queryAnalysis.hypotheticalAnswer)
-          console.log(`HyDE embedding generated from hypothetical answer (${queryAnalysis.hypotheticalAnswer.length} chars)`)
+          logger.debug(`HyDE embedding generated from hypothetical answer (${queryAnalysis.hypotheticalAnswer.length} chars)`)
         } catch {
           console.warn("Failed to generate HyDE embedding, falling back to query embedding")
         }
@@ -1948,7 +1949,7 @@ export class RAGEngine {
       // If step-back is enabled, also retrieve context for the broader question
       let stepBackChunks: unknown[] = []
       if (queryAnalysis?.stepBackQuestion) {
-        console.log("🔙 Using Step-back Prompting for broader context...")
+        logger.debug("🔙 Using Step-back Prompting for broader context...")
         try {
           const stepBackEmbedding = await this.aiClient!.generateEmbedding(queryAnalysis.stepBackQuestion)
           stepBackChunks = this.findRelevantChunks(
@@ -1961,21 +1962,21 @@ export class RAGEngine {
             [],
             0.1 // Lower threshold for broader context
           )
-          console.log(`Step-back retrieval found ${stepBackChunks.length} broader context chunks`)
+          logger.debug(`Step-back retrieval found ${stepBackChunks.length} broader context chunks`)
         } catch {
           console.warn("Failed to retrieve step-back context")
         }
       }
       
       // Generate embeddings for main query (use HyDE if available)
-      console.log("Generating embedding for question:", processedQuestion.substring(0, 100) + "...")
+      logger.debug("Generating embedding for question:", processedQuestion.substring(0, 100) + "...")
       const questionEmbedding = hydeEmbedding || await this.aiClient!.generateEmbedding(processedQuestion);
-      console.log("Question embedding generated, dimensions:", questionEmbedding.length)
+      logger.debug("Question embedding generated, dimensions:", questionEmbedding.length)
       
       // Generate embeddings for alternative queries if available
       const alternativeEmbeddings: number[][] = []
       if (expandedQueries.length > 0) {
-        console.log("Generating embeddings for alternative queries...")
+        logger.debug("Generating embeddings for alternative queries...")
         for (const altQuery of expandedQueries.slice(0, 3)) { // Limit to 3 alternatives
           try {
             const altEmbedding = await this.aiClient!.generateEmbedding(altQuery)
@@ -1991,10 +1992,10 @@ export class RAGEngine {
       const chunkLimit = this.getOptimalChunkLimit(questionType)
       // Increase chunk limit for vague questions to get more context
       const adjustedChunkLimit = vaguenessScore > 0.4 ? Math.min(chunkLimit * 2, 15) : chunkLimit
-      console.log(`Question type: ${questionType}, chunk limit: ${adjustedChunkLimit}`)
+      logger.debug(`Question type: ${questionType}, chunk limit: ${adjustedChunkLimit}`)
       
       // Find relevant chunks with question-aware boosting, RRF, and re-ranking
-      console.log("Finding relevant chunks with RRF and re-ranking...")
+      logger.debug("Finding relevant chunks with RRF and re-ranking...")
       const useRRF = true // Enable RRF by default
       const useReranking = true // Enable re-ranking by default
       let relevantChunks = this.findRelevantChunks(
@@ -2006,14 +2007,14 @@ export class RAGEngine {
         useReranking,
         alternativeEmbeddings // Pass alternative embeddings for multi-query retrieval
       );
-      console.log(`Found ${relevantChunks.length} relevant chunks after RRF and re-ranking`)
+      logger.debug(`Found ${relevantChunks.length} relevant chunks after RRF and re-ranking`)
       
       // Debug: Log chunk similarities
       if (relevantChunks.length > 0) {
-        console.log("Top chunks:")
+        logger.debug("Top chunks:")
         relevantChunks.slice(0, 3).forEach((chunk: unknown, i: number) => {
-          console.log(`  ${i + 1}. Similarity: ${chunk.similarity.toFixed(3)}, Source: ${chunk.source}`)
-          console.log(`     Content preview: ${chunk.content.substring(0, 100)}...`)
+          logger.debug(`  ${i + 1}. Similarity: ${chunk.similarity.toFixed(3)}, Source: ${chunk.source}`)
+          logger.debug(`     Content preview: ${chunk.content.substring(0, 100)}...`)
         })
       } else {
         console.warn("No relevant chunks found - checking why...")
@@ -2021,22 +2022,22 @@ export class RAGEngine {
         // Debug: Check first document in detail
         if (this.documents.length > 0) {
           const firstDoc = this.documents[0]
-          console.log("First document analysis:")
-          console.log("- Name:", firstDoc.name)
-          console.log("- Has chunks:", !!firstDoc.chunks)
-          console.log("- Chunks length:", firstDoc.chunks?.length)
-          console.log("- Has embeddings:", !!firstDoc.embeddings)
-          console.log("- Embeddings length:", firstDoc.embeddings?.length)
+          logger.debug("First document analysis:")
+          logger.debug("- Name:", firstDoc.name)
+          logger.debug("- Has chunks:", !!firstDoc.chunks)
+          logger.debug("- Chunks length:", firstDoc.chunks?.length)
+          logger.debug("- Has embeddings:", !!firstDoc.embeddings)
+          logger.debug("- Embeddings length:", firstDoc.embeddings?.length)
           
           if (firstDoc.chunks && firstDoc.chunks.length > 0) {
             const c0: unknown = firstDoc.chunks[0] as unknown
             const prev = typeof c0 === 'string' ? c0.substring(0, 100) : c0.content?.substring(0, 100)
-            console.log("- First chunk preview:", prev)
+            logger.debug("- First chunk preview:", prev)
           }
           
           if (firstDoc.embeddings && firstDoc.embeddings.length > 0) {
-            console.log("- First embedding dimensions:", firstDoc.embeddings[0]?.length)
-            console.log("- Question embedding dimensions:", questionEmbedding.length)
+            logger.debug("- First embedding dimensions:", firstDoc.embeddings[0]?.length)
+            logger.debug("- Question embedding dimensions:", questionEmbedding.length)
           }
         }
       }
@@ -2048,13 +2049,13 @@ export class RAGEngine {
         // Strategy 1: Try broader keyword search
         const keywordChunks = this.fallbackKeywordSearch(question, [processedQuestion, ...expandedQueries], 10)
         if (keywordChunks.length > 0) {
-          console.log(`Fallback keyword search found ${keywordChunks.length} chunks`)
+          logger.debug(`Fallback keyword search found ${keywordChunks.length} chunks`)
           relevantChunks = keywordChunks
         }
         
         // Strategy 2: Try semantic search with MUCH lower threshold
         if (relevantChunks.length === 0) {
-          console.log("Attempting semantic search with very low threshold (0.005)...")
+          logger.debug("Attempting semantic search with very low threshold (0.005)...")
           const lowThresholdChunks = this.findRelevantChunks(
             questionEmbedding,
             adjustedChunkLimit * 2, // Get more chunks
@@ -2066,17 +2067,17 @@ export class RAGEngine {
             0.005 // Very low threshold to catch anything remotely relevant
           )
           if (lowThresholdChunks.length > 0) {
-            console.log(`Low-threshold search found ${lowThresholdChunks.length} chunks`)
+            logger.debug(`Low-threshold search found ${lowThresholdChunks.length} chunks`)
             relevantChunks = lowThresholdChunks
           }
         }
         
         // Strategy 3: Return top chunks by importance if still nothing
         if (relevantChunks.length === 0) {
-          console.log("Attempting importance-based retrieval...")
+          logger.debug("Attempting importance-based retrieval...")
           const importanceChunks = this.getTopChunksByImportance(10)
           if (importanceChunks.length > 0) {
-            console.log(`Importance-based retrieval found ${importanceChunks.length} chunks`)
+            logger.debug(`Importance-based retrieval found ${importanceChunks.length} chunks`)
             relevantChunks = importanceChunks
           }
         }
@@ -2098,20 +2099,20 @@ export class RAGEngine {
       // ==================== Merge Step-back Context ====================
       // Add step-back chunks to provide broader context (if available)
       if (stepBackChunks.length > 0) {
-        console.log(`Merging ${stepBackChunks.length} step-back context chunks with ${relevantChunks.length} main chunks`)
+        logger.debug(`Merging ${stepBackChunks.length} step-back context chunks with ${relevantChunks.length} main chunks`)
         // Deduplicate and merge (step-back chunks go first for broader context)
         const existingContents = new Set(relevantChunks.map((c: unknown) => c.content.substring(0, 100)))
         const uniqueStepBackChunks = stepBackChunks.filter((c: unknown) => 
           !existingContents.has(c.content.substring(0, 100))
         )
         relevantChunks = [...uniqueStepBackChunks, ...relevantChunks]
-        console.log(`Total chunks after merge: ${relevantChunks.length}`)
+        logger.debug(`Total chunks after merge: ${relevantChunks.length}`)
       }
 
       // Optimize chunks for token budget
-      console.log("Optimizing chunks for token budget:", tokenBudget * 0.7)
+      logger.debug("Optimizing chunks for token budget:", tokenBudget * 0.7)
       const optimizedChunks = this.optimizeChunksForTokens(relevantChunks, tokenBudget * 0.7)
-      console.log(`Optimized to ${optimizedChunks.length} chunks`)
+      logger.debug(`Optimized to ${optimizedChunks.length} chunks`)
       
       // Label each chunk with its source so the model can cite accurately
       const context = optimizedChunks.map((chunk: unknown) => {
@@ -2119,13 +2120,13 @@ export class RAGEngine {
         const page = chunk.page != null ? ` | Page ${chunk.page}` : ''
         return `[SOURCE: ${name}${page}]\n${chunk.content}`
       }).join("\n\n---\n\n")
-      console.log("Context length:", context.length, "characters")
+      logger.debug("Context length:", context.length, "characters")
 
       // Generate initial response with enhanced prompt (include conversation history)
       const systemPrompt = this.createEnhancedSystemPrompt(questionType)
       const userPrompt = this.createPhase1UserPrompt(question, context, conversationHistory)
       
-      console.log("Generating AI response...")
+      logger.debug("Generating AI response...")
       const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
         { role: "system" as const, content: systemPrompt }
       ]
@@ -2133,7 +2134,7 @@ export class RAGEngine {
       // Add conversation history if available (last 5 exchanges to avoid token limits)
       if (conversationHistory && conversationHistory.length > 0) {
         const recentHistory = conversationHistory.slice(-10) // Last 10 messages (5 exchanges)
-        console.log(`Including ${recentHistory.length} previous messages in context`)
+        logger.debug(`Including ${recentHistory.length} previous messages in context`)
         recentHistory.forEach(msg => {
           messages.push({ role: msg.role, content: msg.content })
         })
@@ -2144,7 +2145,7 @@ export class RAGEngine {
 
       // Generate response with low temperature for deterministic, factual responses
       const initialResponse = await this.aiClient!.generateText(messages, { temperature: 0.1 });
-      console.log("AI response generated, length:", initialResponse.length)
+      logger.debug("AI response generated, length:", initialResponse.length)
 
       // Groundedness check: Verify response is based on retrieved chunks
       const groundednessResult = this.checkGroundedness(initialResponse, optimizedChunks, question)
@@ -2154,7 +2155,7 @@ export class RAGEngine {
         
         // Regenerate with stricter prompt if groundedness is too low
         if (groundednessResult.groundednessScore < 0.5) {
-          console.log("Regenerating response with stricter anti-hallucination prompt...")
+          logger.debug("Regenerating response with stricter anti-hallucination prompt...")
           const strictPrompt = this.createStrictAntiHallucinationPrompt(question, context, optimizedChunks)
           const messagesStrict = [
             { role: "system" as const, content: systemPrompt },
@@ -2165,7 +2166,7 @@ export class RAGEngine {
           // Re-check groundedness
           const regroundedness = this.checkGroundedness(regeneratedResponse, optimizedChunks, question)
           if (regroundedness.groundednessScore > groundednessResult.groundednessScore) {
-            console.log("✅ Regenerated response has better groundedness")
+            logger.debug("✅ Regenerated response has better groundedness")
       return {
         question,
         relevantChunks: optimizedChunks,
@@ -2205,7 +2206,7 @@ export class RAGEngine {
   }
 
   private async phase2_SelfCritique(phase1Result: unknown) {
-    console.log("Phase 2: Self-Critique and Validation")
+    logger.debug("Phase 2: Self-Critique and Validation")
     
     const critiquePrompt = this.createCritiquePrompt(phase1Result)
     
@@ -2236,7 +2237,7 @@ export class RAGEngine {
     tokenBudget: number,
     showThinking: boolean
   ): Promise<EnhancedQueryResponse> {
-    console.log("Phase 3: Refinement and Final Response")
+    logger.debug("Phase 3: Refinement and Final Response")
     
     let refinementPrompt: string
     let finalResponse: string
@@ -2544,7 +2545,7 @@ Only output the expanded query and alternatives, nothing else.`
     alternativeQueries: string[],
     limit: number
   ): Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: unknown }> {
-    console.log("Performing enhanced fallback keyword search...")
+    logger.debug("Performing enhanced fallback keyword search...")
     
     // Comprehensive stop words list
     const stopWords = new Set([
@@ -2591,7 +2592,7 @@ Only output the expanded query and alternatives, nothing else.`
     }
     
     const keywordArray = Array.from(keywords)
-    console.log(`Searching for ${keywordArray.length} keywords/phrases: ${keywordArray.slice(0, 10).join(', ')}${keywordArray.length > 10 ? '...' : ''}`)
+    logger.debug(`Searching for ${keywordArray.length} keywords/phrases: ${keywordArray.slice(0, 10).join(', ')}${keywordArray.length > 10 ? '...' : ''}`)
     
     const results: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: unknown }> = []
     
@@ -2650,7 +2651,7 @@ Only output the expanded query and alternatives, nothing else.`
     
     // Sort by relevance and return top results
     results.sort((a, b) => b.similarity - a.similarity)
-    console.log(`Fallback keyword search found ${results.length} results, returning top ${limit}`)
+    logger.debug(`Fallback keyword search found ${results.length} results, returning top ${limit}`)
     return results.slice(0, limit)
   }
 
@@ -2658,7 +2659,7 @@ Only output the expanded query and alternatives, nothing else.`
    * Get top chunks by semantic importance when retrieval fails
    */
   private getTopChunksByImportance(limit: number): Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: unknown }> {
-    console.log("Retrieving top chunks by importance...")
+    logger.debug("Retrieving top chunks by importance...")
     
     const results: Array<{ content: string; source: string; similarity: number; documentId: string; documentName: string; semanticImportance: number; [key: string]: unknown }> = []
     
@@ -2843,7 +2844,7 @@ Only output the expanded query and alternatives, nothing else.`
   private optimizeChunksForTokens(chunks: unknown[], tokenBudget: number) {
     // Step 1: Deduplicate chunks (remove near-duplicates)
     const deduplicatedChunks = this.deduplicateChunks(chunks)
-    console.log(`Deduplication: ${chunks.length} -> ${deduplicatedChunks.length} chunks`)
+    logger.debug(`Deduplication: ${chunks.length} -> ${deduplicatedChunks.length} chunks`)
     
     let totalTokens = 0
     const optimizedChunks = []
@@ -2870,7 +2871,7 @@ Only output the expanded query and alternatives, nothing else.`
       }
     }
     
-    console.log(`Token budget: ${tokenBudget}, used: ${totalTokens}, chunks: ${optimizedChunks.length}`)
+    logger.debug(`Token budget: ${tokenBudget}, used: ${totalTokens}, chunks: ${optimizedChunks.length}`)
     return optimizedChunks
   }
 
@@ -3037,7 +3038,7 @@ Only output the resolved question, nothing else.`
       
       if (resolvedMatch && resolvedMatch[1]) {
         const resolvedQuestion = resolvedMatch[1].trim()
-        console.log(`Context resolved: "${question}" → "${resolvedQuestion}"`)
+        logger.debug(`Context resolved: "${question}" → "${resolvedQuestion}"`)
         return resolvedQuestion
       }
       
@@ -3113,8 +3114,8 @@ Output only the final answer — no explanations, no meta-commentary.`
     unverifiedClaims: string[]
     verifiedClaims: string[]
   } {
-    console.log("=== Groundedness Check ===")
-    console.log(`Question under evaluation: ${question.substring(0, 120)}`)
+    logger.debug("=== Groundedness Check ===")
+    logger.debug(`Question under evaluation: ${question.substring(0, 120)}`)
     
     // Extract all factual claims from response (sentences with specific information)
     const sentences = response
@@ -3184,7 +3185,7 @@ Output only the final answer — no explanations, no meta-commentary.`
     const groundednessScore = totalClaims > 0 ? verifiedClaims.length / totalClaims : 1.0
     const isGrounded = groundednessScore >= 0.7 // 70% threshold
     
-    console.log(`Groundedness: ${(groundednessScore * 100).toFixed(1)}% (${verifiedClaims.length}/${totalClaims} claims verified)`)
+    logger.debug(`Groundedness: ${(groundednessScore * 100).toFixed(1)}% (${verifiedClaims.length}/${totalClaims} claims verified)`)
     if (unverifiedClaims.length > 0) {
       console.warn(`⚠️ ${unverifiedClaims.length} unverified claims detected`)
       unverifiedClaims.slice(0, 3).forEach(claim => console.warn(`  - "${claim.substring(0, 80)}..."`))
@@ -3427,12 +3428,12 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       this.documents = this.documents.filter((doc) => doc && doc.id !== documentId)
 
       const removedCount = initialLength - this.documents.length
-      console.log(`Removed ${removedCount} document(s) with ID: ${documentId}`)
+      logger.debug(`Removed ${removedCount} document(s) with ID: ${documentId}`)
       
       // Invalidate query cache for this document
       if (removedCount > 0) {
         this.queryProcessor.invalidateCache([documentId])
-        console.log(`Query cache invalidated for document: ${documentId}`)
+        logger.debug(`Query cache invalidated for document: ${documentId}`)
       }
       
       // Track in telemetry
@@ -3463,10 +3464,10 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       
       // Clear query cache when all documents are removed
       this.queryProcessor.clearCache()
-      console.log("Query cache cleared")
+      logger.debug("Query cache cleared")
       
       this.documents = []
-      console.log("Cleared all documents from RAG engine")
+      logger.debug("Cleared all documents from RAG engine")
     } catch (error) {
       console.error("Error clearing documents:", error)
     }
@@ -3522,7 +3523,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
 
   // Diagnostic method to help troubleshoot issues
   async runDiagnostics(): Promise<unknown> {
-    console.log("=== RAG Engine Diagnostics ===")
+    logger.debug("=== RAG Engine Diagnostics ===")
     
     const diagnostics: {
       systemStatus: {
@@ -3585,7 +3586,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
     // Test embedding generation
     if (this.aiClient && this.isInitialized) {
       try {
-        console.log("Testing embedding generation...")
+        logger.debug("Testing embedding generation...")
         const testText = "This is a test for embedding generation"
         const testEmbedding = await this.aiClient.generateEmbedding(testText)
         diagnostics.embeddingTest = {
@@ -3593,7 +3594,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
           dimensions: testEmbedding.length,
           sampleValues: testEmbedding.slice(0, 5)
         }
-        console.log("✅ Embedding test successful")
+        logger.debug("✅ Embedding test successful")
 
         // Test similarity calculation if we have documents
         if (this.documents.length > 0 && this.documents[0].embeddings?.length > 0) {
@@ -3604,19 +3605,19 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
             similarity,
             testedAgainst: `${this.documents[0].name} (chunk 1)`
           }
-          console.log("✅ Similarity test successful:", similarity)
+          logger.debug("✅ Similarity test successful:", similarity)
         }
       } catch (error) {
         diagnostics.embeddingTest = {
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error'
         }
-        console.log("❌ Embedding test failed:", error)
+        logger.debug("❌ Embedding test failed:", error)
       }
     }
 
-    console.log("Diagnostics results:", diagnostics)
-    console.log("=== End Diagnostics ===")
+    logger.debug("Diagnostics results:", diagnostics)
+    logger.debug("=== End Diagnostics ===")
     return diagnostics
   }
 
@@ -3764,7 +3765,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
     minSimilarity: number,
     isMultiDocQuery: boolean = false
   ) {
-    console.log(`Applying Enhanced Multi-Document Diversity Algorithm (multiDoc: ${isMultiDocQuery})`)
+    logger.debug(`Applying Enhanced Multi-Document Diversity Algorithm (multiDoc: ${isMultiDocQuery})`)
 
     // Calculate composite scores: similarity * semantic importance with diminishing returns
     const rankedChunks = allChunks
@@ -3775,7 +3776,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       }))
       .sort((a, b) => b.compositeScore - a.compositeScore)
 
-    console.log(`Ranked ${rankedChunks.length} chunks after filtering (min similarity: ${minSimilarity})`)
+    logger.debug(`Ranked ${rankedChunks.length} chunks after filtering (min similarity: ${minSimilarity})`)
 
     if (rankedChunks.length === 0) {
       console.warn("No chunks passed the similarity threshold - using relaxed criteria")
@@ -3793,7 +3794,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       // Ensure minimum representation from each document
       baseChunksPerDoc = Math.max(2, Math.floor(topK / numDocs))
       maxChunksPerDoc = Math.max(3, Math.ceil(topK / numDocs) + 1) // Much stricter: ~equal distribution
-      console.log(`Multi-document query detected: Enforcing fair distribution (${baseChunksPerDoc}-${maxChunksPerDoc} per doc)`)
+      logger.debug(`Multi-document query detected: Enforcing fair distribution (${baseChunksPerDoc}-${maxChunksPerDoc} per doc)`)
     } else {
       baseChunksPerDoc = Math.floor(topK / numDocs)
       maxChunksPerDoc = Math.min(topK, Math.ceil(topK * 0.5)) // Reduced from 70% to 50% max
@@ -3812,14 +3813,14 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       documentTargets.set(docId, target)
     })
 
-    console.log(`Diversity parameters - Base per doc: ${baseChunksPerDoc}, Max per doc: ${maxChunksPerDoc}, Target total: ${topK}`)
+    logger.debug(`Diversity parameters - Base per doc: ${baseChunksPerDoc}, Max per doc: ${maxChunksPerDoc}, Target total: ${topK}`)
 
     // Phase 1: Greedy selection with diversity constraints
     const selectedChunks: typeof rankedChunks = []
     const documentChunkCounts = new Map<string, number>()
     const usedSources = new Set<string>()
 
-    console.log("Phase 1: Greedy diverse selection")
+    logger.debug("Phase 1: Greedy diverse selection")
 
     // First pass: ensure every document gets at least one chunk if available
     // For multi-doc queries, get minimum 2 chunks from each document first
@@ -3840,13 +3841,13 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
           documentChunkCounts.set(docId, currentCount + 1)
 
           const docName = docChunks[0].documentName
-          console.log(`  Pass ${pass + 1}: chunk from ${docName} (similarity: ${docChunks[0].similarity.toFixed(3)}, score: ${docChunks[0].compositeScore.toFixed(3)})`)
+          logger.debug(`  Pass ${pass + 1}: chunk from ${docName} (similarity: ${docChunks[0].similarity.toFixed(3)}, score: ${docChunks[0].compositeScore.toFixed(3)})`)
         }
       }
     }
 
     // Second pass: fill remaining slots respecting targets and max limits
-    console.log("Phase 2: Filling to targets")
+    logger.debug("Phase 2: Filling to targets")
     for (const chunk of rankedChunks) {
       if (selectedChunks.length >= topK) break
       if (usedSources.has(chunk.source)) continue
@@ -3872,7 +3873,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       .slice(0, topK)
 
     // Log final distribution
-    console.log(`Final chunk distribution:`)
+    logger.debug(`Final chunk distribution:`)
     const distribution = new Map<string, { count: number, avgSim: number }>()
     finalChunks.forEach(chunk => {
       const existing = distribution.get(chunk.documentName) || { count: 0, avgSim: 0 }
@@ -3883,13 +3884,13 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
     })
 
     distribution.forEach(({ count, avgSim }, docName) => {
-      console.log(`  ${docName}: ${count} chunks (avg similarity: ${avgSim.toFixed(3)})`)
+      logger.debug(`  ${docName}: ${count} chunks (avg similarity: ${avgSim.toFixed(3)})`)
     })
 
-    console.log(`Returning ${finalChunks.length} chunks with enhanced diversity (${distribution.size} documents represented)`)
+    logger.debug(`Returning ${finalChunks.length} chunks with enhanced diversity (${distribution.size} documents represented)`)
     if (finalChunks.length > 0) {
-      console.log(`Best similarity: ${finalChunks[0].similarity.toFixed(3)}`)
-      console.log(`Worst similarity: ${finalChunks[finalChunks.length - 1].similarity.toFixed(3)}`)
+      logger.debug(`Best similarity: ${finalChunks[0].similarity.toFixed(3)}`)
+      logger.debug(`Worst similarity: ${finalChunks[finalChunks.length - 1].similarity.toFixed(3)}`)
     }
 
     return finalChunks
@@ -3900,7 +3901,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
     documentMetrics: Map<string, { avgSimilarity: number; chunkCount: number; bestSimilarity: number }>,
     topK: number
   ) {
-    console.log("Using fallback diversity strategy (relaxed similarity criteria)")
+    logger.debug("Using fallback diversity strategy (relaxed similarity criteria)")
     
     const fallbackChunks: typeof allChunks = []
     
@@ -3912,7 +3913,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
       
       if (docChunks.length > 0) {
         fallbackChunks.push(docChunks[0])
-        console.log(`Fallback: Added best chunk from ${docChunks[0].documentName} (similarity: ${docChunks[0].similarity.toFixed(3)})`)
+        logger.debug(`Fallback: Added best chunk from ${docChunks[0].documentName} (similarity: ${docChunks[0].similarity.toFixed(3)})`)
       }
     }
     

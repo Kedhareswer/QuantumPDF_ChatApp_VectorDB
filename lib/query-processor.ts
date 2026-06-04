@@ -1,3 +1,4 @@
+import { logger } from "./logger"
 /**
  * Advanced Query Processing Module
  * 
@@ -136,20 +137,20 @@ class QueryResponseCache {
     // Check TTL
     if (Date.now() - entry.timestamp > this.config.cacheTTLMs) {
       this.cache.delete(normalizedQuery)
-      console.log(`QueryCache: Entry expired for "${query.substring(0, 50)}..."`)
+      logger.debug(`QueryCache: Entry expired for "${query.substring(0, 50)}..."`)
       return null
     }
 
     // Check document hash (invalidate if documents changed)
     if (entry.documentHash !== documentHash) {
       this.cache.delete(normalizedQuery)
-      console.log(`QueryCache: Entry invalidated due to document changes`)
+      logger.debug(`QueryCache: Entry invalidated due to document changes`)
       return null
     }
 
     // Update hit count
     entry.hitCount++
-    console.log(`QueryCache: HIT for "${query.substring(0, 50)}..." (hits: ${entry.hitCount})`)
+    logger.debug(`QueryCache: HIT for "${query.substring(0, 50)}..." (hits: ${entry.hitCount})`)
     
     return entry.response
   }
@@ -177,7 +178,7 @@ class QueryResponseCache {
     }
 
     this.cache.set(normalizedQuery, entry)
-    console.log(`QueryCache: Stored response for "${query.substring(0, 50)}..."`)
+    logger.debug(`QueryCache: Stored response for "${query.substring(0, 50)}..."`)
   }
 
   /**
@@ -197,7 +198,7 @@ class QueryResponseCache {
     for (let i = 0; i < toRemove; i++) {
       this.cache.delete(entries[i].key)
     }
-    console.log(`QueryCache: Evicted ${toRemove} entries`)
+    logger.debug(`QueryCache: Evicted ${toRemove} entries`)
   }
 
   /**
@@ -205,7 +206,7 @@ class QueryResponseCache {
    */
   clear(): void {
     this.cache.clear()
-    console.log('QueryCache: Cleared all entries')
+    logger.debug('QueryCache: Cleared all entries')
   }
 
   /**
@@ -223,7 +224,7 @@ class QueryResponseCache {
     }
     
     if (invalidated > 0) {
-      console.log(`QueryCache: Invalidated ${invalidated} entries for document changes`)
+      logger.debug(`QueryCache: Invalidated ${invalidated} entries for document changes`)
     }
   }
 
@@ -562,7 +563,7 @@ Only output the formatted result, nothing else.`
       
       const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]) : 0.7
 
-      console.log(`QueryProcessor: Rewrote "${query.substring(0, 50)}..." → "${rewrittenQuery.substring(0, 50)}..."`)
+      logger.debug(`QueryProcessor: Rewrote "${query.substring(0, 50)}..." → "${rewrittenQuery.substring(0, 50)}..."`)
       
       return { rewrittenQuery, alternatives, confidence }
     } catch (error) {
@@ -616,7 +617,7 @@ Constraints: use domain-specific terms, include concrete details, write as docum
         .replace(/^(OUTPUT:|PASSAGE:|ANSWER:)/i, '')
         .trim()
 
-      console.log(`HyDE: Generated hypothetical answer (${hypotheticalAnswer.length} chars)`)
+      logger.debug(`HyDE: Generated hypothetical answer (${hypotheticalAnswer.length} chars)`)
       
       return hypotheticalAnswer
     } catch (error) {
@@ -664,7 +665,7 @@ Examples:
         .replace(/^["']|["']$/g, '')
         .trim()
 
-      console.log(`Step-back: "${query.substring(0, 40)}..." → "${stepBackQuestion.substring(0, 40)}..."`)
+      logger.debug(`Step-back: "${query.substring(0, 40)}..." → "${stepBackQuestion.substring(0, 40)}..."`)
       
       return stepBackQuestion
     } catch (error) {

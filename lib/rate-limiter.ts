@@ -1,3 +1,4 @@
+import { logger } from "./logger"
 // lib/rate-limiter.ts - Advanced rate limiting with token bucket and adaptive backoff
 
 export interface RateLimiterConfig {
@@ -336,7 +337,7 @@ export class CircuitBreaker {
       if (now >= this.nextAttemptTime) {
         this.state = CircuitState.HALF_OPEN
         this.successCount = 0
-        console.log('Circuit breaker entering HALF_OPEN state')
+        logger.debug('Circuit breaker entering HALF_OPEN state')
       } else {
         throw new Error(
           `Circuit breaker is OPEN. Try again in ${Math.ceil((this.nextAttemptTime - now) / 1000)}s`
@@ -361,7 +362,7 @@ export class CircuitBreaker {
       this.successCount++
       if (this.successCount >= this.halfOpenRequests) {
         this.state = CircuitState.CLOSED
-        console.log('Circuit breaker closed after successful recovery')
+        logger.debug('Circuit breaker closed after successful recovery')
       }
     }
   }
@@ -373,11 +374,11 @@ export class CircuitBreaker {
     if (this.state === CircuitState.HALF_OPEN) {
       this.state = CircuitState.OPEN
       this.nextAttemptTime = Date.now() + this.resetTimeout
-      console.log('Circuit breaker reopened after failure in HALF_OPEN state')
+      logger.debug('Circuit breaker reopened after failure in HALF_OPEN state')
     } else if (this.failures >= this.failureThreshold) {
       this.state = CircuitState.OPEN
       this.nextAttemptTime = Date.now() + this.resetTimeout
-      console.log(
+      logger.debug(
         `Circuit breaker opened after ${this.failures} failures. Will retry at ${new Date(this.nextAttemptTime).toLocaleTimeString()}`
       )
     }

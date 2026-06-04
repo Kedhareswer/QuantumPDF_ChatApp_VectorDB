@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger"
 import { InferenceClient } from "@huggingface/inference";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -12,10 +13,10 @@ export async function POST(request: NextRequest) {
     // Determine the API key to use
     if (userApiKey && typeof userApiKey === 'string' && userApiKey.trim() !== '') {
       clientToken = userApiKey;
-      console.log("Using Hugging Face API Key provided in request.");
+      logger.debug("Using Hugging Face API Key provided in request.");
     } else if (process.env.HUGGINGFACE_API_KEY) {
       clientToken = process.env.HUGGINGFACE_API_KEY;
-      console.log("Using Hugging Face API Key from server environment.");
+      logger.debug("Using Hugging Face API Key from server environment.");
     } else {
       console.error("HUGGINGFACE_API_KEY not configured on server and not provided in request.");
       return NextResponse.json(
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     const client = new InferenceClient(clientToken); // Use the determined token
     embeddingModel = model || "sentence-transformers/all-MiniLM-L6-v2";
 
-    console.log(`Generating embedding with model: ${embeddingModel}`);
+    logger.debug(`Generating embedding with model: ${embeddingModel}`);
 
     const response = await client.featureExtraction({
       model: embeddingModel,
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
       throw new Error("Generated embedding contains invalid values");
     }
 
-    console.log(`Successfully generated embedding with dimension: ${embedding.length}`);
+    logger.debug(`Successfully generated embedding with dimension: ${embedding.length}`);
 
     return NextResponse.json({
       success: true,
