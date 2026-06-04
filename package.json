@@ -79,12 +79,9 @@
     "use-sync-external-store": "latest",
     "vaul": "^1.1.2",
     "weaviate-ts-client": "latest",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^4.1.13",
     "zustand": "latest"
-  },
-  "optionalDependencies": {
-    "@xenova/transformers": "^2.17.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.17",

@@ -285,36 +285,15 @@ export class VisionModelService {
     prompt?: string,
     options: VisionAnalysisOptions = {},
   ): Promise<ImageAnalysisResult> {
+    void imageDataUrl
+    void prompt
     void options
-    try {
-      // Dynamically import Transformers.js
-      const { pipeline } = await import('@xenova/transformers')
-
-      // Initialize image-to-text pipeline
-      // Latest stable Transformers.js vision model as of November 2025
-      const captioner = await pipeline(
-        'image-to-text',
-        'Xenova/vit-gpt2-image-captioning'  // Still the most stable for client-side
-      )
-
-      // Generate caption
-      const result = await captioner(imageDataUrl)
-      const caption = Array.isArray(result) ? result[0]?.generated_text || '' : result.generated_text || ''
-
-      return {
-        caption,
-        description: caption,
-        tags: this.extractTags(caption),
-        objects: [],
-        text: undefined,
-        confidence: 0.7,
-        model: 'Xenova/vit-gpt2-image-captioning',
-        processedAt: new Date(),
-      }
-    } catch (error) {
-      console.error('Transformers.js vision analysis failed:', error)
-      throw error
-    }
+    // The local in-browser backend (@xenova/transformers) was removed to eliminate a
+    // critical protobufjs vulnerability. Callers (e.g. ImageCaptioner) fall back to
+    // placeholder captions or another configured provider (openai/anthropic/huggingface).
+    throw new Error(
+      'The transformers-js vision backend has been removed; configure a cloud vision provider instead.',
+    )
   }
 
   /**

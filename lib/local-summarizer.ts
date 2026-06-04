@@ -27,11 +27,7 @@ export interface LocalSummarizerResult {
   tokens?: number
 }
 
-// Cache for the loaded pipeline to avoid re-loading
-let summarizationPipeline: unknown = null
-let textGenerationPipeline: unknown = null
-let pipelineLoadingPromise: Promise<unknown> | null = null
-let generationLoadingPromise: Promise<unknown> | null = null
+// Local in-browser model caches were removed along with @xenova/transformers.
 
 /**
  * Local Summarizer using Transformers.js
@@ -49,73 +45,19 @@ export class LocalSummarizer {
    * Load the summarization model (lazy loaded on first use)
    */
   private async loadPipeline(): Promise<unknown> {
-    if (summarizationPipeline) {
-      return summarizationPipeline
-    }
-
-    if (pipelineLoadingPromise) {
-      return pipelineLoadingPromise
-    }
-
-    this.isLoading = true
-    this.loadError = null
-
-    pipelineLoadingPromise = (async () => {
-      try {
-        console.log(`LocalSummarizer: Loading model ${this.modelName}...`)
-        const { pipeline } = await import('@xenova/transformers')
-        const typedPipeline = pipeline as unknown
-        
-        summarizationPipeline = await typedPipeline('summarization', this.modelName, {
-          quantized: true, // Use quantized model for faster loading
-        })
-        
-        console.log('LocalSummarizer: Model loaded successfully')
-        return summarizationPipeline
-      } catch (error) {
-        console.error('LocalSummarizer: Failed to load model:', error)
-        this.loadError = error instanceof Error ? error : new Error('Unknown error loading model')
-        throw this.loadError
-      } finally {
-        this.isLoading = false
-      }
-    })()
-
-    return pipelineLoadingPromise
+    // Local in-browser models (@xenova/transformers) were removed to eliminate a
+    // critical protobufjs vulnerability. summarize() falls back to an extractive summary.
+    this.loadError = new Error('Local summarization model is unavailable')
+    throw this.loadError
   }
 
   /**
    * Load the text generation model for explanations
    */
   private async loadGenerationPipeline(): Promise<unknown> {
-    if (textGenerationPipeline) {
-      return textGenerationPipeline
-    }
-
-    if (generationLoadingPromise) {
-      return generationLoadingPromise
-    }
-
-    generationLoadingPromise = (async () => {
-      try {
-        console.log('LocalSummarizer: Loading text generation model...')
-        const { pipeline } = await import('@xenova/transformers')
-        const typedPipeline = pipeline as unknown
-        
-        // Use a small, fast text generation model
-        textGenerationPipeline = await typedPipeline('text-generation', 'Xenova/distilgpt2', {
-          quantized: true,
-        })
-        
-        console.log('LocalSummarizer: Text generation model loaded')
-        return textGenerationPipeline
-      } catch (error) {
-        console.error('LocalSummarizer: Failed to load text generation model:', error)
-        throw error
-      }
-    })()
-
-    return generationLoadingPromise
+    // Local in-browser models (@xenova/transformers) were removed; explain() falls back
+    // to a template-based explanation.
+    throw new Error('Local text-generation model is unavailable')
   }
 
   /**
@@ -346,7 +288,7 @@ Explain ${instruction} what "${topic}" means: `
    * Check if the summarizer is ready to use
    */
   isReady(): boolean {
-    return summarizationPipeline !== null
+    return false
   }
 
   /**
