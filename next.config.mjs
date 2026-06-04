@@ -8,7 +8,7 @@ const nextConfig = {
     unoptimized: true,
   },
   // External packages that should not be bundled
-  serverExternalPackages: ['onnxruntime-node', '@huggingface/transformers', 'sharp'],
+  serverExternalPackages: ['@llamaindex/liteparse', 'onnxruntime-node', '@huggingface/transformers', 'sharp'],
   // Turbopack config (Next.js 16 default)
   turbopack: {},
   experimental: {
