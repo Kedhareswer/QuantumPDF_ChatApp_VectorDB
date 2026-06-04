@@ -62,7 +62,18 @@ function assessQuality(text: string): PdfExtraction["extractionQuality"] {
 
 /** PDF.js text-only fallback used when liteparse fails or finds no text. */
 async function extractWithPdfjs(buffer: Buffer): Promise<{ text: string; pages: number }> {
-  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs")
+  type PdfjsTextItem = { str?: string; hasEOL?: boolean }
+  type PdfjsDoc = {
+    numPages: number
+    getPage(pageNumber: number): Promise<{ getTextContent(): Promise<{ items: PdfjsTextItem[] }> }>
+    destroy(): Promise<void>
+  }
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+  // The legacy build's getDocument types are narrow; cast to accept full init params.
+  const getDocument = pdfjs.getDocument as unknown as (
+    src: Record<string, unknown>,
+  ) => { promise: Promise<PdfjsDoc> }
+
   const pdf = await getDocument({
     data: new Uint8Array(buffer),
     disableWorker: true,
@@ -77,7 +88,7 @@ async function extractWithPdfjs(buffer: Buffer): Promise<{ text: string; pages: 
     try {
       const page = await pdf.getPage(pageNum)
       const content = await page.getTextContent()
-      const pageText = (content.items as Array<{ str?: string; hasEOL?: boolean }>)
+      const pageText = content.items
         .map((item) => (typeof item.str === "string" ? item.str : "") + (item.hasEOL ? "\n" : " "))
         .join("")
         .replace(/[ \t]+\n/g, "\n")

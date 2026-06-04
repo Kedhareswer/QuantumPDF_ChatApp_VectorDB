@@ -1,6 +1,5 @@
 "use client"
 
-import { PDFClientWrapper } from "@/components/pdf-client-wrapper"
 import { PDFProcessorSkeleton } from "@/components/skeleton-loaders"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -9,7 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { DOCXProcessor } from "@/lib/docx-processor"
-import { EnhancedPDFProcessor, type ProcessingProgress } from "@/lib/enhanced-pdf-processor"
+import { PdfDocumentProcessor, type ProcessingProgress } from "@/lib/pdf-document-processor"
 import { SpreadsheetProcessor } from "@/lib/spreadsheet-processor"
 import { useAppStore } from "@/lib/store"
 import { AlertCircle, AlertTriangle, CheckCircle, FileText, Image as ImageIcon, Info, Loader2, RefreshCw, Upload, X } from "lucide-react"
@@ -31,11 +30,11 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const [processingStats, setProcessingStats] = useState<unknown>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [isInitializing] = useState(false)
-  const [pdfProcessorReady, setPdfProcessorReady] = useState(false)
+  const [pdfProcessorReady] = useState(true)
   const [useOCRFallback, setUseOCRFallback] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const pdfProcessor = useRef<EnhancedPDFProcessor | null>(null)
+  const pdfProcessor = useRef<PdfDocumentProcessor>(new PdfDocumentProcessor())
   const spreadsheetProcessor = useRef<SpreadsheetProcessor>(new SpreadsheetProcessor())
   const docxProcessor = useRef<DOCXProcessor>(new DOCXProcessor())
 
@@ -319,12 +318,6 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
     }
   }
 
-  // Handler for when the PDF processor is ready
-  const handleProcessorReady = useCallback((processor: EnhancedPDFProcessor) => {
-    pdfProcessor.current = processor;
-    setPdfProcessorReady(true);
-  }, []);
-
   // Show skeleton during initialization
   if (isInitializing) {
     return <PDFProcessorSkeleton />
@@ -333,9 +326,6 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   return (
     <div className="w-full max-w-4xl mx-auto">
       <Card className="shadow-lg">
-        {/* Client-only PDF wrapper to initialize PDF.js */}
-        <PDFClientWrapper onProcessorReady={handleProcessorReady} />
-        
         <CardHeader className="p-3 sm:p-6">
           <CardTitle className="flex items-center gap-2 text-base sm:text-lg md:text-xl">
             <FileText className="h-4 w-4 sm:h-5 sm:w-5" />
