@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from 'react-markdown'
+import { formatCitationsForDisplay } from '@/lib/citation-format'
 import remarkGfm from 'remark-gfm'
 // @ts-expect-error - missing types
 import remarkMath from 'remark-math'
@@ -992,7 +993,10 @@ ${diagnostics.documents.length === 0
                               // Fallback: if still contains Final Enhancement before Response, trim again
                               cleaned = cleaned.replace(/^[\s\S]*?Final Enhancement[\s\S]*?Response\s*/i, "")
 
-                              return cleaned.trim()
+                              // Convert verbose inline [File, p.N] citations into compact
+                              // superscript refs + a Sources line (display only; the raw
+                              // markers stay in message.content for chunk alignment below).
+                              return formatCitationsForDisplay(cleaned.trim())
                             })()}
                           />
                       </div>
