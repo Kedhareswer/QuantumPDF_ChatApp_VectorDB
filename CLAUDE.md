@@ -30,11 +30,11 @@ Tests live in `__tests__/` with setup at `__tests__/setup.ts`. The path alias `@
 
 ## Architecture Overview
 
-QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All core business logic lives in **`/lib/`** (35 files). UI is in **`/components/`** (32+ files). API routes are in **`/app/api/`**.
+QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All core business logic lives in **`/lib/`** (33 files). UI is in **`/components/`** (32+ files). API routes are in **`/app/api/`**.
 
 ### Request Flow
 
-1. User uploads document → `components/unified-pdf-processor.tsx` dispatches to the relevant processor in `lib/` (`pdf-parser.ts`, `enhanced-pdf-processor.ts`, `docx-processor.ts`, `spreadsheet-processor.ts`)
+1. User uploads document → `components/unified-pdf-processor.tsx` dispatches to the relevant processor in `lib/`: PDFs to `pdf-document-processor.ts` (which calls the server-side liteparse route — see PDF pipeline below), DOCX to `docx-processor.ts`, spreadsheets/CSV to `spreadsheet-processor.ts`
 2. Document text is chunked by `lib/advanced-chunking.ts` (semantic-aware, adaptive chunk sizing with overlap)
 3. Chunks are embedded via `lib/ai-client.ts` (with 30-min TTL embedding cache) and stored in the vector DB via `lib/vector-database-client.ts`
 4. User query → `lib/guardrails.ts` input validation → `lib/query-processor.ts` (HyDE, step-back prompting, query caching)
@@ -56,15 +56,18 @@ QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All
 
 ### Multimodal Document Processing
 
-PDF extraction uses PDF.js + Tesseract.js OCR. Additional extractors in `lib/`:
-- `image-extractor.ts` + `image-captioner.ts` — extracts and captions embedded images
+PDF text, OCR, and page-preview images are extracted **server-side** by `@llamaindex/liteparse` (a native Rust + PDFium NAPI module), wrapped by `lib/liteparse-client.ts` and exposed via `app/api/pdf/extract/route.ts` (Node.js runtime). OCR is controlled by liteparse's `ocrEnabled` option; if liteparse fails or returns no text, the wrapper falls back to PDF.js text extraction.
+
+The client orchestrator `lib/pdf-document-processor.ts` POSTs the uploaded file to that route, then runs the retained **client-side** PDF.js extractors for embedded content:
+- `image-extractor.ts` + `image-captioner.ts` — extracts and captions embedded images (image OCR via Tesseract.js)
 - `table-extractor.ts` — structured table extraction
 - `equation-extractor.ts` — math equations via KaTeX
-- `ocr-processor.ts` — fallback OCR for scanned pages
+
+`pdfjs-dist` is no longer the primary text engine — it now backs only these client-side extractors (loaded via `lib/pdf-client.js`), the server-side fallback in `liteparse-client.ts`, and URL-based PDF fetching in `lib/enhanced-url-processor.ts`.
 
 ### API Routes
 
-- `POST /api/pdf/extract` — server-side PDF extraction
+- `POST /api/pdf/extract` — server-side PDF text/OCR/preview extraction via liteparse (Node.js runtime)
 - `POST /api/search/unified` — unified vector + keyword search
 - `GET|POST /api/vector-db` — vector DB CRUD operations
 - `POST /api/huggingface/*` — proxies to HuggingFace Inference API
@@ -76,7 +79,8 @@ Zustand store in `lib/store.ts` with `persist` middleware (localStorage). All co
 ## Important Configuration Notes
 
 - `next.config.mjs` sets `typescript.ignoreBuildErrors: true` — TypeScript errors will not fail the build. Fix type errors but don't rely on the build to catch them.
-- `onnxruntime-node`, `@huggingface/transformers`, and `sharp` are server-external packages and must not be imported in client components.
+- `@llamaindex/liteparse`, `onnxruntime-node`, `@huggingface/transformers`, and `sharp` are server-external packages (`serverExternalPackages` in `next.config.mjs`) and must not be imported in client components.
+- **Native binaries / deployment:** `@llamaindex/liteparse` ships platform-specific native binaries via `optionalDependencies` (e.g. `@llamaindex/liteparse-linux-x64-gnu`, `@llamaindex/liteparse-win32-x64-msvc`). A production deploy must run `npm install` on the target platform (e.g. Linux) so the correct native binary is fetched — do **not** copy a Windows `node_modules` to a Linux host.
 - Node.js built-ins (`fs`, `net`, `tls`, etc.) are polyfilled to `false` on the client — any server-only code must stay in API routes or be gated with `typeof window === 'undefined'`.
 - Turbopack is the default bundler (Next.js 16).
 
@@ -106,8 +110,8 @@ OPENROUTER_API_KEY=
 - **Framework:** Next.js 16 (App Router), React 19, TypeScript 5
 - **Styling:** Tailwind CSS 4, shadcn/ui (Radix UI primitives), Framer Motion
 - **State:** Zustand with persist middleware
-- **PDF/Docs:** pdfjs-dist, tesseract.js, mammoth (DOCX), xlsx + papaparse (spreadsheets)
-- **Local AI:** @xenova/transformers (Transformers.js, runs in-browser)
+- **PDF/Docs:** @llamaindex/liteparse (native server-side PDF text/OCR/previews), pdfjs-dist (client-side multimodal extractors + server fallback), tesseract.js (image OCR only, via `image-captioner.ts`), mammoth (DOCX), xlsx + papaparse (spreadsheets). `xlsx` is pinned to the SheetJS CDN tarball (`https://cdn.sheetjs.com/...`), **not** the npm registry.
+- **Local AI:** none in-browser — `@xenova/transformers` was removed. Local summarization falls back to extractive (`lib/local-summarizer.ts`); local image captioning falls back to placeholder/cloud providers (`lib/vision-models.ts`).
 - **Vector DB:** @pinecone-database/pinecone, weaviate-ts-client
 - **Markdown:** react-markdown + remark-gfm + rehype-katex
 - **Testing:** Vitest + @testing-library/react + jsdom, Playwright (E2E)
