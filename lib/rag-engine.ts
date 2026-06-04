@@ -70,7 +70,6 @@ import {
     createQueryEvaluation,
     storeEvaluation
 } from "./guardrails"
-import { PDFParser } from "./pdf-parser"
 import {
     QueryProcessor,
     getQueryProcessor,
@@ -153,7 +152,6 @@ export interface RAGEngineStatus {
 export class RAGEngine {
   private documents: Document[] = []
   private aiClient: AIClient | null = null
-  private pdfParser: PDFParser
   private isInitialized = false
   private currentConfig: AIConfig | null = null
   
@@ -171,7 +169,6 @@ export class RAGEngine {
   }
 
   constructor() {
-    this.pdfParser = new PDFParser()
     this.queryProcessor = getQueryProcessor({
       cacheEnabled: true,
       cacheTTLMs: 30 * 60 * 1000, // 30 minutes
@@ -376,58 +373,6 @@ export class RAGEngine {
     // Normalize
     const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0))
     return magnitude > 0 ? embedding.map(val => val / magnitude) : embedding
-  }
-
-  async processDocument(file: File): Promise<Document> {
-    if (!this.isInitialized || !this.aiClient) {
-      throw new Error("RAG engine not initialized")
-    }
-
-    try {
-      // Processing document
-
-      // Extract text from PDF
-      const pdfContent = await this.pdfParser.extractText(file)
-
-      // Adaptive chunk sizing based on document length
-      const { chunkSize, overlap } = this.getAdaptiveChunkParams(pdfContent.text.length)
-
-      // Chunk the text with adaptive parameters
-      const chunks = this.pdfParser.chunkText(pdfContent.text, chunkSize, overlap)
-      // Generated chunks
-
-      if (chunks.length === 0) {
-        throw new Error("No text chunks could be created from the document")
-      }
-
-      // Generate embeddings for all chunks
-      // Generating embeddings
-      const embeddings = await this.aiClient.generateEmbeddings(chunks)
-
-      if (!embeddings || !Array.isArray(embeddings) || embeddings.length !== chunks.length) {
-        throw new Error("Failed to generate embeddings for all chunks")
-      }
-
-      const document: Document = {
-        id: Date.now().toString(),
-        name: file.name,
-        content: pdfContent.text,
-        chunks,
-        embeddings,
-        uploadedAt: new Date(),
-        metadata: {
-          ...pdfContent.metadata,
-          aiProvider: this.currentConfig?.provider,
-          aiModel: this.currentConfig?.model,
-        },
-      }
-
-      logger.debug(`Document processed successfully: ${chunks.length} chunks, ${embeddings.length} embeddings`)
-      return document
-    } catch (error) {
-      console.error("Error processing document:", error)
-      throw error
-    }
   }
 
   async addDocument(
@@ -3476,7 +3421,7 @@ Provide your response now, ensuring EVERY claim is cited and verified against th
   // Health check method
   isHealthy(): boolean {
     try {
-      return this.isInitialized && this.aiClient !== null && this.pdfParser !== null && Array.isArray(this.documents)
+      return this.isInitialized && this.aiClient !== null && Array.isArray(this.documents)
     } catch (error) {
       console.error("Error checking RAG engine health:", error)
       return false
