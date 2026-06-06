@@ -1,7 +1,7 @@
 # QuantumPDF Quick Start Guide
 
 > **Get up and running in 5 minutes**
-> **Last Updated: December 2025 | Version 3.1.0**
+> **Last Updated: June 2026 | Version 3.1.0**
 
 ---
 
@@ -63,7 +63,7 @@ Open [http://localhost:3000](http://localhost:3000)
 ### Enhanced UI Features
 
 1. **Source Cards**: View sources with similarity scores below each message
-2. **Clickable Citations**: Click citation badges to navigate to PDF pages
+2. **Inline Citations**: Compact superscript references with a single "Sources" line under each answer
 3. **Document Filtering**: Use filter chips above input to search specific documents
 4. **Chunk Visualization**: Expand "View Retrieved Chunks" to see retrieval details
 5. **Query History**: Click History button in header to access previous queries
@@ -97,11 +97,8 @@ For cloud vector storage:
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl/Cmd + Enter` | Send message |
-| `Ctrl/Cmd + K` | Focus chat input |
-| `Ctrl/Cmd + U` | Open upload dialog |
-| `Ctrl/Cmd + /` | Toggle sidebar |
-| `Escape` | Close dialogs |
+| `Enter` | Send message |
+| `Shift + Enter` | Insert a newline in the chat input |
 
 ---
 
@@ -115,7 +112,7 @@ For cloud vector storage:
 | Enhanced UI/UX | ✅ | Source Cards, Citations, Filtering, etc. |
 | Image Captioning | ✅ | AI-powered image analysis |
 | Table Extraction | ✅ | Detect and parse tables |
-| Local Models | ✅ | Transformers.js for summaries |
+| Extractive Summaries | ✅ | Built-in extractive fallback summarizer (no in-browser models) |
 | PWA | ✅ | Install as desktop/mobile app |
 
 ---

@@ -1,7 +1,7 @@
 # QuantumPDF Architecture & Flow Diagrams
 
 > **Comprehensive visual guide to system architecture, data flows, and component interactions**
-> **Last Updated: December 2025 | Version 3.1.0**
+> **Last Updated: June 2026 | Version 3.1.0**
 
 ## Table of Contents
 - [System Overview](#system-overview)
@@ -29,17 +29,17 @@ graph TB
     end
 
     subgraph "Processing Layer"
-        PDF[PDF Parser<br/>PDF.js + Tesseract]
+        PDF[PDF Extraction<br/>Server-side liteparse<br/>native Rust + PDFium + OCR]
         RAG[RAG Engine<br/>3-Phase Processing]
         CHUNK[Advanced Chunking<br/>Semantic Aware]
-        MULTI[Multimodal Extraction<br/>Images/Tables/Equations]
+        MULTI[Multimodal Extraction<br/>Client-side PDF.js<br/>Images/Tables/Equations]
     end
 
     subgraph "AI Layer"
-        AI[AI Client<br/>19+ Providers]
+        AI[AI Client<br/>18+ Providers]
         EMB[Embedding Generation<br/>with Cache + Fallback]
         TEXT[Text Generation<br/>Streaming Support]
-        LOCAL[Local Models<br/>Transformers.js]
+        SUMM[Local Summarization<br/>Extractive Fallback]
     end
 
     subgraph "Safety Layer (NEW)"
@@ -72,7 +72,7 @@ graph TB
     RAG -->|Track Metrics| EVAL
     PWA -->|Offline Support| CACHE
     STATE -->|Persist Config| CACHE
-    LOCAL -->|Summarization| AI
+    SUMM -->|Summarization| AI
 
     style UI fill:#e1f5ff
     style RAG fill:#fff4e1
@@ -89,10 +89,10 @@ graph TB
 ```mermaid
 graph LR
     subgraph "Frontend"
-        NEXT[Next.js 15.2.4]
-        REACT[React 19]
+        NEXT[Next.js 16 + Turbopack]
+        REACT[React 19.2]
         TS[TypeScript 5]
-        TAIL[TailwindCSS 3.4]
+        TAIL[TailwindCSS 4]
     end
 
     subgraph "State & Data"
@@ -102,10 +102,11 @@ graph LR
     end
 
     subgraph "Document Processing"
-        PDFJS[PDF.js]
-        TESS[Tesseract.js]
+        LITE[liteparse<br/>server-side, native]
+        PDFJS[PDF.js<br/>client extractors + fallback]
+        TESS[Tesseract.js<br/>image OCR only]
         MAMMOTH[Mammoth.js]
-        SHEETJS[SheetJS/Papa Parse]
+        SHEETJS[SheetJS CDN/Papa Parse]
     end
 
     subgraph "AI Providers"
@@ -114,10 +115,6 @@ graph LR
         GROQ[Groq]
         HF[HuggingFace]
         MORE[+15 More]
-    end
-
-    subgraph "Local AI"
-        TRANS[Transformers.js]
     end
 
     subgraph "Vector DBs"
@@ -131,12 +128,12 @@ graph LR
     TS --> TAIL
     ZUS --> IDB
     ZUS --> LOCAL
-    PDFJS --> TESS
+    LITE --> PDFJS
 
     style NEXT fill:#000,color:#fff
     style REACT fill:#61dafb
     style TS fill:#3178c6,color:#fff
-    style TRANS fill:#ff6f61
+    style LITE fill:#ff6f61
 ```
 
 ---
@@ -222,13 +219,12 @@ graph TB
         AIML[AIML API]
         FW[Fireworks API]
         DI[DeepInfra API]
-        OTHERS[+13 More Providers]
+        OTHERS[+12 More Providers]
     end
 
-    subgraph "Local Models"
-        TFJS[Transformers.js<br/>Xenova/distilbart-cnn-6-6]
-        CAPTION[Image Captioning<br/>Xenova/vit-gpt2-image-captioning]
-        TEXTGEN[Text Generation<br/>Xenova/distilgpt2]
+    subgraph "Local Fallbacks (no in-browser model)"
+        SUMM[Local Summarization<br/>extractive — lib/local-summarizer.ts]
+        CAPTION[Image Captioning<br/>placeholder or cloud vision provider]
     end
 
     subgraph "Fallback System"
@@ -252,12 +248,12 @@ graph TB
 
     GEN -.->|On Failure| HASHEMB
     STREAM -.->|On Failure| NOSTREAM
-    CHAT -->|Local Option| TFJS
+    CHAT -.->|Local Fallback| SUMM
 
     style CONFIG fill:#fff9c4
     style HASHEMB fill:#ffebee
     style NOSTREAM fill:#ffebee
-    style TFJS fill:#e8f5e9
+    style SUMM fill:#e8f5e9
     style CAPTION fill:#e8f5e9
 ```
 
@@ -271,8 +267,9 @@ graph TB
 sequenceDiagram
     participant User
     participant UI as React UI
-    participant PDF as Enhanced PDF Processor
-    participant MULTI as Multimodal Extractor
+    participant PDF as PdfDocumentProcessor (client)
+    participant ROUTE as /api/pdf/extract (liteparse)
+    participant MULTI as Multimodal Extractor (PDF.js)
     participant CHUNK as Chunking Engine
     participant AI as AI Client
     participant VDB as Vector Database
@@ -282,10 +279,15 @@ sequenceDiagram
     UI->>PDF: Process Document
 
     activate PDF
-    PDF->>PDF: Load with PDF.js
-    PDF->>PDF: Extract Text per Page
-    PDF->>PDF: Extract Metadata
-    PDF->>MULTI: Extract Multimodal Content
+    PDF->>ROUTE: POST file
+    activate ROUTE
+    ROUTE->>ROUTE: liteparse extract (native Rust + PDFium)
+    ROUTE->>ROUTE: OCR if ocrEnabled (built-in Tesseract)
+    ROUTE->>ROUTE: Page previews via screenshot()
+    Note over ROUTE: Falls back to PDF.js text if liteparse yields no text
+    ROUTE-->>PDF: {text, chunks, metadata, previews}
+    deactivate ROUTE
+    PDF->>MULTI: Extract Embedded Content (client-side PDF.js)
     
     activate MULTI
     MULTI->>MULTI: Extract Images
@@ -385,9 +387,10 @@ sequenceDiagram
 
 ```mermaid
 graph TD
-    START[PDF Document] --> PARSE[PDF.js Parsing]
-    
-    PARSE --> TEXT[Text Extraction]
+    START[PDF Document] --> ROUTE[Server: /api/pdf/extract<br/>liteparse native Rust + PDFium + OCR]
+    START --> PARSE[Client: PDF.js Parsing]
+
+    ROUTE --> TEXT[Text Extraction]
     PARSE --> IMG[Image Extraction]
     PARSE --> TBL[Table Detection]
     PARSE --> EQ[Equation Detection]
@@ -399,7 +402,7 @@ graph TD
     
     subgraph "Image Processing"
         IMG --> EXTRACT_IMG[Extract Embedded Images]
-        EXTRACT_IMG --> CAPTION[Image Captioning<br/>Xenova/vit-gpt2-image-captioning]
+        EXTRACT_IMG --> CAPTION[Image Captioning<br/>placeholder or cloud vision provider]
         CAPTION --> IMG_META[Image Metadata]
     end
     
@@ -411,9 +414,8 @@ graph TD
     
     subgraph "Equation Processing"
         EQ --> REGEX[Regex Detection]
-        REGEX --> LATEX[LaTeX Output]
-        LATEX --> MATHML[MathML + ASCII]
-        MATHML --> RENDER[KaTeX Rendering]
+        REGEX --> LATEX[LaTeX + plain-text description]
+        LATEX --> RENDER[KaTeX Rendering]
     end
     
     EMB --> VDB[(Vector Storage)]
@@ -431,14 +433,11 @@ graph TD
 sequenceDiagram
     participant PDF as PDF Processor
     participant EQ as Equation Extractor
-    participant EVAL as Math Evaluator
 
     PDF->>EQ: Extract Equations
-    EQ->>EQ: Regex Pattern Detection
-    EQ->>EQ: Extract LaTeX Patterns
-    EQ->>EVAL: Parse Expressions
-    EVAL->>EVAL: math.js Evaluation
-    EVAL-->>EQ: Simplified Results
+    EQ->>EQ: Regex Pattern Detection (LaTeX delimiters + math symbols)
+    EQ->>EQ: Capture LaTeX / symbolic patterns
+    EQ->>EQ: latexToPlainText() description (no symbolic evaluation)
     EQ-->>PDF: ExtractedEquation[]
 ```
 
@@ -509,7 +508,7 @@ graph TD
     end
     
     subgraph "Processors"
-        PDF_PROC[Enhanced PDF Processor<br/>PDF.js + Tesseract.js]
+        PDF_PROC[PdfDocumentProcessor<br/>server liteparse + client PDF.js]
         SHEET_PROC[Spreadsheet Processor<br/>SheetJS + PapaParse]
         DOCX_PROC[DOCX Processor<br/>Mammoth.js]
     end
@@ -756,9 +755,9 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "Client-Side Processing"
+    subgraph "Document Processing"
         UPLOAD[User Uploads Document]
-        PARSE[Parse in Browser]
+        EXTRACT[PDF text extraction<br/>in-process /api/pdf/extract liteparse route<br/>multimodal extraction in browser]
         EMBED[Generate Embeddings]
         STORE[Store Locally]
     end
@@ -774,19 +773,20 @@ graph TB
         NO_PERSIST[❌ No Server Persistence]
     end
 
-    UPLOAD --> PARSE
-    PARSE --> EMBED
+    UPLOAD --> EXTRACT
+    EXTRACT --> EMBED
 
     EMBED -.->|Only Text| AI_API
     EMBED --> STORE
 
     STORE -.->|Optional| VDB_API
 
+    EXTRACT -.->|No Data Retention| NO_PERSIST
     AI_API -.->|No Data Retention| NO_SERVER
     VDB_API -.->|User Controlled| NO_SERVER
 
     style UPLOAD fill:#e8f5e9
-    style PARSE fill:#e8f5e9
+    style EXTRACT fill:#e8f5e9
     style EMBED fill:#e8f5e9
     style STORE fill:#e8f5e9
     style NO_SERVER fill:#ffebee
@@ -814,6 +814,6 @@ These diagrams serve as a visual guide to understanding the complex interactions
 
 ---
 
-**Last Updated**: December 2025
+**Last Updated**: June 2026
 **Version**: 3.1.0
-**New Features**: Enhanced UI/UX Features, Guardrails, Evaluation Metrics, December 2025 AI Models
+**New Features**: Server-side liteparse PDF pipeline, compact superscript RAG citations, Enhanced UI/UX Features, Guardrails, Evaluation Metrics

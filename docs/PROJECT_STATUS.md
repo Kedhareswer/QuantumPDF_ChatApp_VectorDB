@@ -9,7 +9,7 @@
 **Version**: 3.1.0  
 **Status**: ✅ PRODUCTION READY  
 **Code Health**: 9.5/10  
-**Last Updated**: December 2025
+**Last Updated**: June 2026
 
 ---
 
@@ -92,17 +92,17 @@
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Image Extraction | ✅ Complete | Extract embedded images from PDF/DOCX |
-| Image Captioning | ✅ Complete | Xenova/vit-gpt2-image-captioning |
-| Table Detection | ✅ Complete | Pattern-based table extraction |
-| Equation Extraction | ✅ Complete | Regex-based LaTeX, MathML, ASCII math detection |
-| OCR Support | ⚠️ Experimental | Tesseract.js scaffold (disabled by default) |
+| Image Extraction | ✅ Complete | Client-side PDF.js extraction of embedded images (`lib/image-extractor.ts`) |
+| Image Captioning | ✅ Complete | Placeholder or configured cloud vision provider (`lib/vision-models.ts`) |
+| Table Detection | ✅ Complete | Client-side PDF.js table extraction (`lib/table-extractor.ts`) |
+| Equation Extraction | ✅ Complete | Client-side math/equation detection (`lib/equation-extractor.ts`) |
+| Server-Side OCR | ✅ Complete | liteparse built-in Tesseract (`ocrEnabled` option) |
 
 ### ✅ Multi-Format Support
 
 | Format | Status | Processor |
 |--------|--------|-----------|
-| PDF | ✅ Complete | PDF.js + Enhanced Processor |
+| PDF | ✅ Complete | Server-side @llamaindex/liteparse (PDF.js fallback + client extractors) |
 | DOCX | ✅ Complete | Mammoth.js |
 | DOC | ⚠️ Limited | Mammoth.js (best effort) |
 | XLSX | ✅ Complete | SheetJS |
@@ -110,13 +110,14 @@
 | CSV | ✅ Complete | PapaParse |
 | TSV | ✅ Complete | PapaParse |
 
-### ✅ Local AI Models (Transformers.js)
+### ✅ Local AI Fallbacks
 
-| Model | Purpose | Status |
-|-------|---------|--------|
-| Xenova/distilbart-cnn-6-6 | Summarization | ✅ Complete |
-| Xenova/distilgpt2 | Text Generation | ✅ Complete |
-| Xenova/vit-gpt2-image-captioning | Image Captioning | ✅ Complete |
+> In-browser ML (`@xenova/transformers` / Transformers.js) has been **removed**. The features below now use lightweight fallbacks instead of on-device models.
+
+| Capability | Fallback | Status |
+|------------|----------|--------|
+| Summarization | Extractive summarization (`lib/local-summarizer.ts`) | ✅ Complete |
+| Image Captioning | Placeholder or configured cloud vision provider (`lib/vision-models.ts`) | ✅ Complete |
 
 ### ✅ Vector Database Support
 
@@ -188,24 +189,25 @@
 
 ```
 lib/
-├── ai-client.ts              # Multi-provider AI client (19 providers) + Embedding Cache
+├── ai-client.ts              # Multi-provider AI client (18+ providers) + Embedding Cache
 ├── advanced-chunking.ts      # Semantic chunking with metadata
+├── citation-format.ts        # Inline-citation → superscript + Sources line formatting
 ├── docx-processor.ts         # Word document processing
-├── enhanced-pdf-processor.ts # Main PDF processor with multimodal
-├── enhanced-url-processor.ts # URL/web content processing
-├── equation-extractor.ts     # Math/equation detection (regex)
-├── guardrails.ts             # Input/Output validation, Rate limiting, Evals (NEW)
-├── keyword-scoring.ts        # Enhanced keyword scoring with stop words (NEW)
+├── enhanced-url-processor.ts # URL/web content processing (PDF.js for URL PDFs)
+├── equation-extractor.ts     # Client-side math/equation detection
+├── guardrails.ts             # Input/Output validation, Rate limiting, Evals
 ├── image-captioner.ts        # Vision model captioning service
-├── image-extractor.ts        # PDF/DOCX image extraction
-├── local-summarizer.ts       # Transformers.js summarization
-├── ocr-processor.ts          # Tesseract.js + PaddleOCR.js wrapper
-├── pdf-parser.ts             # PDF.js text extraction
+├── image-extractor.ts        # Client-side PDF image extraction
+├── liteparse-client.ts       # @llamaindex/liteparse wrapper (text/OCR/previews + PDF.js fallback)
+├── local-summarizer.ts       # Extractive summarization fallback
+├── logger.ts                 # Debug-gated logger (silenced in prod unless NEXT_PUBLIC_DEBUG=true)
+├── pdf-client.js             # Client-side PDF.js loader for the extractors
+├── pdf-document-processor.ts # Client orchestrator: POSTs to /api/pdf/extract + runs extractors
+├── query-processor.ts        # HyDE + step-back prompting, query caching
 ├── rag-engine.ts             # Core RAG with 3-phase + guardrails + evals
 ├── spreadsheet-processor.ts  # Excel/CSV processing
 ├── store.ts                  # Zustand state management
-├── table-extractor.ts        # Table detection from text
-├── telemetry.ts              # Performance monitoring
+├── table-extractor.ts        # Client-side table extraction
 ├── vector-database.ts        # Vector DB with adaptive hybrid search
 ├── vector-database-client.ts # Vector DB client abstraction
 └── vision-models.ts          # Vision model configurations
@@ -228,7 +230,6 @@ components/
 ├── error-handler.tsx         # Error notifications
 ├── loading-screen.tsx        # Initial loading animation
 ├── mermaid.tsx               # Mermaid diagram rendering
-├── pdf-client-wrapper.tsx    # PDF.js client initialization
 ├── pwa-install-prompt.tsx    # PWA installation UI
 ├── quick-actions.tsx         # Suggested questions
 ├── service-worker-registration.tsx
@@ -285,30 +286,23 @@ interface VectorDBConfig {
 ### Test Commands
 
 ```bash
-# Run all tests
-npm test
+# Run all tests (Vitest + jsdom)
+npx vitest
 
-# Run tests with UI
-npm run test:ui
+# Run tests once (no watch)
+npx vitest run
 
-# Generate coverage report
-npm run test:coverage
-
-# Run specific test file
-npm test ai-client
-
-# Watch mode
-npm test -- --watch
+# Run a specific test file
+npx vitest run __tests__/liteparse-client.test.ts
 ```
 
 ### Test Coverage
 
 | Component | Status | Files |
 |-----------|--------|-------|
-| AI Client | ✅ | `__tests__/ai-client.test.ts` |
-| RAG Engine | ✅ | `__tests__/rag-engine.test.ts` |
-| Advanced Chunking | ✅ | `__tests__/advanced-chunking.test.ts` |
-| Equation Extractor | ✅ | Regex-based extraction |
+| Logger | ✅ | `__tests__/logger.test.ts` |
+| liteparse Client | ✅ | `__tests__/liteparse-client.test.ts` |
+| Citation Formatting | ✅ | `__tests__/citation-format.test.ts` |
 
 ---
 
@@ -376,7 +370,7 @@ npm test -- --watch
 - [x] 3-Phase RAG processing
 - [x] Enhanced UI/UX features (Source Cards, Citations, Filtering, Chunk Visualization, History, Export)
 - [x] Multimodal extraction (images, tables, equations)
-- [x] Local model support (Transformers.js)
+- [x] Server-side PDF extraction via @llamaindex/liteparse (text, OCR, page previews)
 - [x] Multi-format documents (PDF, DOCX, XLSX, CSV)
 - [x] Advanced chunking with structure preservation
 - [x] PWA support
@@ -417,6 +411,6 @@ When reporting issues, include:
 
 ---
 
-**Generated**: November 2025  
-**Project**: QuantumPDF ChatApp v3.0.0  
+**Generated**: June 2026  
+**Project**: QuantumPDF ChatApp v3.1.0  
 **Status**: ✅ PRODUCTION READY

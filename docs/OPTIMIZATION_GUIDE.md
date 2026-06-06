@@ -1,7 +1,7 @@
 # QuantumPDF Optimization Guide
 
 > **Performance optimization strategies and implementation details**
-> **Last Updated: December 2025 | Version 3.1.0**
+> **Last Updated: June 2026 | Next.js 16 + React 19**
 
 ---
 
@@ -36,7 +36,7 @@
 ### Optimization Principles
 
 1. **Cache Aggressively** - Embeddings, query results, processed documents
-2. **Lazy Load** - Heavy models loaded on-demand
+2. **Lazy Load** - Heavy client deps (e.g. `pdfjs-dist`) imported on-demand
 3. **Parallel Processing** - Concurrent API calls, chunk processing
 4. **Early Termination** - Stop processing when sufficient results found
 5. **Progressive Enhancement** - Basic functionality first, advanced features async
@@ -562,51 +562,40 @@ const PDFViewer = dynamic(
 
 ## Memory Management
 
-### Model Lifecycle Management
+### Extractive Summarization (no in-browser model to manage)
+
+`@xenova/transformers` (Transformers.js) was **removed** to eliminate a critical
+`protobufjs` vulnerability, so there is no longer an on-device summarization model
+to load, cache, or unload. `lib/local-summarizer.ts` now falls back to a fast,
+dependency-free **extractive** summary — keeping memory flat and avoiding multi-MB
+model downloads in the browser.
 
 ```typescript
 // lib/local-summarizer.ts
 class LocalSummarizer {
-  private model: Pipeline | null = null
-  private modelLoading = false
-  private lastUsed = 0
-  private unloadTimeout: NodeJS.Timeout | null = null
-  
-  async initialize(): Promise<void> {
-    if (this.model || this.modelLoading) return
-    
-    this.modelLoading = true
-    this.model = await pipeline(
-      'summarization',
-      'Xenova/distilbart-cnn-6-6'
-    )
-    this.modelLoading = false
-    this.scheduleUnload()
-  }
-  
-  private scheduleUnload(): void {
-    // Unload after 5 minutes of inactivity
-    this.unloadTimeout = setTimeout(() => {
-      if (Date.now() - this.lastUsed > 5 * 60 * 1000) {
-        this.unload()
-      }
-    }, 5 * 60 * 1000)
-  }
-  
-  async summarize(text: string): Promise<string> {
-    await this.initialize()
-    this.lastUsed = Date.now()
-    return this.model!(text)
-  }
-  
-  unload(): void {
-    this.model = null
-    if (this.unloadTimeout) {
-      clearTimeout(this.unloadTimeout)
+  // No model is loaded — loadPipeline() always throws so summarize() falls back
+  // to the extractive path below.
+  async summarize(text: string, options: SummaryOptions = {}): Promise<LocalSummarizerResult> {
+    // ...attempts loadPipeline(), which is unavailable, then:
+    return {
+      text: this.extractiveSummary(text, options.maxLength ?? 150),
+      confidence: 0.5,
+      model: 'extractive-fallback',
+      processingTime: /* ... */,
     }
+  }
+
+  // Scores sentences by position + keywords, picks the top ones within maxLength.
+  private extractiveSummary(text: string, maxLength: number): string {
+    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10)
+    // position bonus for first/last, keyword bonus, length penalty, then sort...
+    return /* top-scored sentences joined up to maxLength */ ''
   }
 }
 ```
+
+> Local image captioning is handled the same way: `lib/vision-models.ts` falls back
+> to a placeholder or a configured **cloud** vision provider rather than an in-browser model.
 
 ### Document Cleanup
 
@@ -768,67 +757,51 @@ class CircuitBreaker {
 
 ### Code Splitting
 
+Turbopack is the default bundler (Next.js 16) and performs chunk splitting
+automatically, so there is no custom `splitChunks` config in `next.config.mjs`.
+The only `webpack` override there is a minimal client-side fallback that polyfills
+Node built-ins (`fs`, `net`, `tls`, `dns`, `child_process`, `worker_threads`) to
+`false`. Heavy server-only native modules
+(`@llamaindex/liteparse`, `onnxruntime-node`, `@huggingface/transformers`, `sharp`)
+are listed in `serverExternalPackages` so they are never bundled into the client.
+
+The remaining client-side weight is `pdfjs-dist` (used only by the multimodal
+extractors and the URL fetcher) — load it lazily so it stays out of the initial
+bundle:
+
 ```typescript
-// next.config.js
-module.exports = {
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        cacheGroups: {
-          vendor: {
-            test: /node_modules/,
-            name: 'vendors',
-            chunks: 'all'
-          },
-          pdfjs: {
-            test: /pdfjs-dist/,
-            name: 'pdfjs',
-            chunks: 'async'
-          },
-          transformers: {
-            test: /@xenova|transformers/,
-            name: 'transformers',
-            chunks: 'async'
-          }
-        }
-      }
-    }
-    return config
-  }
-}
+// pdfjs-dist is loaded on demand, not at module init.
+const loadPDFJS = () => import('pdfjs-dist')
 ```
 
 ### Dynamic Imports
 
 ```typescript
-// Heavy dependencies loaded on-demand
+// Heavy client dependencies loaded on-demand
 const loadPDFJS = () => import('pdfjs-dist')
-const loadTransformers = () => import('@xenova/transformers')
-const loadMathJS = () => import('mathjs')
 
-// Only load when needed
-async function processPDF(file: File) {
+// PDF text/OCR/previews are extracted server-side via /api/pdf/extract (liteparse).
+// pdfjs-dist is only pulled in client-side for the embedded image/table/equation
+// extractors and URL-based PDF fetching.
+async function extractEmbeddedContent(file: File) {
   const pdfjs = await loadPDFJS()
-  // Use pdfjs...
-}
-
-async function evaluateEquation(latex: string) {
-  const mathjs = await loadMathJS()
-  return mathjs.evaluate(latex)
+  // Use pdfjs for images / tables / equations...
 }
 ```
 
 ### Tree Shaking
 
 ```typescript
-// Import only what's needed
-import { evaluate, simplify } from 'mathjs'
-// NOT: import * as math from 'mathjs'
+// Import only what's needed (named imports keep bundles lean)
+import { memo, useCallback, useMemo } from 'react'
+// NOT: import * as React from 'react'
 
-import { pipeline } from '@xenova/transformers'
-// NOT: import Transformers from '@xenova/transformers'
+import dynamic from 'next/dynamic'
+// Lazy-load heavy client components instead of importing them eagerly.
 ```
+
+> Note: `@xenova/transformers` is no longer a dependency, so there is no
+> Transformers.js import to tree-shake.
 
 ---
 
@@ -848,12 +821,12 @@ import { pipeline } from '@xenova/transformers'
 ### Profiling Commands
 
 ```bash
-# Bundle analysis
-npm run analyze
+# Bundle analysis (Turbopack emits build stats; inspect .next/ output)
+npm run build
 
 # Performance profiling
 npm run build
-npm run start
+npm start
 # Open Chrome DevTools > Performance
 
 # Memory profiling
@@ -907,7 +880,7 @@ telemetry.recordTiming('rag.query', queryTime)
 - [x] Add adaptive chunk sizing
 - [x] Optimize fallback embeddings
 - [x] Remove dead code
-- [x] Add model lifecycle management
+- [x] Remove in-browser model (`@xenova/transformers`) — extractive summarization fallback, no model lifecycle to manage
 
 ### Long-Term Optimizations
 
@@ -919,5 +892,5 @@ telemetry.recordTiming('rag.query', queryTime)
 
 ---
 
-**Generated**: November 2025  
-**Project**: QuantumPDF ChatApp v3.0.0
+**Generated**: November 2025 · **Updated**: June 2026  
+**Project**: QuantumPDF ChatApp (Next.js 16 + React 19)

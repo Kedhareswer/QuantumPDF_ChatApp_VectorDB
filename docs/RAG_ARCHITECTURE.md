@@ -1,7 +1,7 @@
 # QuantumPDF RAG Architecture
 
 > **Deep dive into the Retrieval-Augmented Generation system with 3-phase processing, guardrails, evaluation metrics, and multimodal support**
-> **Last Updated: December 2025 | Version 3.1.0**
+> **Last Updated: June 2026 | Version 3.1.0**
 
 ---
 
@@ -331,19 +331,21 @@ Display interactive source cards with document metadata, page numbers, and simil
 />
 ```
 
-#### Clickable Citations
-Inline citation badges that allow direct navigation to PDF pages.
+#### Inline Citations (display-only superscripts)
+The RAG engine forces verbose inline citations on every claim, e.g.
+`...for MCH [Common_Labs.pdf, p.1].`. Before rendering, `lib/citation-format.ts`
+rewrites those `[Filename, p.N]` markers into compact, deduped **superscript**
+references and appends a single **"Sources"** footnote line. This is a
+**display-only** transform — the original message content keeps the raw markers
+so source/chunk alignment elsewhere keeps working.
 
 ```typescript
-// Citations are automatically inserted in markdown content
-// Format: [1] where 1 is the citation index
-<CitationBadge
-  index={1}
-  source="Document Name · p.5"
-  documentId="doc-123"
-  page={5}
-  onViewPage={handleViewPage}
-/>
+// components/chat-interface.tsx renders the transformed content
+import { formatCitationsForDisplay } from '@/lib/citation-format'
+
+// "...for MCH [Common_Labs.pdf, p.1]."  ->  "...for MCH¹."
+//   + a trailing line:  **Sources:** ¹ Common_Labs.pdf, p.1
+const display = formatCitationsForDisplay(cleaned.trim())
 ```
 
 #### Document Filtering
@@ -386,6 +388,12 @@ Export conversations in Markdown or PDF format.
 
 ## Multimodal Integration
 
+### PDF Text Extraction (server-side liteparse)
+
+PDF text, OCR, and page-preview images are extracted **server-side** by `@llamaindex/liteparse` — a native Rust + PDFium NAPI module — wrapped by `lib/liteparse-client.ts` and exposed at `app/api/pdf/extract/route.ts` (Node.js runtime). OCR is liteparse's built-in Tesseract, toggled via the `ocrEnabled` option; page previews come from liteparse's `screenshot()`. If liteparse fails or returns no text, the wrapper falls back to PDF.js text extraction.
+
+The client orchestrator `lib/pdf-document-processor.ts` (class `PdfDocumentProcessor`, imported by `components/unified-pdf-processor.tsx`) POSTs the uploaded file to `/api/pdf/extract`, then runs the retained **client-side** PDF.js extractors for embedded images (`lib/image-extractor.ts`), tables (`lib/table-extractor.ts`), and equations (`lib/equation-extractor.ts`). `pdfjs-dist` is no longer the primary PDF text engine — it now only backs these client-side extractors, the server-side fallback in `liteparse-client.ts`, and URL-based PDF fetching in `lib/enhanced-url-processor.ts`.
+
 ### Processing Pipeline
 
 ```
@@ -400,8 +408,9 @@ Export conversations in Markdown or PDF format.
 │  TEXT         │           │  IMAGES       │           │  EQUATIONS    │
 │  EXTRACTION   │           │               │           │               │
 │               │           │               │           │               │
-│  PDF.js       │           │  Image        │           │  Regex        │
-│  Mammoth.js   │           │  Extractor    │           │  Fallback     │
+│  liteparse    │           │  Image        │           │  Regex        │
+│  (PDF server) │           │  Extractor    │           │  Detection    │
+│  Mammoth.js   │           │  (PDF.js)     │           │               │
 │  SheetJS      │           │               │           │               │
 └───────────────┘           └───────────────┘           └───────────────┘
         │                           │                           │
@@ -410,10 +419,11 @@ Export conversations in Markdown or PDF format.
         │                   │  IMAGE        │                   │
         │                   │  CAPTIONING   │                   │
         │                   │               │                   │
-        │                   │  Xenova/      │                   │
-        │                   │  vit-gpt2-    │                   │
-        │                   │  image-       │                   │
-        │                   │  captioning   │                   │
+        │                   │  Cloud vision │                   │
+        │                   │  provider or  │                   │
+        │                   │  placeholder  │                   │
+        │                   │  (Tesseract   │                   │
+        │                   │   OCR)        │                   │
         │                   └───────────────┘                   │
         │                           │                           │
         └───────────────────────────┼───────────────────────────┘
@@ -447,25 +457,38 @@ interface ExtractedImage {
 }
 
 // lib/image-captioner.ts
+// Captioning uses a configured cloud vision provider (VisionModelService) and
+// falls back to a deterministic placeholder when none is configured. There is
+// no in-browser model — @xenova/transformers was removed.
 class ImageCaptioner {
-  private model: Pipeline | null = null
-  
-  async initialize(): Promise<void> {
-    if (!this.model) {
-      const { pipeline } = await import('@xenova/transformers')
-      this.model = await pipeline(
-        'image-to-text',
-        'Xenova/vit-gpt2-image-captioning'
-      )
+  private visionService: VisionModelService | null = null
+
+  private async analyzeImage(
+    image: ExtractedImage,
+    options: Required<CaptioningOptions>,
+  ): Promise<ImageAnalysisResult> {
+    // Use the cloud vision model if available and configured
+    if (this.visionService && this.visionService.isConfigured()) {
+      return this.visionService.analyzeImage(image.dataUrl, this.buildAnalysisPrompt(image), {
+        maxTokens: 300,
+        temperature: options.temperature,
+        includeOCR: options.includeOCR,
+      })
+    }
+
+    // Fallback: placeholder caption/description (no model download)
+    return {
+      caption: this.generatePlaceholderCaption(image),
+      description: this.generatePlaceholderDescription(image),
+      confidence: 0.5,
+      model: 'placeholder',
+      processedAt: new Date(),
     }
   }
-  
-  async caption(imageDataUrl: string): Promise<string> {
-    await this.initialize()
-    const result = await this.model!(imageDataUrl)
-    return result[0].generated_text
-  }
 }
+
+// Optional OCR for image text uses Tesseract.js (lib/image-captioner.ts):
+//   extractTextFromImage(dataUrl) → string
 ```
 
 ### Equation Processing
@@ -498,7 +521,7 @@ async function extractEquations(
 ### Content Aggregation
 
 ```typescript
-// lib/enhanced-pdf-processor.ts
+// lib/pdf-document-processor.ts (multimodal results merged into the document)
 async function aggregateContent(
   textContent: string,
   images: ExtractedImage[],
@@ -781,5 +804,5 @@ interface ExportMenuProps {
 
 ---
 
-**Generated**: November 2025  
-**Project**: QuantumPDF ChatApp v3.0.0
+**Generated**: June 2026  
+**Project**: QuantumPDF ChatApp v3.1.0

@@ -1,7 +1,7 @@
 # QuantumPDF Implementation Guide
 
 > **Complete guide to implementing and extending QuantumPDF features**
-> **Last Updated: December 2025 | Version 3.1.0**
+> **Last Updated: June 2026 | Version 3.1.0**
 
 ---
 
@@ -137,7 +137,7 @@ type AIProvider =
 ### Configuring AI Client
 
 ```typescript
-import { AIClient, AIProvider } from '@/lib/ai-client'
+import { AIClient } from '@/lib/ai-client'
 
 // Initialize client
 const aiClient = new AIClient({
@@ -146,29 +146,27 @@ const aiClient = new AIClient({
   model: 'gpt-4o-mini'
 })
 
-// Switch provider at runtime
-aiClient.setProvider('anthropic', {
+// Switch provider at runtime by constructing a new client
+const anthropicClient = new AIClient({
+  provider: 'anthropic',
   apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-3-sonnet-20240229'
+  model: 'claude-3-5-sonnet-20241022'
 })
 
-// Generate embeddings
-const embeddings = await aiClient.generateEmbeddings('Your text here')
+// Generate embeddings (accepts an array of texts, returns number[][])
+const embeddings = await aiClient.generateEmbeddings(['Your text here'])
 
-// Generate text
-const response = await aiClient.generateText(
-  'Summarize this document',
-  'Your context here'
-)
+// Generate text (messages are role/content pairs)
+const response = await aiClient.generateText([
+  { role: 'system', content: 'Use the provided context.' },
+  { role: 'user', content: 'Summarize this document' }
+])
 
-// Stream response
-const stream = aiClient.streamText(
-  'Explain this concept',
-  'Context information'
+// Stream response (callback-based, not an async generator)
+await aiClient.generateTextStream(
+  [{ role: 'user', content: 'Explain this concept' }],
+  (chunk) => process.stdout.write(chunk)
 )
-for await (const chunk of stream) {
-  process.stdout.write(chunk)
-}
 ```
 
 ### Provider-Specific Models
@@ -474,15 +472,45 @@ import { ExportMenu } from '@/components/export-menu'
 
 ## Multimodal Processing
 
-### Image Extraction
+### PDF Text, OCR & Page Previews (server-side, liteparse)
+
+PDF text, OCR, and page-preview images are extracted **server-side** by
+`@llamaindex/liteparse` — a native Rust + PDFium NAPI module — wrapped by
+`lib/liteparse-client.ts` and exposed at `POST /api/pdf/extract` (Node.js
+runtime). OCR is controlled by liteparse's `ocrEnabled` option, and page
+previews come from liteparse's `screenshot()`. If liteparse fails or returns no
+text, the wrapper falls back to PDF.js text extraction.
+
+The client orchestrator `lib/pdf-document-processor.ts` (`PdfDocumentProcessor`)
+POSTs the uploaded file to that route, then runs the retained **client-side**
+PDF.js extractors for embedded images, tables, and equations.
 
 ```typescript
-import { ImageExtractor } from '@/lib/image-extractor'
+import { PdfDocumentProcessor } from '@/lib/pdf-document-processor'
 
-const extractor = new ImageExtractor()
+const processor = new PdfDocumentProcessor()
 
-// Extract from PDF
-const images = await extractor.extractFromPDF(pdfDocument)
+// POSTs the file to /api/pdf/extract for liteparse text/OCR/previews,
+// then runs the client-side image/table/equation extractors.
+const result = await processor.processFile(pdfFile, (progress) => {
+  console.log(`${progress.stage}: ${progress.progress}%`)
+})
+
+result.text       // Full text content (liteparse)
+result.chunks      // Chunked text
+result.metadata    // pages, ocrUsed, extractionQuality, multimodal, ...
+```
+
+### Image Extraction (client-side, PDF.js)
+
+```typescript
+import { PDFImageExtractor } from '@/lib/image-extractor'
+
+const extractor = new PDFImageExtractor()
+
+// Extract embedded images / page previews from a loaded PDF.js document
+const previews = await extractor.extractPagePreviews(pdfDocument)
+const images = await extractor.extractInlineImages(pdfDocument)
 
 // Image structure
 interface ExtractedImage {
@@ -500,19 +528,19 @@ interface ExtractedImage {
 
 ### Image Captioning
 
+Captioning runs through `VisionModelService`. There is **no in-browser model** —
+`@xenova/transformers` (Transformers.js) was removed. The `local` provider falls
+back to a placeholder; real captions come from a configured cloud vision
+provider (HuggingFace, OpenAI, Anthropic). See `lib/vision-models.ts`.
+
 ```typescript
 import { ImageCaptioner } from '@/lib/image-captioner'
 
-const captioner = new ImageCaptioner()
+// Provider is required for real captions; 'local' yields placeholders
+const captioner = new ImageCaptioner({ provider: 'huggingface', apiKey })
 
-// Initialize model (loads Xenova/vit-gpt2-image-captioning)
-await captioner.initialize()
-
-// Caption single image
-const caption = await captioner.caption(imageDataUrl)
-
-// Batch caption
-const captions = await captioner.batchCaption(images, (progress) => {
+// Caption a batch of images
+const captioned = await captioner.captionImages(images, {}, (progress) => {
   console.log(`Captioned ${progress.processed}/${progress.total}`)
 })
 ```
@@ -520,12 +548,12 @@ const captions = await captioner.batchCaption(images, (progress) => {
 ### Table Extraction
 
 ```typescript
-import { TableExtractor } from '@/lib/table-extractor'
+import { PDFTableExtractor } from '@/lib/table-extractor'
 
-const extractor = new TableExtractor()
+const extractor = new PDFTableExtractor()
 
 // Extract tables from text
-const tables = extractor.extractTables(documentText)
+const tables = await extractor.extractTablesFromText(documentText)
 
 // Table structure
 interface ExtractedTable {
@@ -541,26 +569,25 @@ interface ExtractedTable {
 
 ### Complete Multimodal Pipeline
 
+The full pipeline is orchestrated by `PdfDocumentProcessor`: liteparse provides
+text, OCR, and page previews server-side; the client-side PDF.js extractors add
+embedded images, tables, and equations. `components/unified-pdf-processor.tsx`
+invokes it for uploaded PDFs.
+
 ```typescript
-import { EnhancedPDFProcessor } from '@/lib/enhanced-pdf-processor'
+import { PdfDocumentProcessor } from '@/lib/pdf-document-processor'
 
-const processor = new EnhancedPDFProcessor({
-  extractImages: true,
-  extractTables: true,
-  extractEquations: true,
-  generateCaptions: true
+const processor = new PdfDocumentProcessor()
+
+const result = await processor.processFile(pdfFile, (progress) => {
+  console.log(`${progress.stage}: ${progress.progress}%`)
 })
 
-const result = await processor.process(pdfFile, (progress) => {
-  console.log(`${progress.stage}: ${progress.percent}%`)
-})
-
-// Result includes
-result.content      // Full text content
-result.chunks       // Processed chunks
-result.images       // Extracted images with captions
-result.tables       // Detected tables
-result.equations    // Extracted equations
+// Result (PDFProcessingResult) includes
+result.text            // Full text content (liteparse, PDF.js fallback)
+result.chunks          // Chunked text
+result.advancedChunks  // Semantic chunks (lib/advanced-chunking.ts)
+result.metadata        // pages, ocrUsed, extractionQuality, multimodal, ...
 ```
 
 ---
@@ -721,14 +748,19 @@ function MyComponent() {
 ### Graceful Degradation
 
 ```typescript
-// AI Provider Fallback
+// AI Provider Fallback (construct a new client to switch providers)
 async function generateWithFallback(prompt: string) {
+  const messages = [{ role: 'user' as const, content: prompt }]
   try {
-    return await aiClient.generateText(prompt)
+    return await primaryClient.generateText(messages)
   } catch (error) {
     console.warn('Primary provider failed, trying fallback')
-    aiClient.setProvider('huggingface')
-    return await aiClient.generateText(prompt)
+    const fallbackClient = new AIClient({
+      provider: 'huggingface',
+      apiKey: process.env.HUGGINGFACE_API_KEY!,
+      model: 'meta-llama/Meta-Llama-3.1-8B-Instruct'
+    })
+    return await fallbackClient.generateText(messages)
   }
 }
 
@@ -745,20 +777,20 @@ async function extractEquations(doc: ProcessedDocument) {
 ### Unit Tests
 
 ```typescript
-// __tests__/ai-client.test.ts
+// Example pattern (Vitest, globals enabled)
 import { AIClient } from '@/lib/ai-client'
 
 describe('AIClient', () => {
   it('should generate embeddings', async () => {
-    const client = new AIClient({ provider: 'openai', apiKey: 'test' })
-    const embeddings = await client.generateEmbeddings('test text')
-    expect(embeddings).toHaveLength(1536)
+    const client = new AIClient({ provider: 'openai', apiKey: 'test', model: 'text-embedding-3-small' })
+    // generateEmbeddings takes an array of texts and returns number[][]
+    const embeddings = await client.generateEmbeddings(['test text'])
+    expect(embeddings[0]).toHaveLength(1536)
   })
-  
-  it('should switch providers', () => {
-    const client = new AIClient({ provider: 'openai', apiKey: 'test' })
-    client.setProvider('anthropic', { apiKey: 'test2' })
-    expect(client.currentProvider).toBe('anthropic')
+
+  it('should construct a client per provider', () => {
+    const client = new AIClient({ provider: 'anthropic', apiKey: 'test2', model: 'claude-3-5-sonnet-20241022' })
+    expect(client).toBeInstanceOf(AIClient)
   })
 })
 ```
@@ -766,7 +798,7 @@ describe('AIClient', () => {
 ### Integration Tests
 
 ```typescript
-// __tests__/rag-engine.test.ts
+// Example pattern (Vitest, globals enabled)
 import { RAGEngine } from '@/lib/rag-engine'
 
 describe('RAGEngine', () => {
@@ -785,18 +817,19 @@ describe('RAGEngine', () => {
 
 ### Running Tests
 
+Tests use **Vitest** (jsdom) and live in `__tests__/` with setup at
+`__tests__/setup.ts`. Current test files: `logger.test.ts`,
+`liteparse-client.test.ts`, and `citation-format.test.ts`.
+
 ```bash
-# Run all tests
-npm test
+# Run all tests (watch)
+npx vitest
 
-# Run with coverage
-npm run test:coverage
+# Run once (no watch)
+npx vitest run
 
-# Watch mode
-npm test -- --watch
-
-# Run specific file
-npm test ai-client
+# Run a single test file
+npx vitest run __tests__/liteparse-client.test.ts
 ```
 
 ---
@@ -806,15 +839,17 @@ npm test ai-client
 ### Production Build
 
 ```bash
-# Build optimized bundle
+# Build optimized bundle (Turbopack)
 npm run build
 
 # Start production server
 npm start
-
-# Or export static files
-npm run export
 ```
+
+> **Native binary note:** `@llamaindex/liteparse` ships platform-specific native
+> binaries via `optionalDependencies`. Run `npm install` on the **target**
+> platform (e.g. Linux) so the correct binary is fetched — do **not** copy a
+> Windows `node_modules` to a Linux host.
 
 ### Environment Configuration
 
@@ -848,6 +883,6 @@ CMD ["npm", "start"]
 
 ---
 
-**Generated**: December 2025  
+**Generated**: June 2026  
 **Project**: QuantumPDF ChatApp v3.1.0  
-**Latest Updates**: Enhanced UI/UX features, Guardrails, Evaluation Metrics, December 2025 AI models
+**Latest Updates**: Server-side liteparse PDF pipeline (Next.js 16 / React 19), compact citation superscripts, Guardrails, Evaluation Metrics

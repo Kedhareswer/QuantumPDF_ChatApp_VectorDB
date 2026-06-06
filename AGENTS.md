@@ -79,7 +79,7 @@ Single-test execution is the default for fast iteration.
 - Group imports: framework/external first, then internal imports.
 - Use `import type` for type-only imports when practical.
 - Keep server-only logic out of client components.
-- Server-external packages in `next.config.mjs` must remain server-side: `onnxruntime-node`, `@huggingface/transformers`, `sharp`.
+- Server-external packages in `next.config.mjs` must remain server-side: `@llamaindex/liteparse`, `onnxruntime-node`, `@huggingface/transformers`, `sharp`.
 - Client bundle has Node polyfills disabled; do not use `fs/net/tls` on client.
 
 ## Code Style: Formatting

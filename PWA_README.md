@@ -1,7 +1,7 @@
 # QuantumPDF PWA
 
 > **Progressive Web App capabilities for QuantumPDF**
-> **Last Updated: December 2025 | Version 3.1.0**
+> **Last Updated: June 2026**
 
 ---
 
@@ -45,9 +45,9 @@ QuantumPDF is a fully installable Progressive Web App (PWA) that provides a nati
 
 ## Tech Stack
 
-- **Framework**: Next.js 15
-- **PWA Library**: next-pwa
-- **Service Worker**: Custom + Workbox
+- **Framework**: Next.js 16 (App Router, Turbopack)
+- **PWA Library**: None — custom service worker registered by `components/service-worker-registration.tsx`
+- **Service Worker**: Custom (`public/sw.js`, hand-written cache strategies)
 - **Storage**: Cache API + IndexedDB
 
 ## Browser Support
@@ -63,8 +63,9 @@ QuantumPDF is a fully installable Progressive Web App (PWA) that provides a nati
 
 ### Manifest Location
 ```
-app/manifest.json
+app/manifest.ts
 ```
+(Next.js `MetadataRoute.Manifest` route — served at `/manifest.webmanifest`)
 
 ### Service Worker
 ```

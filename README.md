@@ -1,12 +1,12 @@
 # QuantumPDF - AI Document Analysis Platform
 
 > **Advanced document analysis with 3-phase RAG, guardrails, evaluation metrics, and 19+ AI providers**
-> **Version 3.1.0 | December 2025**
+> **Version 3.1.0 | June 2026**
 
 ![QuantumPDF](https://img.shields.io/badge/version-3.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)
-![Next.js](https://img.shields.io/badge/Next.js-15-black)
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
 
 ---
 ![flow.png](public/flow.png)
@@ -26,10 +26,10 @@
 | **Enhanced UI/UX** | Source Cards, Citations, Filtering, Chunk Visualization, History, Export |
 | **Multimodal Processing** | Images, tables, equations extracted and analyzed |
 | **Multi-Format Support** | PDF, DOCX, XLSX, CSV processing |
-| **Local AI Models** | Transformers.js for on-device summarization |
+| **Server-Side PDF Parsing** | Native liteparse (Rust + PDFium) text, OCR, and page previews |
 | **PWA Support** | Install as desktop/mobile app |
 
-### AI Provider Support (Updated December 2025)
+### AI Provider Support (Updated June 2026)
 
 <table>
 <tr>
@@ -290,17 +290,14 @@ await ragEngine.query(query, {
 ## 🧪 Testing
 
 ```bash
-# Run all tests
-npm test
+# Run all tests (watch mode)
+npx vitest
 
-# Run with UI
-npm run test:ui
+# Run tests once (no watch)
+npx vitest run
 
-# Generate coverage
-npm run test:coverage
-
-# Run specific test
-npm test ai-client
+# Run a single test file
+npx vitest run liteparse-client
 ```
 
 ---
@@ -323,13 +320,13 @@ npm test ai-client
 
 | Category | Technology |
 |----------|------------|
-| **Framework** | Next.js 15, React 18 |
+| **Framework** | Next.js 16 (Turbopack), React 19 |
 | **Language** | TypeScript 5 |
 | **Styling** | Tailwind CSS, shadcn/ui |
 | **State** | Zustand |
-| **PDF** | PDF.js |
-| **Documents** | Mammoth.js, SheetJS, PapaParse |
-| **Local AI** | Transformers.js |
+| **PDF** | @llamaindex/liteparse (native server-side; PDF.js fallback + client image/table/equation extractors) |
+| **Documents** | Mammoth.js, SheetJS (pinned to the SheetJS CDN tarball), PapaParse |
+| **Local AI** | None in-browser — local summarization falls back to extractive |
 | **Vector DB** | In-Memory, Pinecone, Weaviate |
 | **Testing** | Vitest, Playwright |
 
@@ -355,7 +352,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - [OpenAI](https://openai.com) for GPT models
 - [Anthropic](https://anthropic.com) for Claude models
-- [Hugging Face](https://huggingface.co) for Transformers.js
+- [Hugging Face](https://huggingface.co) for the Inference API
 - [Vercel](https://vercel.com) for Next.js
 - [shadcn/ui](https://ui.shadcn.com) for UI components
 

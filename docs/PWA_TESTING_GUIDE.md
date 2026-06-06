@@ -1,7 +1,7 @@
 # QuantumPDF PWA Testing Guide
 
 > **Comprehensive guide for testing PWA functionality**
-> **Last Updated: December 2025 | Version 3.1.0**
+> **Last Updated: June 2026 | Version 0.1.0**
 
 ---
 
@@ -109,7 +109,7 @@
 
 ## Automated Testing
 
-### Jest Tests
+### Vitest Tests
 
 ```typescript
 // __tests__/pwa/manifest.test.ts
@@ -154,7 +154,7 @@ describe('Service Worker', () => {
   })
 
   test('caches static assets', async () => {
-    const cache = await caches.open('quantumpdf-v3.0.0')
+    const cache = await caches.open('quantumpdf-v0.1.0')
     const keys = await cache.keys()
     
     const urls = keys.map(k => k.url)
@@ -169,7 +169,7 @@ describe('Offline Functionality', () => {
   test('app shell loads from cache', async () => {
     // Simulate offline
     // Note: This requires Playwright or Puppeteer for proper simulation
-    const cache = await caches.open('quantumpdf-v3.0.0')
+    const cache = await caches.open('quantumpdf-v0.1.0')
     const response = await cache.match('/')
     
     expect(response).toBeTruthy()
@@ -346,7 +346,7 @@ console.log('SW Controller:', navigator.serviceWorker.controller)
 caches.keys().then(keys => console.log('Caches:', keys))
 
 // Check specific cache contents
-caches.open('quantumpdf-v3.0.0')
+caches.open('quantumpdf-v0.1.0')
   .then(cache => cache.keys())
   .then(keys => console.log('Cached items:', keys.map(k => k.url)))
 
@@ -451,5 +451,5 @@ caches.keys()
 
 ---
 
-**Generated**: November 2025  
-**Project**: QuantumPDF ChatApp v3.0.0
+**Generated**: June 2026  
+**Project**: QuantumPDF ChatApp v0.1.0

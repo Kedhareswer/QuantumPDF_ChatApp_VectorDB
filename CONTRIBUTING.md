@@ -71,8 +71,8 @@ We are committed to providing a welcoming and inclusive environment for all cont
 
 | Tool | Version | Purpose | Installation |
 |------|---------|---------|--------------|
-| **Node.js** | 18.0+ | Runtime environment | [Download](https://nodejs.org/) |
-| **PNPM** | 8.0+ | Package manager | `npm install -g pnpm` |
+| **Node.js** | 20.9+ | Runtime environment (required by Next.js 16) | [Download](https://nodejs.org/) |
+| **npm** | 9.0+ | Package manager | Bundled with Node.js |
 | **Git** | Latest | Version control | [Download](https://git-scm.com/) |
 | **VSCode** | Latest | Recommended editor | [Download](https://code.visualstudio.com/) |
 
@@ -90,14 +90,13 @@ cd QuantumPDF_ChatApp
 git remote add upstream https://github.com/Kedhareswer/QuantumPDF_ChatApp.git
 
 # 4. Install dependencies
-pnpm install
+npm install
 
 # 5. Set up environment variables
-cp .env.example .env.local
-# Edit .env.local with your API keys
+# Create .env.local and add at least one AI provider key (see Environment Variables in CLAUDE.md / README)
 
 # 6. Start development server
-pnpm dev
+npm run dev
 
 # 7. Verify setup
 # Open http://localhost:3000 and test basic functionality
@@ -107,12 +106,12 @@ pnpm dev
 
 ```bash
 # Useful development commands
-pnpm dev          # Start development server
-pnpm build        # Build for production
-pnpm start        # Start production server
-pnpm lint         # Run ESLint
-pnpm type-check   # TypeScript checking
-pnpm test         # Run tests (when available)
+npm run dev       # Start development server (Turbopack)
+npm run build     # Build for production
+npm start         # Start production server
+npm run lint      # Run ESLint
+npx vitest        # Run tests (watch mode)
+npx vitest run    # Run tests once
 ```
 
 ---
@@ -272,7 +271,7 @@ We follow the [Conventional Commits](https://www.conventionalcommits.org/) speci
 feat: add support for Groq AI provider
 fix: resolve mobile responsive layout issue
 docs: update API documentation for vector database
-style: format code with prettier
+style: reformat code and fix lint warnings
 refactor: optimize PDF processing performance
 test: add unit tests for chat interface
 chore: update dependencies to latest versions
@@ -330,8 +329,8 @@ export function ChatMessage(props: any) {
 ### Code Quality Checklist
 
 - [ ] **TypeScript**: Strict typing, no `any` types
-- [ ] **ESLint**: No linting errors
-- [ ] **Prettier**: Consistent formatting
+- [ ] **ESLint**: No linting errors (`npm run lint`)
+- [ ] **Formatting**: Consistent formatting (project uses ESLint; there is no Prettier config)
 - [ ] **Performance**: Optimized for mobile and desktop
 - [ ] **Accessibility**: WCAG AA compliance
 - [ ] **Error Handling**: Proper error boundaries and handling
@@ -346,15 +345,17 @@ export function ChatMessage(props: any) {
 
 | Test Type | Tool | Coverage | When to Write |
 |-----------|------|----------|---------------|
-| **Unit Tests** | Jest + RTL | 80%+ | New functions/components |
+| **Unit Tests** | Vitest + Testing Library (jsdom) | 80%+ | New functions/components |
 | **Integration Tests** | Playwright | Critical paths | API integrations |
 | **E2E Tests** | Playwright | User journeys | Major features |
-| **Visual Tests** | Chromatic | UI components | Design changes |
+
+Tests live in `__tests__/` with setup at `__tests__/setup.ts`.
 
 ### Writing Tests
 
 ```typescript
-// Unit test example
+// Unit test example (Vitest + Testing Library)
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ChatMessage } from './ChatMessage';
 
@@ -367,7 +368,7 @@ describe('ChatMessage', () => {
       timestamp: new Date(),
     };
 
-    render(<ChatMessage message={message} onCopy={jest.fn()} />);
+    render(<ChatMessage message={message} onCopy={vi.fn()} />);
     
     expect(screen.getByText('Test message')).toBeInTheDocument();
   });

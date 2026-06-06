@@ -118,7 +118,7 @@ flowchart TB
     %% ===== DOCUMENT INGESTION PATH =====
     USER -->|"PDF Upload"| PDF_PROC
     subgraph INGEST["Document Ingestion"]
-        PDF_PROC["📄 PDF Parser<br/><i>Text extraction</i>"]
+        PDF_PROC["📄 PDF Extraction<br/><i>Server-side liteparse<br/>(text + OCR + previews)</i>"]
         CHUNKING["✂️ Chunking<br/><i>Adaptive sizing</i>"]
         EMB_GEN["🧬 Embedding Gen"]
         PDF_PROC --> CHUNKING --> EMB_GEN
@@ -197,7 +197,7 @@ flowchart TB
 2. **API Layer**
    - Search Handler: Processes search queries and returns results
    - Vector DB Handler: Manages vector database operations
-   - PDF Processor: Extracts and processes text from uploaded PDFs
+   - PDF Extraction (`/api/pdf/extract`): Server-side text, OCR, and page-preview extraction via `@llamaindex/liteparse` (native Rust + PDFium), with a PDF.js text fallback
 
 3. **Core Services**
    - RAG Engine: Orchestrates the retrieval-augmented generation process
@@ -213,7 +213,7 @@ flowchart TB
 ## Data Flow
 
 1. **Document Ingestion**
-   - User uploads PDF → PDF Processor extracts text → Text is chunked → Chunks are embedded → Stored in Vector DB
+   - User uploads PDF → `lib/pdf-document-processor.ts` POSTs the file to the server-side liteparse route (`/api/pdf/extract`) for text/OCR/previews, then runs the client-side PDF.js extractors for embedded images, tables, and equations → Text is chunked → Chunks are embedded → Stored in Vector DB
 
 2. **Query Processing**
    - User submits query → Query is embedded → Similar chunks retrieved → Context sent to LLM → Response returned to user
