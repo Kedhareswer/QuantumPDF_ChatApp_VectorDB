@@ -61,50 +61,21 @@ function assessQuality(text: string): PdfExtraction["extractionQuality"] {
   return "low"
 }
 
-/** PDF.js text-only fallback used when liteparse fails or finds no text. */
-async function extractWithPdfjs(buffer: Buffer): Promise<{ text: string; pages: number }> {
-  type PdfjsTextItem = { str?: string; hasEOL?: boolean }
-  type PdfjsDoc = {
-    numPages: number
-    getPage(pageNumber: number): Promise<{ getTextContent(): Promise<{ items: PdfjsTextItem[] }> }>
-    destroy(): Promise<void>
-  }
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
-  // The legacy build's getDocument types are narrow; cast to accept full init params.
-  const getDocument = pdfjs.getDocument as unknown as (
-    src: Record<string, unknown>,
-  ) => { promise: Promise<PdfjsDoc> }
-
-  const pdf = await getDocument({
-    data: new Uint8Array(buffer),
-    disableWorker: true,
-    isEvalSupported: false,
-    useSystemFonts: true,
-    stopAtErrors: false,
-    verbosity: 0,
-  }).promise
-
-  const parts: string[] = []
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    try {
-      const page = await pdf.getPage(pageNum)
-      const content = await page.getTextContent()
-      const pageText = content.items
-        .map((item) => (typeof item.str === "string" ? item.str : "") + (item.hasEOL ? "\n" : " "))
-        .join("")
-        .replace(/[ \t]+\n/g, "\n")
-        .replace(/\n{3,}/g, "\n\n")
-        .replace(/[ \t]{2,}/g, " ")
-        .trim()
-      if (pageText) parts.push(pageText)
-    } catch (error) {
-      logger.warn(`PDF.js fallback failed on page ${pageNum}:`, error)
-    }
-  }
-
-  const pages = pdf.numPages
-  await pdf.destroy()
-  return { text: parts.join("\n\n").trim(), pages }
+/**
+ * Serverless-safe text fallback used when liteparse fails or finds no text.
+ * Uses unpdf (a pdfjs build configured for Node/edge runtimes) so it works in
+ * serverless functions where raw pdfjs-dist throws "DOMMatrix is not defined".
+ */
+async function extractTextFallback(buffer: Buffer): Promise<{ text: string; pages: number }> {
+  const { extractText, getDocumentProxy } = await import("unpdf")
+  const pdf = await getDocumentProxy(new Uint8Array(buffer))
+  const { totalPages, text } = await extractText(pdf, { mergePages: true })
+  const merged = (Array.isArray(text) ? text.join("\n\n") : text)
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim()
+  return { text: merged, pages: totalPages }
 }
 
 /**
@@ -174,16 +145,16 @@ export async function extractPdf(
         warnings,
       }
     }
-    warnings.push("liteparse found no extractable text; using PDF.js fallback")
+    warnings.push("liteparse found no extractable text; using unpdf fallback")
   } catch (error) {
     warnings.push(
-      `liteparse failed (${error instanceof Error ? error.message : "unknown error"}); using PDF.js fallback`,
+      `liteparse failed (${error instanceof Error ? error.message : "unknown error"}); using unpdf fallback`,
     )
-    logger.warn("liteparse parse failed; falling back to PDF.js:", error)
+    logger.error("liteparse native parse unavailable; falling back to unpdf:", error)
   }
 
-  // Fallback engine: PDF.js text extraction.
-  const { text, pages } = await extractWithPdfjs(buffer)
+  // Fallback engine: serverless-safe text extraction via unpdf.
+  const { text, pages } = await extractTextFallback(buffer)
   const { advancedChunks, chunks } = buildChunks(text, options.fileName, documentId)
   return {
     text,
