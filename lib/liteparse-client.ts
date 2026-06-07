@@ -2,10 +2,11 @@
  * Server-only PDF extraction via @llamaindex/liteparse (native Rust + PDFium),
  * with a PDF.js text fallback.
  *
- * IMPORTANT: this module loads a native Node addon. Import it only from server
- * code (the /api/pdf/extract route) — never from a client component.
+ * IMPORTANT: this module is server-only. The native @llamaindex/liteparse addon
+ * is imported LAZILY (a dynamic import inside extractPdf) so it is never loaded
+ * during `next build` page-data collection — only at request time — and a native
+ * load failure degrades gracefully to the PDF.js fallback below.
  */
-import { LiteParse } from "@llamaindex/liteparse"
 import { AdvancedChunker, type TextChunk } from "./advanced-chunking"
 import { logger } from "./logger"
 import type { ExtractedImage } from "@/types/multimodal-types"
@@ -118,8 +119,11 @@ export async function extractPdf(
   const documentId = options.documentId ?? newId()
   const warnings: string[] = []
 
-  // Primary engine: liteparse (native).
+  // Primary engine: liteparse (native). The lazy dynamic import keeps the native
+  // addon out of `next build` page-data collection; a load failure is caught
+  // below and falls back to PDF.js.
   try {
+    const { LiteParse } = await import("@llamaindex/liteparse")
     const parser = new LiteParse({
       ocrEnabled: !!options.enableOCR,
       ocrLanguage: options.ocrLanguage ?? "eng",

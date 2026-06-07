@@ -9,6 +9,13 @@ const nextConfig = {
   },
   // External packages that should not be bundled
   serverExternalPackages: ['@llamaindex/liteparse', 'onnxruntime-node', '@huggingface/transformers', 'sharp'],
+  // Trace liteparse's platform-specific native binaries (.node) into the
+  // /api/pdf/extract serverless function so the native addon is present at
+  // runtime (e.g. on Vercel). Without this the addon can be missing at runtime
+  // and PDF parsing silently falls back to PDF.js.
+  outputFileTracingIncludes: {
+    '/api/pdf/extract': ['./node_modules/@llamaindex/**'],
+  },
   // Turbopack config (Next.js 16 default)
   turbopack: {},
   experimental: {
