@@ -23,8 +23,6 @@ interface AIConfig {
     | "minimax"
     | "fireworks"
     | "cerebras"
-    | "replicate"
-    | "anyscale"
   apiKey: string // User-provided API key for the selected provider
   model: string // Model name for the selected provider
   baseUrl?: string
@@ -62,63 +60,176 @@ const embeddingCache = new Map<string, EmbeddingCacheEntry>()
 const EMBEDDING_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
 const MAX_CACHE_SIZE = 1000 // Maximum cached embeddings
 
-const PROVIDER_DEFAULT_TEXT_MODELS: Record<AIConfig["provider"], string> = {
-  huggingface: "meta-llama/Meta-Llama-3.3-70B-Instruct",
-  openai: "gpt-4o-mini",
-  anthropic: "claude-sonnet-4-5-20250514",
-  aiml: "gpt-4o-mini",
-  groq: "llama-3.3-70b-versatile",
-  openrouter: "openai/gpt-4o-mini",
-  deepinfra: "meta-llama/Meta-Llama-3.3-70B-Instruct",
-  deepseek: "deepseek-chat",
-  googleai: "gemini-2.5-flash",
-  vertex: "gemini-2.5-flash",
+// Verified against official provider docs, August 2026.
+export const PROVIDER_DEFAULT_TEXT_MODELS: Record<AIConfig["provider"], string> = {
+  huggingface: "openai/gpt-oss-120b",
+  openai: "gpt-5.6-terra",
+  anthropic: "claude-sonnet-5",
+  aiml: "google/gemini-3-6-flash",
+  groq: "openai/gpt-oss-120b",
+  openrouter: "openai/gpt-5.6-luna",
+  deepinfra: "deepseek-ai/DeepSeek-V4-Flash",
+  deepseek: "deepseek-v4-flash",
+  googleai: "gemini-3.5-flash-lite",
+  vertex: "gemini-3.5-flash-lite",
   mistral: "mistral-small-latest",
-  perplexity: "sonar",
-  xai: "grok-3-latest",
+  perplexity: "perplexity/kimi-k3",
+  xai: "grok-4.3",
   alibaba: "qwen-turbo",
   minimax: "abab6.5-chat",
-  fireworks: "accounts/fireworks/models/llama-v3p3-70b-instruct",
-  cerebras: "llama3.1-8b",
-  replicate: "meta/meta-llama-3-8b-instruct",
-  anyscale: "meta-llama/Meta-Llama-3.1-8B-Instruct",
+  fireworks: "accounts/fireworks/models/deepseek-v4-flash",
+  cerebras: "gpt-oss-120b",
 }
 
-const PROVIDER_DEFAULT_EMBEDDING_MODELS: Partial<Record<AIConfig["provider"], string>> = {
-  huggingface: "sentence-transformers/all-MiniLM-L6-v2",
+export const PROVIDER_DEFAULT_EMBEDDING_MODELS: Partial<Record<AIConfig["provider"], string>> = {
+  huggingface: "Qwen/Qwen3-Embedding-0.6B",
   openai: "text-embedding-3-small",
-  aiml: "text-embedding-3-small",
-  googleai: "gemini-embedding-001",
-  fireworks: "nomic-ai/nomic-embed-text-v1.5",
-  deepinfra: "BAAI/bge-base-en-v1.5",
+  aiml: "openai/text-embedding-3-small",
+  googleai: "gemini-embedding-2",
+  fireworks: "accounts/fireworks/models/qwen3-embedding-0p6b",
+  deepinfra: "Qwen/Qwen3-Embedding-0.6B",
+  mistral: "mistral-embed",
 }
 
-const MODEL_MIGRATIONS: Partial<Record<AIConfig["provider"], Record<string, string>>> = {
+/**
+ * Old model id -> current replacement.
+ *
+ * This is load-bearing, not cosmetic: `aiConfig` is persisted to localStorage by
+ * lib/store.ts, so anyone who already picked a model keeps that exact string
+ * across updates. Without an entry here, retiring an id from the dropdown leaves
+ * existing users sending a model the provider no longer serves.
+ *
+ * Every id removed from AI_PROVIDERS in unified-configuration.tsx should appear
+ * on the left-hand side of one of these maps.
+ */
+export const MODEL_MIGRATIONS: Partial<Record<AIConfig["provider"], Record<string, string>>> = {
   googleai: {
-    "embedding-001": "gemini-embedding-001",
-    "models/embedding-001": "gemini-embedding-001",
+    "embedding-001": "gemini-embedding-2",
+    "models/embedding-001": "gemini-embedding-2",
+    "gemini-embedding-001": "gemini-embedding-2",
+    "gemini-3-pro": "gemini-3.1-pro-preview",
+    "gemini-3-pro-preview": "gemini-3.1-pro-preview",
+    "gemini-2.0-flash": "gemini-3.5-flash-lite",
   },
   openai: {
-    "gpt-4-turbo-preview": "gpt-4o",
+    "gpt-4-turbo-preview": "gpt-5.6-sol",
+    // Shut down 2026-10-23
+    "gpt-4o": "gpt-5.6-sol",
+    "gpt-4-turbo": "gpt-5.6-sol",
+    o1: "gpt-5.6-sol",
+    // Shut down 2026-12-11
+    "gpt-5-pro": "gpt-5.6-sol",
+    "gpt-5-mini": "gpt-5.6-terra",
+    "gpt-5-nano": "gpt-5.6-luna",
+    "o3-2025-04-16": "gpt-5.6-sol",
+    // The -chat-latest variant shuts down 2026-08-10; plain gpt-5.1 is fine.
+    "gpt-5.1-chat-latest": "gpt-5.1",
   },
   anthropic: {
-    "claude-3-5-haiku-latest": "claude-3-5-haiku-20241022",
+    // These two ids carried a 20250514 suffix that never existed for 4.5.
+    "claude-sonnet-4-5-20250514": "claude-sonnet-5",
+    "claude-haiku-4-5-20250514": "claude-haiku-4-5",
+    // Retired per the official deprecations table.
+    "claude-sonnet-4-20250514": "claude-sonnet-5",
+    "claude-3-5-sonnet-20241022": "claude-sonnet-5",
+    "claude-3-5-haiku-20241022": "claude-haiku-4-5",
+    "claude-3-5-haiku-latest": "claude-haiku-4-5",
+    "claude-3-opus-20240229": "claude-opus-5",
   },
   deepseek: {
-    "deepseek-r1": "deepseek-reasoner",
+    "deepseek-r1": "deepseek-v4-pro",
+    "deepseek-chat": "deepseek-v4-flash",
+    "deepseek-reasoner": "deepseek-v4-pro",
+    "deepseek-v3.1": "deepseek-v4-flash",
+    "deepseek-coder": "deepseek-v4-pro",
+  },
+  groq: {
+    "llama-3.3-70b-versatile": "openai/gpt-oss-120b",
+    "llama-3.1-8b-instant": "openai/gpt-oss-20b",
+    "meta-llama/llama-4-maverick-17b-128e-instruct": "openai/gpt-oss-120b",
+    "meta-llama/llama-4-scout-17b-16e-instruct": "openai/gpt-oss-20b",
+    "moonshotai/kimi-k2-instruct-0905": "minimaxai/minimax-m2.7",
+    "qwen/qwen3-32b": "qwen/qwen3.6-27b",
   },
   perplexity: {
-    "llama-3.1-sonar-small-128k-online": "sonar",
-    "llama-3.1-sonar-large-128k-online": "sonar-pro",
-    "llama-3.1-sonar-huge-128k-online": "sonar-pro",
+    // The sonar surface is deprecated and unreachable at the gateway path.
+    "llama-3.1-sonar-small-128k-online": "perplexity/kimi-k3",
+    "llama-3.1-sonar-large-128k-online": "perplexity/kimi-k3",
+    "llama-3.1-sonar-huge-128k-online": "perplexity/kimi-k3",
+    sonar: "perplexity/kimi-k3",
+    "sonar-pro": "perplexity/kimi-k3",
+    "sonar-reasoning": "perplexity/glm-5.2",
+    "sonar-reasoning-pro": "perplexity/glm-5.2",
+    "sonar-deep-research": "perplexity/glm-5.2",
   },
   xai: {
-    "grok-beta": "grok-3-latest",
-    "grok-3-mini-beta": "grok-3-mini",
-    "grok-3-beta": "grok-3-latest",
+    "grok-beta": "grok-4.3",
+    "grok-3-beta": "grok-4.3",
+    "grok-3-latest": "grok-4.3",
+    "grok-3-mini-beta": "grok-4.3",
+    "grok-3-mini": "grok-4.3",
+    "grok-4-0709": "grok-4.5",
+    "grok-vision": "grok-4.5",
+  },
+  mistral: {
+    "mistral-large-2512": "mistral-large-latest",
+    "mistral-medium-2508": "mistral-medium-latest",
+    "mistral-small-2506": "mistral-small-latest",
+    "ministral-3-14b-2512": "ministral-3-14b-latest",
+    "ministral-3-8b-2512": "ministral-3-8b-latest",
+    "ministral-3-3b-2512": "ministral-3-3b-latest",
+    "magistral-medium-2509": "mistral-medium-latest",
+    "magistral-small-2509": "mistral-small-latest",
+    "pixtral-large-latest": "mistral-large-latest",
+  },
+  cerebras: {
+    "llama3.3-70b": "gpt-oss-120b",
+    "llama3.1-70b": "gpt-oss-120b",
+    "llama3.1-8b": "gpt-oss-120b",
+  },
+  fireworks: {
+    "accounts/fireworks/models/llama-v3p3-70b-instruct": "accounts/fireworks/models/deepseek-v4-flash",
+    "accounts/fireworks/models/deepseek-v3p1": "accounts/fireworks/models/deepseek-v4-flash",
+    "accounts/fireworks/models/kimi-k2-instruct-0905": "accounts/fireworks/models/kimi-k3",
+    "accounts/fireworks/models/qwen3-235b-a22b": "accounts/fireworks/models/qwen3p7-plus",
+    "accounts/fireworks/models/qwen3-32b": "accounts/fireworks/models/qwen3p7-plus",
+    "accounts/fireworks/models/glm-4p6": "accounts/fireworks/models/glm-5p2",
+    "nomic-ai/nomic-embed-text-v1.5": "accounts/fireworks/models/qwen3-embedding-0p6b",
+  },
+  huggingface: {
+    // The "Meta-" prefix was only ever used for Llama 3 / 3.1.
+    "meta-llama/Meta-Llama-3.3-70B-Instruct": "meta-llama/Llama-3.3-70B-Instruct",
+    "Qwen/Qwen2.5-72B-Instruct": "Qwen/Qwen3.5-397B-A17B",
+    "deepseek-ai/DeepSeek-V3": "deepseek-ai/DeepSeek-V4-Flash",
+    "google/gemma-2-27b-it": "openai/gpt-oss-120b",
+    "sentence-transformers/all-MiniLM-L6-v2": "Qwen/Qwen3-Embedding-0.6B",
+  },
+  deepinfra: {
+    "meta-llama/Meta-Llama-3.3-70B-Instruct": "deepseek-ai/DeepSeek-V4-Flash",
+    "deepseek-ai/DeepSeek-V3": "deepseek-ai/DeepSeek-V4-Flash",
+    "mistralai/Mistral-Small-3.2-Instruct": "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+    "BAAI/bge-base-en-v1.5": "Qwen/Qwen3-Embedding-0.6B",
+  },
+  openrouter: {
+    "openai/gpt-4o-mini": "openai/gpt-5.6-luna",
+    "openai/gpt-5.1": "openai/gpt-5.6-sol",
+    "openai/gpt-5-mini": "openai/gpt-5.6-terra",
+    "anthropic/claude-3.5-sonnet-20241022": "anthropic/claude-sonnet-5",
+    "google/gemini-2.5-pro": "google/gemini-3.6-flash",
+    "meta-llama/llama-3.3-405b-instruct": "openai/gpt-5.6-luna",
+  },
+  aiml: {
+    "gpt-4o-mini": "google/gemini-3-6-flash",
+    "gpt-5.1": "openai/gpt-5.6-sol",
+    "claude-3-5-sonnet-20241022": "anthropic/claude-sonnet-5",
+    "gemini-2.5-pro": "google/gemini-3-6-flash",
+    "gemini-2.5-flash": "google/gemini-3-5-flash-lite",
+    "llama-3.3-70b-instruct": "google/gemini-3-6-flash",
+    "deepseek-v3": "deepseek/deepseek-v4-flash",
+    "text-embedding-3-small": "openai/text-embedding-3-small",
   },
   vertex: {
-    "text-embedding-gecko": "gemini-2.5-flash",
+    "text-embedding-gecko": "gemini-3.5-flash-lite",
   },
 }
 
@@ -698,10 +809,6 @@ export class AIClient {
           return await this.generateFireworksText(messages, temperature)
         case "cerebras":
           return await this.generateCerebrasText(messages, temperature)
-        case "replicate":
-          return await this.generateReplicateText(messages, temperature)
-        case "anyscale":
-          return await this.generateAnyscaleText(messages, temperature)
         default:
           throw new Error(`Text generation not supported for provider: ${this.config.provider}`)
       }
@@ -727,7 +834,7 @@ export class AIClient {
       const streamingSupportedProviders = [
         "openai", "anthropic", "groq", "openrouter", "deepinfra", 
         "deepseek", "mistral", "perplexity", "xai", "fireworks", 
-        "cerebras", "anyscale", "aiml"
+        "cerebras", "aiml"
       ]
 
       if (streamingSupportedProviders.includes(this.config.provider)) {
@@ -775,7 +882,6 @@ export class AIClient {
       case "xai":
       case "fireworks":
       case "cerebras":
-      case "anyscale":
       case "aiml":
         return await this.generateGenericOpenAICompatibleStream(messages, onChunk, onComplete, onError)
       default:
@@ -969,19 +1075,6 @@ export class AIClient {
           temperature: 0.7
         }
       },
-      anyscale: {
-        baseUrl: this.config.baseUrl || "https://api.endpoints.anyscale.com/v1",
-        headers: {
-          Authorization: `Bearer ${this.config.apiKey}`,
-          "Content-Type": "application/json"
-        },
-        requestBody: {
-          model: textModel,
-          messages,
-          max_tokens: 2048,
-          temperature: 0.7
-        }
-      },
       aiml: {
         baseUrl: this.config.baseUrl || "https://api.aimlapi.com/v1",
         headers: {
@@ -1023,10 +1116,6 @@ export class AIClient {
           return await this.testDeepInfraConnection()
         case "googleai":
           return await this.testGoogleAIConnection()
-        case "replicate":
-          return await this.testReplicateConnection()
-        case "anyscale":
-          return await this.testAnyscaleConnection()
         // ... other test connection cases
         default:
           // For providers using simpleTestConnection
@@ -1688,73 +1777,6 @@ export class AIClient {
   private async testGoogleAIConnection(): Promise<boolean> {
     try {
       await this.generateGoogleAIText([{ role: "user", content: "test" }])
-      return true
-    } catch {
-      return false
-    }
-  }
-
-  private async generateReplicateText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://api.replicate.com/v1"
-    const apiKey = this.config.apiKey?.trim()
-    const model = this.getModelForPurpose("text")
-    if (!apiKey) {
-      throw new Error("Replicate API key is not configured")
-    }
-
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens: 1024,
-        temperature,
-      }),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Replicate API error (${response.status}): ${response.statusText} - ${errorText}`)
-    }
-
-    const result = await response.json()
-    const content = result.choices?.[0]?.message?.content || result.output_text
-    if (!content || typeof content !== "string") {
-      throw new Error("Invalid response format from Replicate API")
-    }
-    return content
-  }
-
-  private async testReplicateConnection(): Promise<boolean> {
-    try {
-      await this.generateReplicateText([{ role: "user", content: "test" }])
-      return true
-    } catch (error) {
-      console.error("Replicate connection test failed:", error)
-      return false
-    }
-  }
-
-  private async generateAnyscaleText(messages: ChatMessage[], temperature: number = 0.1): Promise<string> {
-    const baseUrl = this.config.baseUrl || "https://api.endpoints.anyscale.com/v1"
-    const model = this.getModelForPurpose("text")
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.config.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages: messages, max_tokens: 500, temperature }),
-    })
-    if (!response.ok) throw new Error(`Anyscale API error: ${response.statusText}`)
-    const result = await response.json()
-    return result.choices[0].message.content
-  }
-
-  private async testAnyscaleConnection(): Promise<boolean> {
-    try {
-      await this.generateAnyscaleText([{ role: "user", content: "test" }])
       return true
     } catch {
       return false

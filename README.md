@@ -1,6 +1,6 @@
 # QuantumPDF - AI Document Analysis Platform
 
-> **Advanced document analysis with 3-phase RAG, guardrails, evaluation metrics, and 19+ AI providers**
+> **Advanced document analysis with 3-phase RAG, guardrails, evaluation metrics, and 14 AI providers**
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)
@@ -16,7 +16,7 @@
 | Feature | Description |
 |---------|-------------|
 | **3-Phase RAG** | Context Analysis → Self-Critique → Refined Answer |
-| **19+ AI Providers** | OpenAI, Anthropic, Groq, DeepSeek, Mistral, and more |
+| **14 AI Providers** | OpenAI, Anthropic, Google, Groq, DeepSeek, Mistral, xAI, and more |
 | **Guardrails System** | Input validation, rate limiting, toxicity detection, PII detection |
 | **Evaluation Metrics** | Retrieval quality, groundedness, citation coverage, latency tracking |
 | **Cross-Document Retrieval** | Fair distribution with multi-document query detection |
@@ -36,21 +36,21 @@
 <td>
 
 **Major Providers**
-- ✅ OpenAI (GPT-5.1, GPT-4o, o3)
-- ✅ Anthropic (Claude 4.5 Sonnet/Haiku)
-- ✅ Google AI (Gemini 3 Pro, 2.5 Flash)
-- ✅ xAI (Grok 4, Grok 3)
-- ✅ Mistral (Large 3, Magistral)
-- ✅ DeepSeek (V3.2, Reasoner)
+- ✅ OpenAI (GPT-5.6 Sol / Terra / Luna)
+- ✅ Anthropic (Claude 5 Fable / Opus / Sonnet)
+- ✅ Google AI (Gemini 3.6 / 3.5 Flash)
+- ✅ xAI (Grok 4.5, Grok 4.3)
+- ✅ Mistral (Large / Medium / Small, Ministral 3)
+- ✅ DeepSeek (V4 Pro, V4 Flash)
 
 </td>
 <td>
 
 **Fast Inference**
-- ✅ Groq (Llama 4, GPT-OSS)
-- ✅ Fireworks (Kimi K2, Qwen 3)
-- ✅ Cerebras (Llama 3.3)
-- ✅ Perplexity (Sonar Deep Research)
+- ✅ Groq (GPT-OSS, MiniMax M2.7, Qwen 3.6)
+- ✅ Fireworks (DeepSeek V4, Kimi K3, GLM 5.2)
+- ✅ Cerebras (GPT-OSS 120B, Gemma 4)
+- ✅ Perplexity (OpenAI-compatible gateway)
 
 </td>
 <td>
@@ -58,10 +58,8 @@
 **Open Source & Enterprise**
 - ✅ HuggingFace
 - ✅ DeepInfra
-- ✅ Replicate
 - ✅ OpenRouter
 - ✅ AIML API
-- ✅ Anyscale
 
 </td>
 </tr>
@@ -198,7 +196,7 @@ XLS XLSX XLSM XLSB ODS CSV TSV         up to  50 MB — in-browser
                                     │
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          AI Providers                                    │
-│  OpenAI │ Anthropic │ Groq │ DeepSeek │ Mistral │ 14+ more providers   │
+│  OpenAI │ Anthropic │ Google │ Groq │ DeepSeek │ Mistral │ 8 more        │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 

@@ -12,9 +12,16 @@ const nextConfig = {
   // Trace liteparse's platform-specific native binary (.node) into the
   // serverless function so the addon is present at runtime (e.g. on Vercel).
   // Without this liteparse silently falls back to unpdf.
-  outputFileTracingIncludes: {
-    '/api/pdf/extract': ['./node_modules/@llamaindex/**'],
-  },
+  //
+  // Skipped on Windows: under pnpm, `node_modules/@llamaindex/*` are junctions
+  // into the `.pnpm` store, and Turbopack's file tracer panics reading one
+  // ("Access is denied. (os error 5)"), which fails the whole build. Tracing is
+  // only needed to bundle the addon for a serverless deploy — a local
+  // `next build && next start` resolves it from node_modules directly — so
+  // dropping it on win32 costs nothing and unblocks pnpm on Windows.
+  ...(process.platform === 'win32'
+    ? {}
+    : { outputFileTracingIncludes: { '/api/pdf/extract': ['./node_modules/@llamaindex/**'] } }),
   // Turbopack config (Next.js 16 default)
   turbopack: {},
   experimental: {

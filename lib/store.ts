@@ -84,8 +84,6 @@ export type AIProvider =
   | "minimax"
     | "fireworks"
   | "cerebras"
-    | "replicate"
-    | "anyscale"
 
 interface AIConfig {
   provider: AIProvider
@@ -208,7 +206,7 @@ export const useAppStore = create<AppState>()(
         const validProviders: AIProvider[] = [
           "huggingface", "openai", "anthropic", "aiml", "groq", "openrouter",
           "deepinfra", "deepseek", "googleai", "vertex", "mistral", "perplexity",
-          "xai", "alibaba", "minimax", "fireworks", "cerebras", "replicate", "anyscale"
+          "xai", "alibaba", "minimax", "fireworks", "cerebras"
         ];
         
         if (!validProviders.includes(config.provider)) {
@@ -261,7 +259,7 @@ export const useAppStore = create<AppState>()(
         activeTab: state.activeTab,
       }),
       // Add version and migration logic
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown, version: number) => {
         if (!persistedState || typeof persistedState !== "object") {
           return persistedState
@@ -298,6 +296,28 @@ export const useAppStore = create<AppState>()(
                 model: "gpt-4o-mini",
                 baseUrl: "https://api.openai.com/v1"
               };
+            }
+          }
+        }
+
+        if (version < 3) {
+          // Anyscale Endpoints was shut down, and Replicate never had an
+          // OpenAI-compatible chat endpoint for this client to call. Anyone
+          // persisted onto either would otherwise sit on a provider the app no
+          // longer implements. Stale *model* ids are handled separately by
+          // MODEL_MIGRATIONS in lib/ai-client.ts, which remaps them at call time.
+          const removedProviders = ["replicate", "anyscale"]
+          const aiConfig = state.aiConfig as Record<string, unknown> | undefined
+          if (aiConfig && typeof aiConfig === "object") {
+            const provider = typeof aiConfig.provider === "string" ? aiConfig.provider : ""
+            if (removedProviders.includes(provider)) {
+              console.warn(`Provider "${provider}" was removed; migrating to "openai"`)
+              state.aiConfig = {
+                ...aiConfig,
+                provider: "openai",
+                model: "gpt-5.6-terra",
+                baseUrl: "https://api.openai.com/v1",
+              }
             }
           }
         }

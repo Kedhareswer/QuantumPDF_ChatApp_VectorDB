@@ -17,46 +17,46 @@ import { useAppStore } from "@/lib/store"
 import { AlertTriangle, Check, Cpu, Database, ExternalLink, Eye, EyeOff, Info, Loader2, X, Zap } from "lucide-react"
 import { useState } from "react"
 
-// Updated: December 2025 - Latest models from official provider documentation
-const AI_PROVIDERS = {
+// Updated: August 2026 — verified against each provider's official model documentation.
+// Retiring an id here is not enough on its own: aiConfig is persisted to localStorage,
+// so every removed id also needs a MODEL_MIGRATIONS entry in lib/ai-client.ts or existing
+// users keep sending a model the API no longer knows.
+export const AI_PROVIDERS = {
   // Major Providers
   openai: {
     name: "OpenAI",
-    description: "GPT-5 family, GPT-4o, and o-series reasoning models (Dec 2025)",
+    description: "GPT-5.6 family (Sol/Terra/Luna), 1.05M context (Aug 2026)",
     category: "Major",
     models: [
-      "gpt-5.1",           // Latest flagship (Dec 2025)
-      "gpt-5-pro",         // Pro tier
-      "gpt-5-mini",        // Efficient model
-      "gpt-5-nano",        // Smallest model
-      "gpt-4o",            // GPT-4 Omni multimodal
-      "gpt-4o-mini",       // Cost-effective GPT-4o
-      "o3-2025-04-16",     // Reasoning model
-      "o1",                // Original reasoning
-      "gpt-4-turbo"        // Legacy but stable
+      "gpt-5.6-sol",       // Flagship — `gpt-5.6` aliases here; reasoning.mode "pro" replaces gpt-5-pro
+      "gpt-5.6-terra",     // Balanced — replaces the old mini tier
+      "gpt-5.6-luna",      // Cheap/high-volume — replaces the old nano tier
+      "gpt-5.5",           // Previous-gen frontier, still active
+      "gpt-5.1",           // Older gen, still active
+      "gpt-4o-mini"        // Legacy cheap option, still active
     ],
-    defaultModel: "gpt-4o-mini",
+    defaultModel: "gpt-5.6-terra",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.openai.com/v1",
     signupUrl: "https://platform.openai.com/api-keys",
     supportsEmbeddings: true,
     icon: "",
-    features: ["Chat completion", "Embeddings", "Function calling", "Vision", "Audio"]
+    features: ["Chat completion", "Embeddings", "Function calling", "Vision", "Reasoning"]
   },
   anthropic: {
     name: "Anthropic",
-    description: "Claude 4.5 Sonnet/Haiku - frontier models with extended thinking (Dec 2025)",
+    description: "Claude 5 family — Fable, Opus, Sonnet; 1M context (Aug 2026)",
     category: "Major",
     models: [
-      "claude-sonnet-4-5-20250514",   // Claude 4.5 Sonnet (latest frontier)
-      "claude-haiku-4-5-20250514",    // Claude 4.5 Haiku (fast + intelligent)
-      "claude-sonnet-4-20250514",     // Claude 4 Sonnet
-      "claude-3-5-sonnet-20241022",   // Claude 3.5 Sonnet (stable)
-      "claude-3-5-haiku-20241022",    // Claude 3.5 Haiku
-      "claude-3-opus-20240229"        // Claude 3 Opus (legacy)
+      "claude-fable-5",    // Most capable
+      "claude-opus-5",     // Flagship for complex agentic work
+      "claude-sonnet-5",   // Best speed/intelligence balance
+      "claude-haiku-4-5",  // Fast + cheap (alias for claude-haiku-4-5-20251001)
+      "claude-opus-4-8",   // Previous-gen Opus, still active
+      "claude-sonnet-4-6"  // Previous-gen Sonnet, still active
     ],
-    defaultModel: "claude-sonnet-4-5-20250514",
+    defaultModel: "claude-sonnet-5",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.anthropic.com",
@@ -64,22 +64,23 @@ const AI_PROVIDERS = {
     supportsEmbeddings: false,
     icon: "🧠",
     pricing: "Pay-per-token",
-    features: ["Chat completion", "Function calling", "Vision", "Large context", "Extended thinking"]
+    features: ["Chat completion", "Function calling", "Vision", "1M context", "Extended thinking"]
   },
   googleai: {
     name: "Google AI",
-    description: "Gemini 3 Pro & 2.5 family with multimodal capabilities (Dec 2025)",
+    description: "Gemini 3.x family with multimodal capabilities (Aug 2026)",
     category: "Major",
     models: [
-      "gemini-3-pro",            // Latest flagship (Dec 2025)
-      "gemini-3-pro-preview",    // Preview version
-      "gemini-2.5-pro",          // Stable pro model
-      "gemini-2.5-flash",        // Best price-performance
-      "gemini-2.5-flash-lite",   // Lightweight version
-      "gemini-2.0-flash",        // Previous generation
-      "gemini-embedding-001"     // Text embeddings
+      "gemini-3.6-flash",        // Newest flash
+      "gemini-3.5-flash",        // Stable flash
+      "gemini-3.5-flash-lite",   // Cheapest stable
+      "gemini-3.1-flash-lite",   // Previous lite
+      "gemini-3.1-pro-preview",  // Pro (still preview — ids can move)
+      "gemini-2.5-pro",          // Previous-gen pro
+      "gemini-2.5-flash",        // Previous-gen flash
+      "gemini-2.5-flash-lite",   // Previous-gen lite
     ],
-    defaultModel: "gemini-2.5-flash",
+    defaultModel: "gemini-3.5-flash-lite",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
@@ -87,96 +88,82 @@ const AI_PROVIDERS = {
     supportsEmbeddings: true,
     icon: "⚡",
     pricing: "Pay-per-token",
-    features: ["Chat completion", "Embeddings", "Vision", "Multimodal", "Live API"]
+    features: ["Chat completion", "Embeddings", "Vision", "Multimodal", "Long context"]
   },
   groq: {
     name: "Groq",
-    description: "Ultra-fast inference - Llama 4, GPT-OSS, Qwen 3 (Dec 2025)",
+    description: "Ultra-fast inference — GPT-OSS, MiniMax, Qwen 3.6 (Aug 2026)",
     category: "Fast",
     models: [
-      "llama-3.3-70b-versatile",           // Production - Llama 3.3
-      "llama-3.1-8b-instant",              // Production - Fast
-      "meta-llama/llama-guard-4-12b",      // Production - Safety
-      "openai/gpt-oss-120b",               // Production - GPT OSS large
-      "openai/gpt-oss-20b",                // Production - GPT OSS small
-      "meta-llama/llama-4-maverick-17b-128e-instruct",  // Preview - Llama 4
-      "meta-llama/llama-4-scout-17b-16e-instruct",      // Preview - Llama 4 Scout
-      "moonshotai/kimi-k2-instruct-0905",  // Preview - Kimi K2
-      "qwen/qwen3-32b"                     // Preview - Qwen 3
+      "openai/gpt-oss-120b",      // Large GPT-OSS
+      "openai/gpt-oss-20b",       // Small GPT-OSS
+      "minimaxai/minimax-m2.7",   // MiniMax M2.7
+      "qwen/qwen3.6-27b",         // Qwen 3.6
+      "groq/compound",            // Groq agentic system
+      "groq/compound-mini"        // Smaller agentic system
     ],
-    defaultModel: "llama-3.3-70b-versatile",
+    defaultModel: "openai/gpt-oss-120b",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.groq.com/openai/v1",
     signupUrl: "https://console.groq.com/keys",
     supportsEmbeddings: false,
     icon: "",
-    features: ["Ultra-fast inference", "Llama 4 preview", "GPT-OSS models", "Low latency"]
+    features: ["Ultra-fast inference", "GPT-OSS models", "Low latency"]
   },
   fireworks: {
     name: "Fireworks AI",
-    description: "Fast inference - DeepSeek V3.1, Kimi K2, Qwen 3 (Dec 2025)",
+    description: "Fast inference — DeepSeek V4, Kimi K3, GLM 5.2 (Aug 2026)",
     category: "Commercial",
     models: [
-      "accounts/fireworks/models/kimi-k2-instruct-0905",    // Top performer
-      "accounts/fireworks/models/deepseek-v3p1",            // DeepSeek V3.1
-      "accounts/fireworks/models/qwen3-235b-a22b",          // Qwen 3 large
-      "accounts/fireworks/models/qwen3-32b",                // Qwen 3 medium
-      "accounts/fireworks/models/llama-v3p3-70b-instruct",  // Llama 3.3
-      "accounts/fireworks/models/gpt-oss-120b",             // GPT-OSS large
-      "accounts/fireworks/models/gpt-oss-20b",              // GPT-OSS small
-      "accounts/fireworks/models/glm-4p6"                   // GLM 4.6
+      "accounts/fireworks/models/deepseek-v4-pro",
+      "accounts/fireworks/models/deepseek-v4-flash",
+      "accounts/fireworks/models/kimi-k3",
+      "accounts/fireworks/models/kimi-k2p6",
+      "accounts/fireworks/models/glm-5p2",
+      "accounts/fireworks/models/minimax-m3",
+      "accounts/fireworks/models/qwen3p7-plus",
+      "accounts/fireworks/models/gpt-oss-120b",
+      "accounts/fireworks/models/gpt-oss-20b"
     ],
-    defaultModel: "accounts/fireworks/models/llama-v3p3-70b-instruct",
+    defaultModel: "accounts/fireworks/models/deepseek-v4-flash",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.fireworks.ai/inference/v1",
     signupUrl: "https://fireworks.ai/",
     supportsEmbeddings: true,
     icon: "",
-    features: ["Fast inference", "DeepSeek V3.1", "Qwen 3", "Competitive pricing"]
+    features: ["Fast inference", "DeepSeek V4", "Kimi K3", "Competitive pricing"]
   },
   mistral: {
     name: "Mistral AI",
-    description: "Mistral Large 3, Medium 3.1, Magistral reasoning models (Dec 2025)",
+    description: "Mistral Large/Medium/Small + Ministral 3 family (Aug 2026)",
     category: "Commercial",
     models: [
-      // Generalist models
-      "mistral-large-2512",      // Mistral Large 3 (Dec 2025)
-      "mistral-medium-2508",     // Mistral Medium 3.1 (Aug 2025)
-      "mistral-small-2506",      // Mistral Small 3.2 (Jun 2025)
-      // Ministral family
-      "ministral-3-14b-2512",    // Ministral 3 14B
-      "ministral-3-8b-2512",     // Ministral 3 8B
-      "ministral-3-3b-2512",     // Ministral 3 3B
-      // Reasoning models
-      "magistral-medium-2509",   // Magistral Medium 1.2
-      "magistral-small-2509",    // Magistral Small 1.2
-      // Specialist models
+      // Rolling aliases — Mistral moves these to the current snapshot for you
+      "mistral-large-latest",
+      "mistral-medium-latest",
+      "mistral-small-latest",
+      "ministral-3-14b-latest",
+      "ministral-3-8b-latest",
+      "ministral-3-3b-latest",
       "codestral-2508",          // Coding specialist
-      "devstral-medium-2507",    // SWE specialist
-      "devstral-small-2507",     // SWE small
-      "voxtral-small-2507",      // Audio input
-      "voxtral-mini-2507",       // Audio mini
-      "mistral-ocr-2505",        // OCR specialist
-      "pixtral-large-latest",    // Vision model
-      "mistral-embed"            // Embeddings
     ],
-    defaultModel: "mistral-large-2512",
+    defaultModel: "mistral-small-latest",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.mistral.ai/v1",
     signupUrl: "https://console.mistral.ai/",
     supportsEmbeddings: true,
     icon: "",
-    features: ["Mistral Large 3", "Magistral reasoning", "Vision", "Audio", "OCR", "Coding"]
+    features: ["Rolling aliases", "Ministral 3", "Embeddings", "Coding"]
   },
   cerebras: {
     name: "Cerebras",
-    description: "Extremely fast inference on specialized chips",
+    description: "Extremely fast inference on specialized chips (Aug 2026)",
     category: "Fast",
-    models: ["llama3.3-70b", "llama3.1-8b", "llama3.1-70b"],
-    defaultModel: "llama3.1-8b",
+    models: ["gpt-oss-120b", "gemma-4-31b", "zai-glm-4.7"],
+    defaultModel: "gpt-oss-120b",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.cerebras.ai/v1",
@@ -190,16 +177,20 @@ const AI_PROVIDERS = {
   // Aggregators
   openrouter: {
     name: "OpenRouter",
-    description: "Access to multiple AI models through one API",
+    description: "One API in front of every major lab (Aug 2026)",
     category: "Aggregator",
     models: [
-      "openai/gpt-5.1",
-      "openai/gpt-5-mini",
-      "anthropic/claude-3.5-sonnet-20241022",
-      "google/gemini-2.5-pro",
-      "meta-llama/llama-3.3-405b-instruct",
+      "openai/gpt-5.6-sol",
+      "openai/gpt-5.6-terra",
+      "openai/gpt-5.6-luna",
+      "anthropic/claude-opus-5",
+      "anthropic/claude-sonnet-5",
+      "google/gemini-3.6-flash",
+      "google/gemini-3.5-flash-lite",
+      "x-ai/grok-4.5",
+      "deepseek/deepseek-v4-flash-0731"
     ],
-    defaultModel: "openai/gpt-5-mini",
+    defaultModel: "openai/gpt-5.6-luna",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://openrouter.ai/api/v1",
@@ -211,17 +202,20 @@ const AI_PROVIDERS = {
   },
   aiml: {
     name: "AI/ML API",
-    description: "Unified access to 200+ AI providers",
+    description: "Unified access to 200+ models (Aug 2026)",
     category: "Aggregator",
     models: [
-      "gpt-5.1",
-      "claude-3-5-sonnet-20241022",
-      "gemini-2.5-pro",
-      "gemini-2.5-flash",
-      "llama-3.3-70b-instruct",
-      "deepseek-v3",
+      "openai/gpt-5.6-sol",
+      "openai/gpt-5.6-luna",
+      "anthropic/claude-opus-5",
+      "anthropic/claude-sonnet-5",
+      "google/gemini-3-6-flash",
+      "google/gemini-3-5-flash-lite",
+      "x-ai/grok-4-5",
+      "alibaba/qwen3.8-max",
+      "deepseek/deepseek-v4-flash"
     ],
-    defaultModel: "gpt-5.1",
+    defaultModel: "google/gemini-3-6-flash",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.aimlapi.com/v1",
@@ -235,56 +229,72 @@ const AI_PROVIDERS = {
   // Specialized
   huggingface: {
     name: "Hugging Face",
-    description: "Open source models and inference API",
+    description: "Inference Providers router — open-weight models (Aug 2026)",
     category: "Open Source",
     models: [
-      "meta-llama/Meta-Llama-3.3-70B-Instruct",
-      "Qwen/Qwen2.5-72B-Instruct",
-      "deepseek-ai/DeepSeek-V3",
-      "mistralai/Mistral-Small-3.2-Instruct",
-      "google/gemma-2-27b-it",
+      "openai/gpt-oss-120b",
+      "openai/gpt-oss-20b",
+      "deepseek-ai/DeepSeek-V4-Pro",
+      "deepseek-ai/DeepSeek-V4-Flash",
+      "zai-org/GLM-5.2",
+      "zai-org/GLM-4.7-Flash",
+      "moonshotai/Kimi-K3",
+      "Qwen/Qwen3.5-397B-A17B",
+      "MiniMaxAI/MiniMax-M3",
+      "meta-llama/Llama-3.3-70B-Instruct"
     ],
-    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
+    defaultModel: "openai/gpt-oss-120b",
     apiKeyRequired: true,
     baseUrlRequired: false,
-    defaultBaseUrl: "https://api-inference.huggingface.co",
+    // The legacy api-inference.huggingface.co host is deprecated; Inference
+    // Providers is the current surface. Needs a fine-grained token with the
+    // "Make calls to Inference Providers" permission — a read token is not enough.
+    defaultBaseUrl: "https://router.huggingface.co/v1",
     signupUrl: "https://huggingface.co/settings/tokens",
     supportsEmbeddings: true,
     icon: "",
-    features: ["Open source models", "Free tier", "Community models"]
+    features: ["Open-weight models", "Many providers", "Community models"]
   },
   perplexity: {
     name: "Perplexity",
-    description: "Sonar search-augmented models with reasoning (Dec 2025)",
+    description: "OpenAI-compatible gateway (Aug 2026)",
     category: "Specialized",
     models: [
-      "sonar",                  // Base search model
-      "sonar-pro",              // Advanced search (2x results)
-      "sonar-reasoning",        // Reasoning with search
-      "sonar-reasoning-pro",    // Pro reasoning
-      "sonar-deep-research"     // Deep research agent
+      "perplexity/kimi-k3",
+      "perplexity/glm-5.2"
     ],
-    defaultModel: "sonar",
+    defaultModel: "perplexity/kimi-k3",
     apiKeyRequired: true,
     baseUrlRequired: false,
-    defaultBaseUrl: "https://api.perplexity.ai",
+    // The old /chat/completions Sonar path is gone. This is the gateway, which
+    // keeps the OpenAI chat-completions shape the rest of this app speaks.
+    // The richer Agent API (/v1/agent) is Responses-shaped and would need a
+    // separate request/response path. Note the sonar-* models always web-search
+    // and bill per search, which is wrong for RAG over the user's own documents.
+    defaultBaseUrl: "https://api.perplexity.ai/router/v1",
     signupUrl: "https://www.perplexity.ai/settings/api",
     supportsEmbeddings: false,
     icon: "",
-    features: ["Search-augmented", "Real-time data", "Deep research", "Reasoning"]
+    features: ["OpenAI-compatible", "Hosted open models"]
   },
 
   // Additional providers
   deepinfra: {
     name: "DeepInfra",
-    description: "Serverless inference for open source models",
+    description: "Serverless inference for open-weight models (Aug 2026)",
     category: "Open Source",
     models: [
-      "meta-llama/Meta-Llama-3.3-70B-Instruct",
-      "deepseek-ai/DeepSeek-V3",
-      "mistralai/Mistral-Small-3.2-Instruct",
+      "deepseek-ai/DeepSeek-V4-Flash",
+      "deepseek-ai/DeepSeek-V4-Pro",
+      "deepseek-ai/DeepSeek-V3.2",
+      "zai-org/GLM-5.2",
+      "zai-org/GLM-4.7-Flash",
+      "Qwen/Qwen3.5-397B-A17B",
+      "moonshotai/Kimi-K2.6",
+      "google/gemma-4-26B-A4B-it",
+      "mistralai/Mistral-Small-3.2-24B-Instruct-2506"
     ],
-    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
+    defaultModel: "deepseek-ai/DeepSeek-V4-Flash",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.deepinfra.com/v1/openai",
@@ -292,55 +302,17 @@ const AI_PROVIDERS = {
     supportsEmbeddings: true,
     icon: "⚡",
     pricing: "Pay-per-token",
-    features: ["Serverless", "Open source models", "Cost effective"]
-  },
-  replicate: {
-    name: "Replicate",
-    description: "Run open source models via API",
-    category: "Open Source",
-    models: [
-      "meta-llama/Meta-Llama-3.3-70B-Instruct",
-      "deepseek-ai/DeepSeek-V3",
-      "mistralai/Mistral-Small-3.2-Instruct",
-    ],
-    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    apiKeyRequired: true,
-    baseUrlRequired: false,
-    defaultBaseUrl: "https://api.replicate.com/v1",
-    signupUrl: "https://replicate.com/account/api-tokens",
-    supportsEmbeddings: false,
-    icon: "",
-    features: ["Open source models", "Easy deployment", "Version control"]
-  },
-  anyscale: {
-    name: "Anyscale",
-    description: "Scalable AI infrastructure",
-    category: "Infrastructure",
-    models: [
-      "meta-llama/Meta-Llama-3.3-70B-Instruct",
-      "mistralai/Mistral-Small-3.2-Instruct",
-      "deepseek-ai/DeepSeek-V3",
-    ],
-    defaultModel: "meta-llama/Meta-Llama-3.3-70B-Instruct",
-    apiKeyRequired: true,
-    baseUrlRequired: false,
-    defaultBaseUrl: "https://api.endpoints.anyscale.com/v1",
-    signupUrl: "https://console.anyscale.com/",
-    supportsEmbeddings: false,
-    icon: "",
-    features: ["Scalable infrastructure", "Ray ecosystem", "Enterprise ready"]
+    features: ["Serverless", "Open-weight models", "Cost effective"]
   },
   deepseek: {
     name: "DeepSeek",
-    description: "DeepSeek V3.2-Speciale & V3.1 with advanced reasoning (Dec 2025)",
+    description: "DeepSeek V4 Pro & Flash (Aug 2026)",
     category: "Specialized",
     models: [
-      "deepseek-chat",                // DeepSeek V3.2 (current default)
-      "deepseek-reasoner",            // Reasoning model
-      "deepseek-v3.1",                // Open source V3.1
-      "deepseek-coder"                // Coding specialist
+      "deepseek-v4-flash",   // Fast + cheap
+      "deepseek-v4-pro"      // Frontier
     ],
-    defaultModel: "deepseek-chat",
+    defaultModel: "deepseek-v4-flash",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.deepseek.com",
@@ -348,19 +320,21 @@ const AI_PROVIDERS = {
     supportsEmbeddings: false,
     icon: "🔬",
     pricing: "Pay-per-token",
-    features: ["V3.2-Speciale", "Reasoning", "Coding", "Cost effective"]
+    features: ["V4 Pro / Flash", "Reasoning", "Cost effective"]
   },
   xai: {
     name: "xAI (Grok)",
-    description: "Grok 4 & Grok 3 models with agentic capabilities (Dec 2025)",
+    description: "Grok 4.5 / 4.3 with agentic capabilities (Aug 2026)",
     category: "Major",
     models: [
-      "grok-4-0709",             // Latest Grok 4 (Jul 2025)
-      "grok-3-latest",           // Grok 3 stable
-      "grok-3-mini",             // Smaller Grok 3
-      "grok-vision"              // Vision model
+      "grok-4.5",                        // Newest flagship
+      "grok-4.3",                        // Balanced
+      "grok-4.20-0309-reasoning",        // Reasoning
+      "grok-4.20-0309-non-reasoning",    // Non-reasoning
+      "grok-4.20-multi-agent-0309",      // Multi-agent
+      "grok-build-0.1"                   // Coding/agentic build
     ],
-    defaultModel: "grok-3-latest",
+    defaultModel: "grok-4.3",
     apiKeyRequired: true,
     baseUrlRequired: false,
     defaultBaseUrl: "https://api.x.ai/v1",
@@ -368,9 +342,20 @@ const AI_PROVIDERS = {
     supportsEmbeddings: false,
     icon: "🚀",
     pricing: "Pay-per-token",
-    features: ["Grok 4", "Agentic tools", "Live search", "Vision"]
+    features: ["Grok 4.5", "Agentic tools", "Live search", "Vision"]
   },
+  // Removed August 2026:
+  //  - anyscale:  Anyscale Endpoints was shut down. api.endpoints.anyscale.com/v1/models
+  //               returns 404 and the console 308-redirects to console.anyscale.com,
+  //               which only sells Ray/platform products now. There is nothing to call.
+  //  - replicate: Replicate serves no OpenAI-compatible /chat/completions endpoint, so
+  //               this app's client could never talk to it. Re-adding it means a separate
+  //               predictions-API path (POST /v1/models/{owner}/{name}/predictions with a
+  //               per-model input schema, plus `Prefer: wait` or polling) — not a base-URL swap.
 }
+
+/** Every category actually present in AI_PROVIDERS, in first-seen order. */
+const AI_PROVIDER_CATEGORIES = [...new Set(Object.values(AI_PROVIDERS).map((p) => p.category))]
 
 const VECTOR_DB_PROVIDERS = {
   local: {
@@ -607,7 +592,10 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
               </CardHeader>
               <CardContent className="p-4">
                 <div className="flex flex-wrap gap-2">
-                  {["Major", "Fast", "Aggregator", "Specialized", "Cloud"].map((category) => (
+                  {/* Derived from the data, not hardcoded: a literal list silently
+                      hid every provider whose category had no chip (Commercial,
+                      Open Source) and showed a "Cloud" chip nothing matched. */}
+                  {AI_PROVIDER_CATEGORIES.map((category) => (
                     <Button
                       key={category}
                       variant={selectedCategory === category ? "default" : "outline"}
