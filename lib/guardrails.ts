@@ -2,6 +2,7 @@
  * Comprehensive Guardrails and Evaluation System
  * Provides safety checks, input validation, and quality evaluation for the RAG pipeline
  */
+import { extensionOf, SUPPORTED_EXTENSIONS } from "./supported-formats"
 
 // ============================================================================
 // INPUT GUARDRAILS
@@ -122,11 +123,11 @@ export function validateDocument(
     warnings.push('Document may contain personally identifiable information (PII)')
   }
   
-  // Check file extension
-  const allowedExtensions = ['.pdf', '.txt', '.docx', '.doc', '.md', '.csv', '.xlsx', '.xls']
-  const ext = fileName.toLowerCase().slice(fileName.lastIndexOf('.'))
-  if (!allowedExtensions.includes(ext)) {
-    warnings.push(`File type "${ext}" may not be fully supported`)
+  // Check file extension. Derived from the one supported-format list so this
+  // stops warning about formats the app gained (pptx, odt, epub, tsv, …).
+  const ext = extensionOf(fileName)
+  if (ext !== 'pdf' && ext !== 'txt' && ext !== 'md' && !SUPPORTED_EXTENSIONS.includes(ext)) {
+    warnings.push(`File type ".${ext}" may not be fully supported`)
   }
   
   return {

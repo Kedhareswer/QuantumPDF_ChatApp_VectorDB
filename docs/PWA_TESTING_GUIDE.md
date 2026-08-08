@@ -1,7 +1,7 @@
 # QuantumPDF PWA Testing Guide
 
 > **Comprehensive guide for testing PWA functionality**
-> **Last Updated: June 2026 | Version 0.1.0**
+> **Last updated: August 2026**
 
 ---
 
@@ -117,7 +117,7 @@ describe('PWA Manifest', () => {
   let manifest: any
 
   beforeAll(async () => {
-    const response = await fetch('/manifest.json')
+    const response = await fetch('/manifest.webmanifest')
     manifest = await response.json()
   })
 
@@ -190,10 +190,10 @@ test.describe('PWA', () => {
     
     // Check manifest link exists
     const manifest = await page.getAttribute('link[rel="manifest"]', 'href')
-    expect(manifest).toBe('/manifest.json')
+    expect(manifest).toBe('/manifest.webmanifest')
     
     // Check manifest is valid
-    const response = await page.request.get('/manifest.json')
+    const response = await page.request.get('/manifest.webmanifest')
     const data = await response.json()
     expect(data.name).toBeDefined()
     expect(data.display).toBe('standalone')
@@ -257,7 +257,7 @@ lighthouse http://localhost:3000 --output=html --output-path=./report.html
 
 | Item | Requirement | Fix |
 |------|-------------|-----|
-| Installable | Valid manifest | Check manifest.json |
+| Installable | Valid manifest | Check /manifest.webmanifest |
 | Web App Manifest | All fields | Add missing fields |
 | Service Worker | Registered | Check registration code |
 | HTTPS | Required | Deploy to HTTPS |

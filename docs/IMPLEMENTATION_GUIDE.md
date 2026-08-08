@@ -1,7 +1,7 @@
 # QuantumPDF Implementation Guide
 
 > **Complete guide to implementing and extending QuantumPDF features**
-> **Last Updated: June 2026 | Version 3.1.0**
+> **Last updated: August 2026**
 
 ---
 
@@ -26,7 +26,7 @@
 ### Prerequisites
 
 ```bash
-Node.js >= 18.0.0
+Node.js >= 20.9.0
 npm >= 9.0.0
 ```
 
@@ -76,16 +76,15 @@ app/
 ├── page.tsx              # Main page with state orchestration
 ├── layout.tsx            # Root layout with providers
 ├── globals.css           # Global styles
-└── manifest.json         # PWA manifest
+└── manifest.ts           # PWA manifest (served at /manifest.webmanifest)
 
 components/
-├── chat-interface.tsx    # Chat with streaming
-├── source-card.tsx       # Interactive source cards
-├── citation-badge.tsx    # Clickable citations
+├── chat-interface.tsx    # Chat with streaming + inline citations
 ├── document-filter.tsx   # Document filtering UI
 ├── chunk-visualization.tsx # Chunk visualization
-├── query-history.tsx    # Query history sidebar
-├── export-menu.tsx      # Export conversations
+├── query-history.tsx     # Query history (chat header)
+├── quick-actions.tsx     # Clear / new session / export
+├── onboarding-tour.tsx   # First-run driver.js tour
 ├── unified-pdf-processor.tsx  # Multi-format file upload
 ├── unified-configuration.tsx  # Settings panel
 ├── document-library.tsx  # Document management
@@ -94,6 +93,9 @@ components/
 lib/
 ├── ai-client.ts          # Multi-provider AI client
 ├── rag-engine.ts         # Core RAG with 3-phase processing
+├── liteparse-client.ts   # Server-side PDF extraction (+ unpdf fallback)
+├── anydoc-client.ts      # In-browser wasm extraction, all non-PDF formats
+├── citation-format.ts    # Superscript citation rendering
 ├── store.ts              # Zustand state management
 └── vector-database-client.ts  # Vector DB abstraction
 ```
@@ -371,39 +373,20 @@ if (!check.withinBudget) {
 
 ## Enhanced UI/UX Features
 
-### Source Cards
+### Inline Citations
 
-Interactive source display with document metadata and similarity scores.
-
-```typescript
-// components/source-card.tsx
-import { SourceCards } from '@/components/source-card'
-
-<SourceCards
-  sources={response.sources}
-  chunks={response.chunks}
-  onViewPage={(documentId, page) => {
-    // Navigate to PDF page
-  }}
-/>
-```
-
-### Clickable Citations
-
-Inline citation badges that allow navigation to specific PDF pages.
+Citations render as compact superscripts inside the answer, followed by a
+`Sources:` line. This replaced the earlier `SourceCards` / `CitationBadge`
+components, which were removed — the formatting now lives in a plain helper
+rather than a component tree.
 
 ```typescript
-// components/citation-badge.tsx
-import { CitationBadge } from '@/components/citation-badge'
+// lib/citation-format.ts — exports toSuperscript(n) and formatCitationsForDisplay(content)
+import { formatCitationsForDisplay } from '@/lib/citation-format'
 
-// In markdown content, replace [1] with:
-<CitationBadge
-  index={1}
-  source="Document Name · p.5"
-  documentId="doc-123"
-  page={5}
-  onViewPage={handleViewPage}
-/>
+// Rewrites [1] / [1,2] markers in the answer body into superscripts (¹ ²).
+// Used in components/chat-interface.tsx before handing content to react-markdown.
+return formatCitationsForDisplay(cleaned.trim())
 ```
 
 ### Document Filtering
@@ -459,13 +442,16 @@ addQueryHistory(query, response.length)
 
 ### Export Conversations
 
-Export conversations in multiple formats.
+Export lives in the quick-actions menu in the chat header, not in a standalone
+component (the old `export-menu.tsx` was an unused duplicate and was removed).
 
 ```typescript
-// components/export-menu.tsx
-import { ExportMenu } from '@/components/export-menu'
+// components/quick-actions.tsx
+import { QuickActions } from '@/components/quick-actions'
 
-<ExportMenu messages={messages} />
+// Renders clear / new-session / export. handleExportChat supports
+// 'json' | 'markdown' | 'txt' | 'pdf'.
+<QuickActions onClearChat={onClearChat} onNewSession={onNewSession} disabled={disabled} />
 ```
 
 ---
@@ -479,7 +465,7 @@ PDF text, OCR, and page-preview images are extracted **server-side** by
 `lib/liteparse-client.ts` and exposed at `POST /api/pdf/extract` (Node.js
 runtime). OCR is controlled by liteparse's `ocrEnabled` option, and page
 previews come from liteparse's `screenshot()`. If liteparse fails or returns no
-text, the wrapper falls back to PDF.js text extraction.
+text, the wrapper falls back to `unpdf` text extraction (serverless-safe).
 
 The client orchestrator `lib/pdf-document-processor.ts` (`PdfDocumentProcessor`)
 POSTs the uploaded file to that route, then runs the retained **client-side**
@@ -528,22 +514,15 @@ interface ExtractedImage {
 
 ### Image Captioning
 
-Captioning runs through `VisionModelService`. There is **no in-browser model** —
-`@xenova/transformers` (Transformers.js) was removed. The `local` provider falls
-back to a placeholder; real captions come from a configured cloud vision
-provider (HuggingFace, OpenAI, Anthropic). See `lib/vision-models.ts`.
+**Not currently implemented.** `@xenova/transformers` was removed (no in-browser
+model), and the `image-captioner.ts` / `vision-models.ts` modules that wrapped the
+cloud fallbacks were deleted in the August 2026 cleanup because nothing imported
+them.
 
-```typescript
-import { ImageCaptioner } from '@/lib/image-captioner'
-
-// Provider is required for real captions; 'local' yields placeholders
-const captioner = new ImageCaptioner({ provider: 'huggingface', apiKey })
-
-// Caption a batch of images
-const captioned = await captioner.captionImages(images, {}, (progress) => {
-  console.log(`Captioned ${progress.processed}/${progress.total}`)
-})
-```
+`image-extractor.ts` still extracts embedded images and their metadata; they are
+surfaced in the multimodal panel without captions. Wiring captions back up means
+calling a vision-capable provider through `lib/ai-client.ts` at the point where
+`DOCXImageExtractor` / the PDF.js image extractor return their results.
 
 ### Table Extraction
 

@@ -1,7 +1,7 @@
 # QuantumPDF PWA Guide
 
 > **Complete guide to Progressive Web App implementation and capabilities**
-> **Last Updated: June 2026 | Version 0.1.0**
+> **Last updated: August 2026**
 
 ---
 
@@ -270,7 +270,7 @@ export function ServiceWorkerRegistration() {
 const CACHE_NAME = 'quantumpdf-v0.1.0'
 const STATIC_ASSETS = [
   '/',
-  '/manifest.json',
+  '/manifest.webmanifest',
   '/offline.html',
   '/icon-192.png',
   '/icon-512.png'
@@ -417,7 +417,7 @@ module.exports = withPWA({
 
 ## App Manifest
 
-The manifest is **not** a static `public/manifest.json` file — it is generated
+The manifest is **not** a static `public/manifest.webmanifest` file — it is generated
 by the Next.js metadata route `app/manifest.ts` (typed as
 `MetadataRoute.Manifest`) and served at `/manifest.webmanifest`. The generated
 output looks like this:
@@ -542,7 +542,7 @@ lighthouse http://localhost:3000 --output=json --output-path=./pwa-report.json
 ### Automated Testing
 
 > The Next.js metadata route serves the manifest at `/manifest.webmanifest`
-> (not `/manifest.json`), the install-time cache is named `quantumpdf-v0.1.0`,
+> (not `/manifest.webmanifest`), the install-time cache is named `quantumpdf-v0.1.0`,
 > and `app/manifest.ts` declares 13 icon entries.
 
 ```typescript

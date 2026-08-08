@@ -1,7 +1,7 @@
 # QuantumPDF Optimization Guide
 
 > **Performance optimization strategies and implementation details**
-> **Last Updated: June 2026 | Next.js 16 + React 19**
+> **Last updated: August 2026**
 
 ---
 
@@ -562,40 +562,20 @@ const PDFViewer = dynamic(
 
 ## Memory Management
 
-### Extractive Summarization (no in-browser model to manage)
+### No in-browser models to manage
 
 `@xenova/transformers` (Transformers.js) was **removed** to eliminate a critical
-`protobufjs` vulnerability, so there is no longer an on-device summarization model
-to load, cache, or unload. `lib/local-summarizer.ts` now falls back to a fast,
-dependency-free **extractive** summary — keeping memory flat and avoiding multi-MB
-model downloads in the browser.
+`protobufjs` vulnerability, so there is no on-device model to load, cache, or
+unload — memory stays flat and there are no multi-MB model downloads.
 
-```typescript
-// lib/local-summarizer.ts
-class LocalSummarizer {
-  // No model is loaded — loadPipeline() always throws so summarize() falls back
-  // to the extractive path below.
-  async summarize(text: string, options: SummaryOptions = {}): Promise<LocalSummarizerResult> {
-    // ...attempts loadPipeline(), which is unavailable, then:
-    return {
-      text: this.extractiveSummary(text, options.maxLength ?? 150),
-      confidence: 0.5,
-      model: 'extractive-fallback',
-      processingTime: /* ... */,
-    }
-  }
+The `local-summarizer.ts` and `vision-models.ts` fallbacks that remained after
+that removal were themselves deleted in the August 2026 cleanup: nothing in the
+app imported them. Summarization and captioning, where needed, go through the
+configured provider via `lib/ai-client.ts`.
 
-  // Scores sentences by position + keywords, picks the top ones within maxLength.
-  private extractiveSummary(text: string, maxLength: number): string {
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10)
-    // position bonus for first/last, keyword bonus, length penalty, then sort...
-    return /* top-scored sentences joined up to maxLength */ ''
-  }
-}
-```
-
-> Local image captioning is handled the same way: `lib/vision-models.ts` falls back
-> to a placeholder or a configured **cloud** vision provider rather than an in-browser model.
+The one wasm payload the browser does fetch is `@firecrawl/anydoc-wasm` (~6 MB),
+prefetched at idle on page load by `prefetchAnydoc()` so the first upload does
+not wait on it. It is instantiated once and memoized for the tab's lifetime.
 
 ### Document Cleanup
 
@@ -812,11 +792,16 @@ import dynamic from 'next/dynamic'
 | Metric | Before | After | Improvement |
 |--------|--------|-------|-------------|
 | Fallback Embeddings | 45ms | 28ms | **38% faster** |
-| Dead Code | 520+ lines | 0 lines | **100% removed** |
-| Bundle Size | ~900KB | ~850KB | **~5% smaller** |
 | Message Re-renders | All messages | Changed only | **87% reduction** |
 | Embedding Cache Hit | 0% | 80-90% | **80-90% saved** |
 | Query Cache Hit | 0% | ~30% | **30% faster avg** |
+
+**August 2026 cleanup:** 50 unreferenced files (~9,700 lines) and 31 unused
+dependencies removed — including the unused half of the shadcn/ui set and its
+Radix primitives, `framer-motion`, `recharts`, `zod` and `immer`. An earlier
+edition of this table claimed dead code was already at "0 lines"; treat
+dead-code counts here as a snapshot, not a standing guarantee. Re-check with a
+reachability walk from `app/**` rather than trusting the number.
 
 ### Profiling Commands
 
@@ -880,7 +865,8 @@ telemetry.recordTiming('rag.query', queryTime)
 - [x] Add adaptive chunk sizing
 - [x] Optimize fallback embeddings
 - [x] Remove dead code
-- [x] Remove in-browser model (`@xenova/transformers`) — extractive summarization fallback, no model lifecycle to manage
+- [x] Remove in-browser model (`@xenova/transformers`) — no model lifecycle to manage
+- [x] Move non-PDF parsing in-browser (`@firecrawl/anydoc-wasm`) — no upload round-trip, no serverless function
 
 ### Long-Term Optimizations
 

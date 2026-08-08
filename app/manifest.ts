@@ -15,22 +15,9 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: 'ltr',
     categories: ['productivity', 'business', 'education', 'utilities'],
     display_override: ['window-controls-overlay', 'standalone', 'fullscreen'],
-    screenshots: [
-      {
-        src: '/screenshot-wide.png',
-        sizes: '1280x720',
-        type: 'image/png',
-        form_factor: 'wide',
-        label: 'QuantumPDF ChatApp Desktop View'
-      },
-      {
-        src: '/screenshot-narrow.png',
-        sizes: '750x1334',
-        type: 'image/png',
-        form_factor: 'narrow',
-        label: 'QuantumPDF ChatApp Mobile View'
-      }
-    ],
+    // No `screenshots` entry: it pointed at /screenshot-wide.png and
+    // /screenshot-narrow.png, neither of which exists. A 404 here degrades the
+    // install dialog, so the field stays out until real screenshots are added.
     icons: [
       {
         src: '/icon-72.png',

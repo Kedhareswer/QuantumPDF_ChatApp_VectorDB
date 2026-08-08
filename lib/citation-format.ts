@@ -34,7 +34,7 @@ export function toSuperscript(n: number): string {
 // or a page reference (", p.N"). This deliberately avoids matching markdown
 // links like [text](url) or numeric arrays like [1, 2].
 const CITATION_MARKER =
-  /\s*\[([^\]\n]*?(?:\.(?:pdf|docx|doc|csv|tsv|xlsx|xls|txt)|,\s*p\.?\s*\d+)[^\]\n]*?)\]/gi
+  /\s*\[([^\]\n]*?(?:\.(?:pdf|docx?|docm|odt|rtf|epub|pptx?|pps|odp|xlsx?|xlsm|xlsb|ods|csv|tsv|txt)|,\s*p\.?\s*\d+)[^\]\n]*?)\]/gi
 
 const keyOf = (label: string): string => label.trim().toLowerCase().replace(/\s+/g, " ")
 

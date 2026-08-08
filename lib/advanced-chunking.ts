@@ -549,3 +549,36 @@ export class AdvancedChunker {
     return false
   }
 }
+
+/**
+ * The chunking settings every extraction engine uses. Both the PDF path
+ * (liteparse-client.ts) and the non-PDF path (anydoc-client.ts) feed the same
+ * vector index, so they must chunk identically — tuning one and not the other
+ * shifts retrieval quality in ways that only show up at query time.
+ */
+export const DEFAULT_CHUNK_OPTIONS: ChunkingOptions = {
+  maxChunkSize: 1000,
+  minChunkSize: 250,
+  overlap: 100,
+  preserveStructure: true,
+  semanticSplitting: true,
+  documentAware: true,
+  adaptiveThreshold: true,
+}
+
+/** Chunk extracted text, dropping any chunk that is only whitespace. */
+export function buildChunks(text: string, fileName?: string, documentId?: string) {
+  const advancedChunks = new AdvancedChunker(DEFAULT_CHUNK_OPTIONS).chunkText(text, documentId, fileName)
+  const chunks = advancedChunks.map((c) => c.content).filter((c) => c.trim().length > 0)
+  return { advancedChunks, chunks }
+}
+
+export type ExtractionQuality = "high" | "medium" | "low" | "none"
+
+/** Shared "how much did we get out of this document" heuristic. */
+export function assessExtractionQuality(text: string): ExtractionQuality {
+  if (!text) return "none"
+  if (text.length > 500) return "high"
+  if (text.length > 100) return "medium"
+  return "low"
+}

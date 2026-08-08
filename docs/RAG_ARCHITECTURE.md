@@ -1,7 +1,7 @@
 # QuantumPDF RAG Architecture
 
 > **Deep dive into the Retrieval-Augmented Generation system with 3-phase processing, guardrails, evaluation metrics, and multimodal support**
-> **Last Updated: June 2026 | Version 3.1.0**
+> **Last updated: August 2026**
 
 ---
 
@@ -87,8 +87,8 @@
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      UI/UX ENHANCEMENT                                   │
-│  • Source Cards    • Citations    • Chunk Visualization                 │
-│  • Document Filter • Query History • Export                             │
+│  • Inline Citations • Chunk Visualization                               │
+│  • Document Filter  • Query History      • Export                       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -390,7 +390,7 @@ Export conversations in Markdown or PDF format.
 
 ### PDF Text Extraction (server-side liteparse)
 
-PDF text, OCR, and page-preview images are extracted **server-side** by `@llamaindex/liteparse` — a native Rust + PDFium NAPI module — wrapped by `lib/liteparse-client.ts` and exposed at `app/api/pdf/extract/route.ts` (Node.js runtime). OCR is liteparse's built-in Tesseract, toggled via the `ocrEnabled` option; page previews come from liteparse's `screenshot()`. If liteparse fails or returns no text, the wrapper falls back to PDF.js text extraction.
+PDF text, OCR, and page-preview images are extracted **server-side** by `@llamaindex/liteparse` — a native Rust + PDFium NAPI module — wrapped by `lib/liteparse-client.ts` and exposed at `app/api/pdf/extract/route.ts` (Node.js runtime). OCR is liteparse's built-in engine, toggled via the `ocrEnabled` option; page previews come from liteparse's `screenshot()`. If liteparse fails or returns no text, the wrapper falls back to `unpdf` text extraction (serverless-safe).
 
 The client orchestrator `lib/pdf-document-processor.ts` (class `PdfDocumentProcessor`, imported by `components/unified-pdf-processor.tsx`) POSTs the uploaded file to `/api/pdf/extract`, then runs the retained **client-side** PDF.js extractors for embedded images (`lib/image-extractor.ts`), tables (`lib/table-extractor.ts`), and equations (`lib/equation-extractor.ts`). `pdfjs-dist` is no longer the primary PDF text engine — it now only backs these client-side extractors, the server-side fallback in `liteparse-client.ts`, and URL-based PDF fetching in `lib/enhanced-url-processor.ts`.
 
@@ -410,27 +410,16 @@ The client orchestrator `lib/pdf-document-processor.ts` (class `PdfDocumentProce
 │               │           │               │           │               │
 │  liteparse    │           │  Image        │           │  Regex        │
 │  (PDF server) │           │  Extractor    │           │  Detection    │
-│  Mammoth.js   │           │  (PDF.js)     │           │               │
-│  SheetJS      │           │               │           │               │
+│  anydoc-wasm  │           │  (PDF.js /    │           │               │
+│  (non-PDF,    │           │   DOCX zip)   │           │               │
+│   in-browser) │           │               │           │               │
 └───────────────┘           └───────────────┘           └───────────────┘
-        │                           │                           │
-        │                           ▼                           │
-        │                   ┌───────────────┐                   │
-        │                   │  IMAGE        │                   │
-        │                   │  CAPTIONING   │                   │
-        │                   │               │                   │
-        │                   │  Cloud vision │                   │
-        │                   │  provider or  │                   │
-        │                   │  placeholder  │                   │
-        │                   │  (Tesseract   │                   │
-        │                   │   OCR)        │                   │
-        │                   └───────────────┘                   │
         │                           │                           │
         └───────────────────────────┼───────────────────────────┘
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      CONTENT AGGREGATION                                 │
-│  Text + Image Captions + Tables + Equations → Unified Content           │
+│  Text + Images + Tables + Equations → Unified Content                   │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -456,39 +445,16 @@ interface ExtractedImage {
   extractedAt: Date
 }
 
-// lib/image-captioner.ts
-// Captioning uses a configured cloud vision provider (VisionModelService) and
-// falls back to a deterministic placeholder when none is configured. There is
-// no in-browser model — @xenova/transformers was removed.
-class ImageCaptioner {
-  private visionService: VisionModelService | null = null
-
-  private async analyzeImage(
-    image: ExtractedImage,
-    options: Required<CaptioningOptions>,
-  ): Promise<ImageAnalysisResult> {
-    // Use the cloud vision model if available and configured
-    if (this.visionService && this.visionService.isConfigured()) {
-      return this.visionService.analyzeImage(image.dataUrl, this.buildAnalysisPrompt(image), {
-        maxTokens: 300,
-        temperature: options.temperature,
-        includeOCR: options.includeOCR,
-      })
-    }
-
-    // Fallback: placeholder caption/description (no model download)
-    return {
-      caption: this.generatePlaceholderCaption(image),
-      description: this.generatePlaceholderDescription(image),
-      confidence: 0.5,
-      model: 'placeholder',
-      processedAt: new Date(),
-    }
-  }
-}
-
-// Optional OCR for image text uses Tesseract.js (lib/image-captioner.ts):
-//   extractTextFromImage(dataUrl) → string
+// Captioning is NOT currently implemented. `image-captioner.ts` and
+// `vision-models.ts` were deleted in the August 2026 cleanup — nothing
+// imported them, and `@xenova/transformers` (the in-browser model) had
+// already been removed. `caption` and `alt` above are therefore unset today.
+//
+// Image *extraction* still runs: PDF.js for PDFs, and DOCXImageExtractor
+// (jszip over word/media) for .docx/.docm.
+//
+// Image-level OCR is also gone with tesseract.js. PDF OCR now happens
+// server-side inside liteparse via its `ocrEnabled` option.
 ```
 
 ### Equation Processing

@@ -1,7 +1,7 @@
 # QuantumPDF Architecture & Flow Diagrams
 
 > **Comprehensive visual guide to system architecture, data flows, and component interactions**
-> **Last Updated: June 2026 | Version 3.1.0**
+> **Last updated: August 2026**
 
 ## Table of Contents
 - [System Overview](#system-overview)
@@ -39,7 +39,7 @@ graph TB
         AI[AI Client<br/>18+ Providers]
         EMB[Embedding Generation<br/>with Cache + Fallback]
         TEXT[Text Generation<br/>Streaming Support]
-        SUMM[Local Summarization<br/>Extractive Fallback]
+        SUMM[Summarization<br/>via configured provider]
     end
 
     subgraph "Safety Layer (NEW)"
@@ -102,11 +102,10 @@ graph LR
     end
 
     subgraph "Document Processing"
-        LITE[liteparse<br/>server-side, native]
-        PDFJS[PDF.js<br/>client extractors + fallback]
-        TESS[Tesseract.js<br/>image OCR only]
-        MAMMOTH[Mammoth.js]
-        SHEETJS[SheetJS CDN/Papa Parse]
+        LITE[liteparse<br/>server-side, native<br/>text · OCR · previews]
+        UNPDF[unpdf<br/>serverless-safe PDF fallback]
+        PDFJS[PDF.js<br/>client extractors only]
+        ANYDOC["@firecrawl/anydoc-wasm<br/>in-browser WebAssembly<br/>all non-PDF formats"]
     end
 
     subgraph "AI Providers"
@@ -223,7 +222,7 @@ graph TB
     end
 
     subgraph "Local Fallbacks (no in-browser model)"
-        SUMM[Local Summarization<br/>extractive — lib/local-summarizer.ts]
+        SUMM[Summarization<br/>via configured provider]
         CAPTION[Image Captioning<br/>placeholder or cloud vision provider]
     end
 
@@ -282,9 +281,9 @@ sequenceDiagram
     PDF->>ROUTE: POST file
     activate ROUTE
     ROUTE->>ROUTE: liteparse extract (native Rust + PDFium)
-    ROUTE->>ROUTE: OCR if ocrEnabled (built-in Tesseract)
+    ROUTE->>ROUTE: OCR if ocrEnabled (liteparse built-in)
     ROUTE->>ROUTE: Page previews via screenshot()
-    Note over ROUTE: Falls back to PDF.js text if liteparse yields no text
+    Note over ROUTE: Falls back to unpdf text extraction (serverless-safe) if liteparse fails or yields no text
     ROUTE-->>PDF: {text, chunks, metadata, previews}
     deactivate ROUTE
     PDF->>MULTI: Extract Embedded Content (client-side PDF.js)
@@ -502,38 +501,32 @@ graph TD
 graph TD
     subgraph "File Input"
         PDF[PDF Files]
-        XLSX[Excel Files<br/>XLSX/XLS]
-        CSV[CSV/TSV Files]
-        DOCX[Word Files<br/>DOCX/DOC]
+        NONPDF["Word / PowerPoint / Excel<br/>OpenDocument / RTF / EPUB<br/>CSV / TSV"]
     end
-    
+
     subgraph "Processors"
-        PDF_PROC[PdfDocumentProcessor<br/>server liteparse + client PDF.js]
-        SHEET_PROC[Spreadsheet Processor<br/>SheetJS + PapaParse]
-        DOCX_PROC[DOCX Processor<br/>Mammoth.js]
+        PDF_PROC[PdfDocumentProcessor<br/>POST /api/pdf/extract<br/>+ client PDF.js extractors]
+        DOC_PROC[DocumentProcessor<br/>lib/document-processor.ts<br/>anydoc-wasm, in-browser]
+        IMG_PROC[DOCXImageExtractor<br/>.docx/.docm only]
     end
-    
+
     subgraph "Output"
-        TEXT_OUT[Extracted Text]
+        TEXT_OUT[Extracted Text / Markdown]
         META_OUT[Document Metadata]
         STRUCT_OUT[Structured Data]
     end
-    
+
     PDF --> PDF_PROC
-    XLSX --> SHEET_PROC
-    CSV --> SHEET_PROC
-    DOCX --> DOCX_PROC
-    
+    NONPDF --> DOC_PROC
+    DOC_PROC --> IMG_PROC
+
     PDF_PROC --> TEXT_OUT
     PDF_PROC --> META_OUT
     PDF_PROC --> STRUCT_OUT
-    
-    SHEET_PROC --> TEXT_OUT
-    SHEET_PROC --> META_OUT
-    SHEET_PROC --> STRUCT_OUT
-    
-    DOCX_PROC --> TEXT_OUT
-    DOCX_PROC --> META_OUT
+
+    DOC_PROC --> TEXT_OUT
+    DOC_PROC --> META_OUT
+    IMG_PROC --> STRUCT_OUT
     
     TEXT_OUT --> CHUNK[Chunking Engine]
     CHUNK --> EMB[Embedding Generation]

@@ -34,32 +34,28 @@ npm run lint
 ### PWA commands
 
 ```bash
-npm run pwa:icons:svg
-npm run pwa:icons:png
-npm run pwa:test
-npm run pwa:validate
+npm run pwa:icons   # regenerate every PWA icon from public/brain.png (needs sharp)
+npm run pwa:test    # build + start, so the service worker is active
 ```
 
 ### Test commands (Vitest)
 
-`package.json` has no `test` script; use `npx vitest` directly.
-
 ```bash
-# run all tests (watch mode)
-npx vitest
-
 # run all tests once
-npx vitest run
+npm test
+
+# watch mode
+npx vitest
 
 # run a single test file (important)
 npx vitest run __tests__/my-feature.test.ts
 
 # run a single test case by name
 npx vitest run __tests__/my-feature.test.ts -t "handles empty input"
-
-# run coverage
-npx vitest run --coverage
 ```
+
+Coverage is not wired up: `@vitest/coverage-v8` is not installed, so
+`--coverage` aborts. Install it first if you need a coverage run.
 
 Single-test execution is the default for fast iteration.
 
@@ -80,7 +76,8 @@ Single-test execution is the default for fast iteration.
 - Use `import type` for type-only imports when practical.
 - Keep server-only logic out of client components.
 - Server-external packages in `next.config.mjs` must remain server-side: `@llamaindex/liteparse`, `onnxruntime-node`, `@huggingface/transformers`, `sharp`.
-- Client bundle has Node polyfills disabled; do not use `fs/net/tls` on client.
+- `@firecrawl/anydoc-wasm` is the inverse: **client-only**. `lib/anydoc-client.ts` is `"use client"` and imports the wasm lazily in the browser. Do not move it into a route handler — the old `/api/document/extract` route was deleted on purpose.
+- Node built-ins (`fs`, `net`, `tls`, …) are unavailable on the client; keep that code in route handlers or gate it on `typeof window === 'undefined'`.
 
 ## Code Style: Formatting
 

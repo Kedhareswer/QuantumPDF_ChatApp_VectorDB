@@ -1,15 +1,14 @@
 "use client"
 
-import { PDFProcessorSkeleton } from "@/components/skeleton-loaders"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
-import { DOCXProcessor } from "@/lib/docx-processor"
+import { extensionOf, SUPPORTED_EXTENSIONS } from "@/lib/supported-formats"
+import { DocumentProcessor } from "@/lib/document-processor"
 import { PdfDocumentProcessor, type ProcessingProgress } from "@/lib/pdf-document-processor"
-import { SpreadsheetProcessor } from "@/lib/spreadsheet-processor"
 import { useAppStore } from "@/lib/store"
 import { AlertCircle, AlertTriangle, CheckCircle, FileText, Image as ImageIcon, Info, Loader2, RefreshCw, Upload, X } from "lucide-react"
 import Image from "next/image"
@@ -20,6 +19,12 @@ interface UnifiedPDFProcessorProps {
   onDocumentProcessed: (document: unknown) => void | Promise<void>
 }
 
+const isPdfFile = (file: File) =>
+  file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+
+/** Derived from the one supported-format list so the picker can't drift from validation. */
+const ACCEPT_ATTR = [".pdf", ...SUPPORTED_EXTENSIONS.map((e) => `.${e}`)].join(",")
+
 export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessorProps) {
   const { isProcessing, setIsProcessing, addError } = useAppStore()
 
@@ -29,14 +34,11 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const [processingMethod, setProcessingMethod] = useState<string | null>(null)
   const [processingStats, setProcessingStats] = useState<unknown>(null)
   const [retryCount, setRetryCount] = useState(0)
-  const [isInitializing] = useState(false)
-  const [pdfProcessorReady] = useState(true)
   const [useOCRFallback, setUseOCRFallback] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pdfProcessor = useRef<PdfDocumentProcessor>(new PdfDocumentProcessor())
-  const spreadsheetProcessor = useRef<SpreadsheetProcessor>(new SpreadsheetProcessor())
-  const docxProcessor = useRef<DOCXProcessor>(new DOCXProcessor())
+  const documentProcessor = useRef<DocumentProcessor>(new DocumentProcessor())
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -56,26 +58,17 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   }
 
   const validateAndSetFile = (selectedFile: File) => {
-    // Detect file type
-    const isPDF = selectedFile.type === "application/pdf" || selectedFile.name.toLowerCase().endsWith('.pdf')
-    const isSpreadsheet = 
-      selectedFile.type === "text/csv" ||
-      selectedFile.type === "text/tab-separated-values" ||
-      selectedFile.type === "application/vnd.ms-excel" ||
-      selectedFile.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-      selectedFile.name.toLowerCase().match(/\.(csv|tsv|xls|xlsx|ods)$/)
-    const isDOCX =
-      selectedFile.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-      selectedFile.type === "application/msword" ||
-      selectedFile.name.toLowerCase().match(/\.(docx|doc)$/)
+    const isPDF = isPdfFile(selectedFile)
+    const isDocument = SUPPORTED_EXTENSIONS.includes(extensionOf(selectedFile.name))
 
-    if (!isPDF && !isSpreadsheet && !isDOCX) {
+    if (!isPDF && !isDocument) {
       setError("Please select a supported document file")
       setFile(null)
       addError({
         type: "error",
         title: "Invalid File Type",
-        message: "Only PDF, CSV, Excel (XLS/XLSX), and Word (DOCX/DOC) files are supported",
+        message:
+          "Supported: PDF, Word (DOC/DOCX/ODT/RTF), PowerPoint (PPT/PPTX/ODP), Excel (XLS/XLSX/ODS), EPUB, CSV/TSV",
       })
       return
     }
@@ -129,13 +122,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   const handleProcessFile = async () => {
     if (!file) return
 
-    // Detect file type
-    const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')
-    const isDOCX = 
-      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-      file.type === "application/msword" ||
-      file.name.toLowerCase().match(/\.(docx|doc)$/)
-    const isSpreadsheet = !isPDF && !isDOCX
+    const isPDF = isPdfFile(file)
 
     try {
       setIsProcessing(true)
@@ -143,46 +130,18 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
       setProgress(null)
       setProcessingStats(null)
 
-      let result: unknown
-
-      if (isDOCX) {
-        // Process DOCX
-        result = await docxProcessor.current.processFile(
-          file,
-          (progressUpdate) => {
-            setProgress(progressUpdate as unknown)
-          }
-        )
-      } else if (isSpreadsheet) {
-        // Process spreadsheet
-        result = await spreadsheetProcessor.current.processFile(
-          file,
-          (progressUpdate) => {
-            setProgress(progressUpdate as unknown)
-          }
-        )
-      } else {
-        // Process PDF
-        if (!pdfProcessor.current) {
-          throw new Error("PDF processor not initialized")
+      const handleProgress = (progressUpdate: ProcessingProgress) => {
+        setProgress(progressUpdate)
+        if (progressUpdate.method) {
+          setProcessingMethod(progressUpdate.method)
         }
-
-        // Check if the processor is ready
-        if (!pdfProcessorReady) {
-          throw new Error("PDF processor is not ready yet. Please wait.")
-        }
-
-        result = await pdfProcessor.current.processFile(
-          file,
-          (progressUpdate) => {
-            setProgress(progressUpdate)
-            if (progressUpdate.method) {
-              setProcessingMethod(progressUpdate.method)
-            }
-          },
-          { enableOCR: useOCRFallback },
-        )
       }
+
+      const result: unknown = isPDF
+        // PDF: liteparse server route + client-side multimodal extractors
+        ? await pdfProcessor.current.processFile(file, handleProgress, { enableOCR: useOCRFallback })
+        // Everything else: anydoc wasm, in this tab
+        : await documentProcessor.current.processFile(file, handleProgress)
 
       // Validate processing result
       if (!result.text || result.text.trim().length === 0) {
@@ -284,15 +243,8 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
   }
 
   const handleAbortProcessing = () => {
-    if (pdfProcessor.current) {
-      pdfProcessor.current.abort();
-    }
-    if (spreadsheetProcessor.current) {
-      spreadsheetProcessor.current.abort();
-    }
-    if (docxProcessor.current) {
-      docxProcessor.current.abort();
-    }
+    pdfProcessor.current.abort();
+    documentProcessor.current.abort();
     setIsProcessing(false);
     setProgress(null);
     setError("Processing was cancelled by user");
@@ -316,11 +268,6 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
       default:
         return "border-gray-600 text-gray-600 bg-gray-50"
     }
-  }
-
-  // Show skeleton during initialization
-  if (isInitializing) {
-    return <PDFProcessorSkeleton />
   }
 
   return (
@@ -349,7 +296,7 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".pdf,.csv,.tsv,.xls,.xlsx,.ods,.docx,.doc"
+            accept={ACCEPT_ATTR}
             className="hidden"
             disabled={isProcessing}
           />
@@ -380,13 +327,13 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
                 <Upload className="w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 text-gray-400" />
                 <div className="text-center px-2">
                   <p className="text-xs sm:text-sm font-medium">Click or drag & drop to upload</p>
-                  <p className="text-[10px] sm:text-xs text-gray-500 mt-1">PDF (100MB), Word/Excel/CSV (50MB) • Enhanced processing</p>
+                  <p className="text-[10px] sm:text-xs text-gray-500 mt-1">PDF (100MB), Word/Slides/Sheets/EPUB (50MB) • Enhanced processing</p>
                 </div>
               </div>
             )}
           </div>
 
-          {file && (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) && (
+          {file && isPdfFile(file) && (
             <div className="mt-4 flex items-center justify-between rounded-md border border-gray-200 bg-gray-50/50 px-3 py-2">
               <div className="text-left">
                 <p className="text-xs sm:text-sm font-medium">Enable OCR fallback</p>
@@ -629,11 +576,15 @@ export function UnifiedPDFProcessor({ onDocumentProcessed }: UnifiedPDFProcessor
         </p>
         <p className="flex items-center">
           <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-          <span><strong>Word (DOCX/DOC):</strong> Full text extraction with structure preservation</span>
+          <span><strong>Word (DOC/DOCX/ODT/RTF):</strong> Headings, tables, lists and footnotes preserved as Markdown</span>
         </p>
         <p className="flex items-center">
           <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
-          <span><strong>Spreadsheets (XLSX/XLS/CSV/TSV):</strong> Table data extraction with multi-sheet support</span>
+          <span><strong>Slides (PPT/PPTX/ODP) &amp; EPUB:</strong> Full text and structure extraction</span>
+        </p>
+        <p className="flex items-center">
+          <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-green-500 flex-shrink-0" />
+          <span><strong>Spreadsheets (XLS/XLSX/ODS/CSV/TSV):</strong> Table data extraction with multi-sheet support</span>
         </p>
         <p className="flex items-center">
           <Info className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1 text-blue-500 flex-shrink-0" />

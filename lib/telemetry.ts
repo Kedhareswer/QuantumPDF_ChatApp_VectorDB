@@ -12,7 +12,11 @@ export interface TelemetryEvent {
 }
 
 // Ingestion type tracking
-export type DocumentType = 'pdf' | 'docx' | 'xlsx' | 'csv' | 'tsv' | 'xls' | 'ods' | 'unknown'
+export type DocumentType =
+  | 'pdf' | 'docx' | 'odt' | 'rtf' | 'epub'
+  | 'pptx' | 'odp'
+  | 'xlsx' | 'xls' | 'ods' | 'csv' | 'tsv'
+  | 'unknown'
 
 export interface IngestionStats {
   byType: Map<DocumentType, { count: number; totalChunks: number; avgProcessingTime: number; ocrUsed: number }>
@@ -186,8 +190,18 @@ export class TelemetryCollector {
     const typeMap: Record<string, DocumentType> = {
       'pdf': 'pdf',
       'docx': 'docx',
+      'docm': 'docx',
       'doc': 'docx',
+      'odt': 'odt',
+      'rtf': 'rtf',
+      'epub': 'epub',
+      'pptx': 'pptx',
+      'ppt': 'pptx',
+      'pps': 'pptx',
+      'odp': 'odp',
       'xlsx': 'xlsx',
+      'xlsm': 'xlsx',
+      'xlsb': 'xlsx',
       'xls': 'xls',
       'csv': 'csv',
       'tsv': 'tsv',

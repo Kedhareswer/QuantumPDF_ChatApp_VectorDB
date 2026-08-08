@@ -1,9 +1,7 @@
 # QuantumPDF - AI Document Analysis Platform
 
 > **Advanced document analysis with 3-phase RAG, guardrails, evaluation metrics, and 19+ AI providers**
-> **Version 3.1.0 | June 2026**
 
-![QuantumPDF](https://img.shields.io/badge/version-3.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
@@ -23,13 +21,15 @@
 | **Evaluation Metrics** | Retrieval quality, groundedness, citation coverage, latency tracking |
 | **Cross-Document Retrieval** | Fair distribution with multi-document query detection |
 | **Adaptive Hybrid Search** | Dynamic semantic/keyword weighting based on query type |
-| **Enhanced UI/UX** | Source Cards, Citations, Filtering, Chunk Visualization, History, Export |
+| **Enhanced UI/UX** | Inline citations, filtering, chunk visualization, history, export |
 | **Multimodal Processing** | Images, tables, equations extracted and analyzed |
-| **Multi-Format Support** | PDF, DOCX, XLSX, CSV processing |
+| **Multi-Format Support** | PDF, Word, PowerPoint, Excel, OpenDocument, RTF, EPUB, CSV/TSV |
 | **Server-Side PDF Parsing** | Native liteparse (Rust + PDFium) text, OCR, and page previews |
+| **In-Browser Document Parsing** | Everything non-PDF is converted to Markdown by anydoc compiled to WebAssembly — the bytes never leave your machine |
+| **Guided Onboarding** | First-run product tour (driver.js) |
 | **PWA Support** | Install as desktop/mobile app |
 
-### AI Provider Support (Updated June 2026)
+### AI Provider Support
 
 <table>
 <tr>
@@ -71,12 +71,12 @@
 
 | Feature | Purpose | Location |
 |---------|---------|----------|
-| 📄 **Source Cards** | Interactive source display with metadata | Below messages |
-| 🔗 **Clickable Citations** | Inline citations with page navigation | In message content |
+| 🔗 **Inline Citations** | Compact superscripts with a Sources line under each answer | In message content |
 | 🔍 **Document Filtering** | Filter queries to specific documents | Above input |
 | 📊 **Chunk Visualization** | View retrieved chunks with similarity scores | Expandable section |
-| 📜 **Query History** | Persistent query storage and re-run | Header sidebar |
-| 💾 **Export Conversations** | Export as Markdown, PDF, or clipboard | Header menu |
+| 📜 **Query History** | Persistent query storage and re-run | Chat header |
+| 💾 **Export Conversations** | Export as JSON, Markdown, TXT or PDF | Quick actions menu |
+| 🧭 **First-Run Tour** | Points at provider setup, upload and chat | On first visit (desktop) |
 
 ---
 
@@ -84,8 +84,8 @@
 
 ### Prerequisites
 
-- Node.js 18+
-- npm 9+
+- Node.js 20.9+ (required by Next.js 16)
+- npm 9+ (pnpm works too)
 - API key (OpenAI, Anthropic, or other supported provider)
 
 ### Installation
@@ -98,9 +98,9 @@ cd QuantumPDF_ChatApp_VectorDB
 # Install dependencies
 npm install
 
-# Configure environment
-cp .env.example .env.local
-# Edit .env.local with your API keys
+# Configure environment (see Environment Variables below for the full list)
+# Create .env.local and add at least one AI provider key.
+# You can also skip this entirely and paste a key into the in-app Settings tab.
 
 # Start development server
 npm run dev
@@ -128,7 +128,10 @@ PINECONE_ENVIRONMENT=us-east-1
 ### Upload Documents
 
 ```
-Supported formats: PDF, DOCX, DOC, XLSX, XLS, CSV, TSV
+PDF                                    up to 100 MB — server-side, with OCR for scanned pages
+DOC DOCX DOCM ODT RTF EPUB             up to  50 MB — in-browser
+PPT PPTX PPS ODP                       up to  50 MB — in-browser
+XLS XLSX XLSM XLSB ODS CSV TSV         up to  50 MB — in-browser
 ```
 
 1. Click "Upload Documents" or drag & drop
@@ -143,12 +146,11 @@ Supported formats: PDF, DOCX, DOC, XLSX, XLS, CSV, TSV
 
 ### Enhanced UI Features
 
-1. **Source Cards**: View sources with similarity scores and page numbers
-2. **Clickable Citations**: Click citations to jump to PDF pages
-3. **Document Filtering**: Filter queries to specific documents using chips
-4. **Chunk Visualization**: Expand to see all retrieved chunks
-5. **Query History**: Access previous queries from sidebar
-6. **Export**: Export conversations as Markdown or PDF
+1. **Inline Citations**: Superscript markers in the answer, with a Sources line beneath it
+2. **Document Filtering**: Filter queries to specific documents using chips
+3. **Chunk Visualization**: Expand to see all retrieved chunks and their similarity scores
+4. **Query History**: Access previous queries from the chat header
+5. **Export**: Export conversations as JSON, Markdown, TXT or PDF
 
 ---
 
@@ -158,17 +160,21 @@ Supported formats: PDF, DOCX, DOC, XLSX, XLS, CSV, TSV
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                            Frontend                                      │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │    Chat     │  │   Agent     │  │  Document   │  │   Config    │    │
-│  │  Interface  │  │  Selector   │  │   Library   │  │   Panel     │    │
+│  │    Chat     │  │   Document   │  │  Document   │  │   Config    │    │
+│  │  Interface  │  │   Processor  │  │   Library   │  │   Panel     │    │
 │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          Processing Layer                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │    PDF      │  │   Image     │  │   Table     │  │  Equation   │    │
-│  │  Processor  │  │  Extractor  │  │  Extractor  │  │  Extractor  │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘    │
+│                          Extraction Layer                                │
+│  ┌──────────────────────────┐   ┌──────────────────────────────────┐   │
+│  │  PDF: liteparse (server) │   │  Non-PDF: anydoc-wasm (browser)  │   │
+│  │  text · OCR · previews   │   │  Word/Slides/Sheets/EPUB → MD    │   │
+│  └──────────────────────────┘   └──────────────────────────────────┘   │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                     │
+│  │   Image     │  │   Table     │  │  Equation   │  (client, PDF.js)   │
+│  │  Extractor  │  │  Extractor  │  │  Extractor  │                     │
+│  └─────────────┘  └─────────────┘  └─────────────┘                     │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -183,11 +189,10 @@ Supported formats: PDF, DOCX, DOC, XLSX, XLS, CSV, TSV
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      Enhanced UI/UX Features                             │
 │  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐               │
-│  │  Source   │ │Citations  │ │  Filter   │ │  Chunks   │               │
-│  │  Cards    │ │           │ │           │ │  View     │               │
+│  │ Citations │ │  Filter   │ │  Chunks   │ │  History  │               │
 │  └───────────┘ └───────────┘ └───────────┘ └───────────┘               │
 │  ┌───────────┐ ┌───────────┐                                            │
-│  │  History  │ │  Export   │                                            │
+│  │  Export   │ │   Tour    │                                            │
 │  └───────────┘ └───────────┘                                            │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -206,21 +211,23 @@ QuantumPDF_ChatApp_VectorDB/
 ├── app/                    # Next.js app directory
 │   ├── page.tsx           # Main page component
 │   ├── layout.tsx         # Root layout
-│   └── manifest.json      # PWA manifest
+│   └── manifest.ts        # PWA manifest (served at /manifest.webmanifest)
 ├── components/            # React components
-│   ├── chat-interface.tsx # Chat with streaming
-│   ├── source-card.tsx   # Interactive source cards
-│   ├── citation-badge.tsx # Clickable citations
+│   ├── chat-interface.tsx # Chat with streaming + citations
 │   ├── document-filter.tsx # Document filtering
 │   ├── chunk-visualization.tsx # Chunk transparency
 │   ├── query-history.tsx # Query persistence
-│   ├── export-menu.tsx   # Conversation export
+│   ├── quick-actions.tsx # Clear / new session / export
+│   ├── onboarding-tour.tsx # First-run driver.js tour
 │   ├── unified-pdf-processor.tsx # File upload
-│   └── unified-configuration.tsx # Settings panel
+│   ├── unified-configuration.tsx # Settings panel
+│   └── ui/                # shadcn primitives (only the ones in use)
 ├── lib/                   # Core libraries
 │   ├── ai-client.ts       # Multi-provider AI client
 │   ├── rag-engine.ts      # 3-phase RAG system
 │   ├── advanced-chunking.ts # Semantic chunking
+│   ├── liteparse-client.ts # Server-side PDF extraction
+│   ├── anydoc-client.ts   # In-browser wasm extraction (non-PDF)
 │   └── store.ts           # Zustand state
 ├── types/                 # TypeScript definitions
 ├── docs/                  # Documentation
@@ -255,46 +262,39 @@ const ragConfig = {
 }
 ```
 
-### UI Feature Configuration
+### Scoping a Query to Specific Documents
 
 ```typescript
-// Document filtering
-const selectedDocumentIds = ['doc-1', 'doc-2']
-
-// Query with filter
+// The document filter chips above the input drive this
 await ragEngine.query(query, {
-  filters: { documentIds: selectedDocumentIds }
+  filters: { documentIds: ['doc-1', 'doc-2'] }
 })
-
-// Export conversations
-<ExportMenu messages={messages} />
-
-// Query history (auto-saves)
-<QueryHistory onSelectQuery={handleQuery} />
 ```
 
 ---
 
 ## 📊 Performance
 
-| Metric | Target | Achieved |
-|--------|--------|----------|
-| PDF Processing (1MB) | <15s | ~12s ✅ |
-| Embedding Generation | <5s | ~4.5s ✅ |
-| Vector Search | <100ms | ~80ms ✅ |
-| Chat Response | <5s | ~3.5s ✅ |
-| Cached Response | <500ms | ~200ms ✅ |
+Rough figures from local runs — they depend heavily on your provider, document size and network, so treat them as ballpark rather than guarantees.
+
+| Metric | Ballpark |
+|--------|----------|
+| PDF text extraction (1 MB, no OCR) | a few seconds |
+| Non-PDF extraction (in-browser wasm) | sub-second after the module is warm |
+| First non-PDF upload | + one-off ~6 MB wasm download, prefetched on page load |
+| Vector search (local, in-memory) | tens of milliseconds |
+| Chat response | dominated by provider latency |
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Run all tests (watch mode)
-npx vitest
-
 # Run tests once (no watch)
-npx vitest run
+npm test
+
+# Watch mode
+npx vitest
 
 # Run a single test file
 npx vitest run liteparse-client
@@ -311,8 +311,9 @@ npx vitest run liteparse-client
 | [RAG Guide](docs/RAG_ARCHITECTURE.md) | RAG implementation |
 | [Implementation](docs/IMPLEMENTATION_GUIDE.md) | Code reference |
 | [Optimization](docs/OPTIMIZATION_GUIDE.md) | Performance tips |
-| [Project Status](docs/PROJECT_STATUS.md) | Feature status |
 | [PWA Guide](docs/PWA_GUIDE.md) | Progressive Web App |
+| [Security Residuals](docs/SECURITY-RESIDUALS.md) | Known accepted risks |
+| [CLAUDE.md](CLAUDE.md) | Architecture reference for AI coding agents |
 
 ---
 
@@ -323,12 +324,13 @@ npx vitest run liteparse-client
 | **Framework** | Next.js 16 (Turbopack), React 19 |
 | **Language** | TypeScript 5 |
 | **Styling** | Tailwind CSS, shadcn/ui |
-| **State** | Zustand |
-| **PDF** | @llamaindex/liteparse (native server-side; PDF.js fallback + client image/table/equation extractors) |
-| **Documents** | Mammoth.js, SheetJS (pinned to the SheetJS CDN tarball), PapaParse |
-| **Local AI** | None in-browser — local summarization falls back to extractive |
+| **State** | Zustand (persist middleware) |
+| **PDF** | @llamaindex/liteparse (native, server-side; unpdf fallback + client-side image/table/equation extractors) |
+| **Documents** | @firecrawl/anydoc-wasm (in-browser WebAssembly → Markdown), PapaParse (TSV→CSV) |
+| **Onboarding** | driver.js |
+| **Local AI** | None in-browser — all inference goes to the configured provider |
 | **Vector DB** | In-Memory, Pinecone, Weaviate |
-| **Testing** | Vitest, Playwright |
+| **Testing** | Vitest + Testing Library (jsdom) |
 
 ---
 

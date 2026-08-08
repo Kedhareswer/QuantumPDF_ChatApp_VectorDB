@@ -20,12 +20,13 @@ import { ChatInterface } from "@/components/chat-interface"
 import { DocumentLibrary } from "@/components/document-library"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { ErrorHandler } from "@/components/error-handler"
+import { OnboardingTour } from "@/components/onboarding-tour"
 import { TabContentLoadingSkeleton } from "@/components/skeleton-loaders"
 import { SystemStatus } from "@/components/system-status"
-import { TutorialModal } from "@/components/tutorial-modal"
 import { UnifiedConfiguration } from "@/components/unified-configuration"
 import { UnifiedPDFProcessor } from "@/components/unified-pdf-processor"
 import { AIClient } from "@/lib/ai-client"
+import { prefetchAnydoc } from "@/lib/anydoc-client"
 import { RAGEngine } from "@/lib/rag-engine"
 import { useAppStore } from "@/lib/store"
 import { VectorDatabaseClient } from "@/lib/vector-database-client"
@@ -95,19 +96,12 @@ export default function QuantumPDFChatbot() {
   // Search state
   const [isTabLoading, setIsTabLoading] = useState(false)
 
-  // Tutorial modal state
-  const [showTutorial, setShowTutorial] = useState(false)
-
   // Check if chat is ready
   const isChatReady = modelStatus === "ready" && documents.length > 0
 
-  // Check for first-time user on mount
+  // Warm anydoc's wasm module in the background; it schedules its own idle deferral.
   useEffect(() => {
-    const hasSeenTutorial = localStorage.getItem("quantum-pdf-tutorial-completed")
-    if (!hasSeenTutorial) {
-      // Show tutorial after a short delay for better UX
-      setTimeout(() => setShowTutorial(true), 500)
-    }
+    prefetchAnydoc()
   }, [])
 
   // Initialize RAG engine with store config
@@ -520,8 +514,8 @@ export default function QuantumPDFChatbot() {
   return (
     <ErrorBoundary>
       <div className="h-screen overflow-hidden bg-gray-50 flex">
-        {/* Tutorial Modal */}
-        <TutorialModal isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
+        {/* First-run product tour */}
+        <OnboardingTour />
 
         {/* Error Handler */}
         <ErrorHandler errors={errors} onDismiss={removeError} />
@@ -575,6 +569,7 @@ export default function QuantumPDFChatbot() {
                 <TabsList className="grid w-full grid-cols-3 m-4 border-2 border-black bg-white">
                   <TabsTrigger
                     value="documents"
+                    data-tour="tab-documents"
                     className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center space-x-1"
                   >
                     <FileText className="w-4 h-4" />
@@ -584,7 +579,7 @@ export default function QuantumPDFChatbot() {
                       </Badge>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="settings" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                  <TabsTrigger value="settings" data-tour="tab-settings" className="data-[state=active]:bg-black data-[state=active]:text-white">
                     <Settings className="w-4 h-4" />
                   </TabsTrigger>
                   <TabsTrigger value="status" className="data-[state=active]:bg-black data-[state=active]:text-white">
@@ -642,6 +637,7 @@ export default function QuantumPDFChatbot() {
                 <Button
                   variant={sidebarTabValue === "documents" ? "default" : "outline"}
                   size="sm"
+                  data-tour="tab-documents"
                   className="w-full justify-center p-3"
                   onClick={() => handleTabChange("documents")}
                   aria-label="Documents"
@@ -651,6 +647,7 @@ export default function QuantumPDFChatbot() {
                 <Button
                   variant={sidebarTabValue === "settings" ? "default" : "outline"}
                   size="sm"
+                  data-tour="tab-settings"
                   className="w-full justify-center p-3"
                   onClick={() => handleTabChange("settings")}
                   aria-label="Settings"

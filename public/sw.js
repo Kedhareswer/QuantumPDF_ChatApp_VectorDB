@@ -10,7 +10,7 @@ const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 // Resources to cache immediately on install
 const PRECACHE_URLS = [
   '/',
-  '/manifest.json',
+  '/manifest.webmanifest',
   '/offline.html',
   '/icon-192.png',
   '/icon-512.png',
@@ -20,9 +20,11 @@ const PRECACHE_URLS = [
 
 // Cache-first routes (static assets)
 const CACHE_FIRST_ROUTES = [
-  /\.(js|css|woff2?|ttf|eot|svg)$/,
+  // .wasm matters: anydoc's module is ~6MB and is content-hashed by Turbopack,
+  // so without this it falls through to networkFirst and re-writes 6MB into the
+  // runtime cache on every single page load.
+  /\.(js|css|wasm|woff2?|ttf|eot|svg)$/,
   /\/icon-.*\.png$/,
-  /\/screenshot-.*\.png$/,
   /\/apple-touch-icon\.png$/
 ];
 
@@ -41,7 +43,18 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('[ServiceWorker] Precaching app shell');
-        return cache.addAll(PRECACHE_URLS.map(url => new Request(url, { cache: 'no-cache' })));
+        // ponytail: cache.addAll() is atomic — one 404 rejects the whole install
+        // and the worker never activates, silently killing offline support. Cache
+        // each URL independently so a missing asset costs only that asset.
+        // __tests__/pwa-assets.test.ts asserts every entry here actually exists,
+        // so a drift is caught at test time rather than swallowed at runtime.
+        return Promise.all(
+          PRECACHE_URLS.map(url =>
+            cache.add(new Request(url, { cache: 'no-cache' })).catch(err => {
+              console.warn('[ServiceWorker] Precache skipped', url, err);
+            })
+          )
+        );
       })
       .then(() => self.skipWaiting())
       .catch((error) => {
@@ -149,9 +162,11 @@ async function networkFirst(request) {
       return cached;
     }
 
-    // Return offline page for HTML requests
+    // Return offline page for HTML requests. Note: caches.match (not
+    // cache.match) — /offline.html is precached into CACHE_NAME, not the
+    // RUNTIME_CACHE opened above, so a scoped lookup always missed it.
     if (request.headers.get('accept')?.includes('text/html')) {
-      const offlinePage = await cache.match('/offline.html');
+      const offlinePage = await caches.match('/offline.html');
       if (offlinePage) return offlinePage;
     }
 

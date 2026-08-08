@@ -30,12 +30,16 @@ const sizes = [
   { size: 180, name: 'apple-touch-icon.png' },
   { size: 32, name: 'favicon-32x32.png' },
   { size: 16, name: 'favicon-16x16.png' },
+  // Referenced by the manifest's shortcuts entries.
+  { size: 96, name: 'upload-icon.png' },
+  { size: 96, name: 'chat-icon.png' },
 ];
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "..", "public");
-const sourceImage = path.join(publicDir, "logo.png");
+// brain.png (750x750) is the app logo and the source every icon is derived from.
+const sourceImage = path.join(publicDir, "brain.png");
 
 async function generateIcons() {
   console.log('🎨 PWA Icon Generator\n');
