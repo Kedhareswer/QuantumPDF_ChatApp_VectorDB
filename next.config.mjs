@@ -9,9 +9,17 @@ const nextConfig = {
   },
   // External packages that should not be bundled
   serverExternalPackages: ['@llamaindex/liteparse', 'onnxruntime-node', '@huggingface/transformers', 'sharp'],
-  // Trace liteparse's platform-specific native binary (.node) into the
-  // serverless function so the addon is present at runtime (e.g. on Vercel).
-  // Without this liteparse silently falls back to unpdf.
+  // Trace liteparse's native binary + libpdfium into the serverless function so
+  // the addon is present at runtime (e.g. on Vercel). Without this liteparse
+  // silently falls back to unpdf.
+  //
+  // The patterns match *files inside the liteparse package only* — no `**`. A
+  // recursive glob over `@llamaindex/**` walks into liteparse's own
+  // node_modules, where pnpm puts the `liteparse-linux-x64-gnu` optional dep as
+  // a symlinked directory; Turbopack's tracer then tries to hash that directory
+  // as a file and the build dies with "Is a directory (os error 21)".
+  // Not a loss: `dist/native.js` falls back to `liteparse.<triple>.node` in the
+  // package root, and the published tarball ships that plus libpdfium.so.
   //
   // Skipped on Windows: under pnpm, `node_modules/@llamaindex/*` are junctions
   // into the `.pnpm` store, and Turbopack's file tracer panics reading one
@@ -21,7 +29,14 @@ const nextConfig = {
   // dropping it on win32 costs nothing and unblocks pnpm on Windows.
   ...(process.platform === 'win32'
     ? {}
-    : { outputFileTracingIncludes: { '/api/pdf/extract': ['./node_modules/@llamaindex/**'] } }),
+    : {
+        outputFileTracingIncludes: {
+          '/api/pdf/extract': [
+            './node_modules/@llamaindex/liteparse/*.node',
+            './node_modules/@llamaindex/liteparse/*.so',
+          ],
+        },
+      }),
   // Turbopack config (Next.js 16 default)
   turbopack: {},
   experimental: {
