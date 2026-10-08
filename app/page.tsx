@@ -104,19 +104,23 @@ export default function QuantumPDFChatbot() {
     prefetchAnydoc()
   }, [])
 
-  // Initialize RAG engine with store config
+  // Initialize RAG engine with store config. Debounced: aiConfig changes on
+  // every API-key keystroke and slider tick, and each initialize() makes live
+  // API calls. `cancelled` drops results from a run a newer config superseded.
   useEffect(() => {
-    const initializeRAG = async () => {
+    let cancelled = false
+    const timer = setTimeout(async () => {
       try {
         if (aiConfig.apiKey && aiConfig.provider) {
-      setModelStatus("loading")
+          setModelStatus("loading")
           logger.debug("Initializing RAG engine with config:", {
             provider: aiConfig.provider,
             model: aiConfig.model,
             hasApiKey: !!aiConfig.apiKey
           })
-          
+
           await ragEngine.initialize(aiConfig)
+          if (cancelled) return
           setModelStatus("ready")
           logger.debug("RAG engine initialized successfully")
         } else {
@@ -124,18 +128,21 @@ export default function QuantumPDFChatbot() {
           logger.debug("RAG engine waiting for configuration")
         }
       } catch (error) {
-          console.error("Failed to initialize RAG engine:", error)
-          setModelStatus("error")
-        
-          addError({
-            type: "error",
+        if (cancelled) return
+        console.error("Failed to initialize RAG engine:", error)
+        setModelStatus("error")
+        addError({
+          type: "error",
           title: "RAG Engine Error",
           message: error instanceof Error ? error.message : "Failed to initialize RAG engine",
         })
       }
-    }
+    }, 600)
 
-    initializeRAG()
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [addError, aiConfig, ragEngine, setModelStatus]) // Re-initialize when config changes
 
   useEffect(() => {
@@ -203,6 +210,11 @@ export default function QuantumPDFChatbot() {
         ], (token) => {
           accumulatedContent += token
           updateMessage(assistantId, { content: accumulatedContent })
+        }, undefined, (streamError) => {
+          updateMessage(assistantId, {
+            content: accumulatedContent || "I'm sorry, I encountered an error while generating a response.",
+          })
+          addError({ type: "error", title: "Chat Error", message: streamError.message })
         })
         return // early since streaming handled
       } else {
@@ -458,7 +470,7 @@ export default function QuantumPDFChatbot() {
       clearMessages()
       clearDocuments()
       ragEngine.clearDocuments()
-      vectorDB.clear()
+      vectorDB.clear().catch((error) => console.error("Failed to clear vector database:", error))
       setActiveTab("documents")
     }
   }

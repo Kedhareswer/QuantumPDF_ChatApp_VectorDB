@@ -171,20 +171,34 @@ export class AdvancedChunker {
     const sections = this.identifySemanticSections(text)
 
     let chunkIndex = 0
-    for (const section of sections) {
-      const trimmedContent = section.content.trim()
+    // A small section that could not be merged backwards (e.g. the document's
+    // title, or a heading after a full chunk) is carried into the next section
+    // instead of being dropped.
+    let carry: { content: string; startChar: number } | null = null
+    const appendToLast = (content: string, endChar: number): boolean => {
+      const last = chunks[chunks.length - 1]
+      if (!last || last.content.length + content.length >= this.options.maxChunkSize) return false
+      last.content += '\n\n' + content
+      last.metadata.endChar = endChar
+      last.metadata.wordCount = last.content.split(/\s+/).length
+      return true
+    }
 
-      // Skip very small sections
+    for (const rawSection of sections) {
+      const section: { content: string; startChar: number } = carry
+        ? { content: `${carry.content}\n\n${rawSection.content.trim()}`, startChar: carry.startChar }
+        : rawSection
+      carry = null
+      const trimmedContent: string = section.content.trim()
+      if (!trimmedContent) continue
+
       if (trimmedContent.length < this.options.minChunkSize) {
-        // Try to merge with previous chunk if exists
-        if (chunks.length > 0 && chunks[chunks.length - 1].content.length + trimmedContent.length < this.options.maxChunkSize) {
-          chunks[chunks.length - 1].content += '\n\n' + trimmedContent
-          chunks[chunks.length - 1].metadata.endChar = section.startChar + trimmedContent.length
-          chunks[chunks.length - 1].metadata.wordCount = chunks[chunks.length - 1].content.split(/\s+/).length
-          continue
-        } else {
-          continue // Skip if can't merge
+        // Headings belong with what follows them; other fragments with what precedes.
+        const isHeading = this.detectChunkType(trimmedContent) === 'heading'
+        if (isHeading || !appendToLast(trimmedContent, section.startChar + trimmedContent.length)) {
+          carry = { content: trimmedContent, startChar: section.startChar }
         }
+        continue
       }
 
       if (trimmedContent.length <= this.options.maxChunkSize) {
@@ -195,12 +209,20 @@ export class AdvancedChunker {
         // Split large section into smaller chunks with semantic boundaries
         const subChunks = this.splitLargeSection(section)
         subChunks.forEach(subChunk => {
-          if (subChunk.content.trim().length >= this.options.minChunkSize) {
-            chunks.push(this.createChunk(subChunk.content, chunkIndex, subChunk.startChar, documentId, documentName))
-            chunkIndex++
-          }
+          const content = subChunk.content.trim()
+          if (!content) return
+          // A short tail still carries text: attach it rather than drop it.
+          if (content.length < this.options.minChunkSize && appendToLast(content, subChunk.startChar + content.length)) return
+          chunks.push(this.createChunk(content, chunkIndex, subChunk.startChar, documentId, documentName))
+          chunkIndex++
         })
       }
+    }
+
+    if (carry && !appendToLast(carry.content, carry.startChar + carry.content.length)) {
+      // Whole document shorter than minChunkSize (or a trailing fragment that
+      // won't fit): keep it as its own chunk.
+      chunks.push(this.createChunk(carry.content, chunkIndex, carry.startChar, documentId, documentName))
     }
 
     return chunks
@@ -404,7 +426,7 @@ export class AdvancedChunker {
 
         // Start new chunk with overlap
         const overlapSentences = this.getOverlapSentences(currentChunk)
-        currentChunk = overlapSentences + sentence
+        currentChunk = overlapSentences ? `${overlapSentences} ${sentence}` : sentence
         chunkStart = currentPos - overlapSentences.length
       } else {
         currentChunk += (currentChunk ? ' ' : '') + sentence
@@ -421,13 +443,17 @@ export class AdvancedChunker {
   }
 
   private splitIntoSentences(text: string): string[] {
-    return text.match(/[^.!?]+[.!?]+/g) || [text]
+    // The `$` alternative keeps trailing text with no end punctuation (list
+    // items, PDF lines), which the old pattern silently dropped.
+    const sentences = (text.match(/[^.!?]+(?:[.!?]+|$)/g) || []).map((s) => s.trim()).filter(Boolean)
+    return sentences.length > 0 ? sentences : [text]
   }
 
   private getOverlapSentences(text: string): string {
     const sentences = this.splitIntoSentences(text)
     const overlapCount = Math.min(2, sentences.length - 1)
-    return sentences.slice(-overlapCount).join(' ')
+    // slice(-0) would return the whole chunk as "overlap"
+    return overlapCount > 0 ? sentences.slice(-overlapCount).join(' ') : ''
   }
 
   private getAdaptiveChunkSize(paragraph: string): number {

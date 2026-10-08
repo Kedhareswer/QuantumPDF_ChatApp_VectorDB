@@ -1,90 +1,49 @@
-import { InferenceClient } from "@huggingface/inference";
-import { type NextRequest } from "next/server";
+import { InferenceClient } from "@huggingface/inference"
+import { type NextRequest, NextResponse } from "next/server"
 
-export const runtime = "nodejs";
+export const runtime = "nodejs"
 
+type ChatMessage = { role: "system" | "user" | "assistant"; content: string }
+
+/**
+ * Chat completion through Hugging Face Inference Providers.
+ *
+ * Proxied (rather than called from the browser) so a server-side
+ * HUGGINGFACE_API_KEY works for users who have not entered their own token.
+ */
 export async function POST(request: NextRequest) {
-  const encoder = new TextEncoder();
-
-  // Helper to stream events
-  function streamEvent(controller: ReadableStreamDefaultController, event: unknown) {
-    controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-  }
-
-  // Parse request
-  let textModel: string = "meta-llama/Meta-Llama-3.3-70B-Instruct";
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
-  let prompt = "";
-  let context = "";
-  let model = "";
+  let model = "openai/gpt-oss-120b"
   try {
-    const body = await request.json();
-    prompt = body.prompt;
-    context = body.context;
-    model = body.model;
-    if (model) textModel = model;
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: "HUGGINGFACE_API_KEY not configured on server" }), { status: 500 });
+    const body = await request.json()
+    const messages: ChatMessage[] = Array.isArray(body?.messages) ? body.messages : []
+    const token =
+      typeof body?.apiKey === "string" && body.apiKey.trim() ? body.apiKey.trim() : process.env.HUGGINGFACE_API_KEY
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "No Hugging Face token: enter one in settings or set HUGGINGFACE_API_KEY on the server." },
+        { status: 401 },
+      )
     }
-    if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
-      return new Response(JSON.stringify({ error: "Invalid prompt input" }), { status: 400 });
+    if (
+      messages.length === 0 ||
+      !messages.every((m) => ["system", "user", "assistant"].includes(m?.role) && typeof m?.content === "string")
+    ) {
+      return NextResponse.json({ error: "messages must be a non-empty array of {role, content}" }, { status: 400 })
     }
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid request body" }), { status: 400 });
+    if (typeof body?.model === "string" && body.model.trim()) model = body.model.trim()
+
+    const temperature = typeof body?.temperature === "number" ? Math.min(Math.max(body.temperature, 0), 2) : 0.1
+    const maxTokens = typeof body?.maxTokens === "number" ? Math.min(Math.max(Math.floor(body.maxTokens), 1), 16384) : 2048
+
+    const client = new InferenceClient(token)
+    const result = await client.chatCompletion({ model, messages, temperature, max_tokens: maxTokens })
+    const text = result.choices?.[0]?.message?.content ?? ""
+    return NextResponse.json({ text, model })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`Hugging Face chat completion failed for ${model}:`, message)
+    // 502: the upstream provider failed, not this route.
+    return NextResponse.json({ error: message }, { status: 502 })
   }
-
-  // Streaming response
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        // Step 1: Searching document database
-        streamEvent(controller, { step: "search", status: "in_progress" });
-        await new Promise((res) => setTimeout(res, 400));
-        streamEvent(controller, { step: "search", status: "done" });
-
-        // Step 2: Ranking by relevance
-        streamEvent(controller, { step: "ranking", status: "in_progress" });
-        await new Promise((res) => setTimeout(res, 400));
-        streamEvent(controller, { step: "ranking", status: "done" });
-
-        // Step 3: Preparing context
-        streamEvent(controller, { step: "context", status: "in_progress" });
-        await new Promise((res) => setTimeout(res, 400));
-        streamEvent(controller, { step: "context", status: "done" });
-
-        // Step 4: Generating answer (in progress)
-        streamEvent(controller, { step: "answer", status: "in_progress" });
-
-        // Generate answer
-        const client = new InferenceClient(apiKey!);
-        const fullPrompt = context
-          ? `Context: ${context}\n\nQuestion: ${prompt}\n\nAnswer:`
-          : `Question: ${prompt}\n\nAnswer:`;
-        const response = await client.textGeneration({
-          model: textModel,
-          inputs: fullPrompt,
-          parameters: {
-            max_new_tokens: 200,
-            temperature: 0.7,
-            do_sample: true,
-            return_full_text: false,
-          },
-        });
-        const generatedText = response.generated_text?.trim() || "";
-        streamEvent(controller, { step: "answer", status: "done", text: generatedText, model: textModel });
-        controller.close();
-      } catch (error) {
-        streamEvent(controller, { step: "error", status: "error", message: error instanceof Error ? error.message : String(error) });
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-    },
-  });
 }

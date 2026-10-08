@@ -1,6 +1,6 @@
 import { logger } from "./logger"
 import { calculateKeywordScore, enhancedKeywordSimilarity } from "./keyword-scoring"
-import { createZeroVector, getEmbeddingDimension } from "./vector-dimensions"
+import { createZeroVector } from "./vector-dimensions"
 
 interface VectorDBConfig {
   provider: "pinecone" | "weaviate" | "local"
@@ -65,7 +65,13 @@ import type { Pinecone as PineconeClient, Index as PineconeIndex } from "@pineco
 
 class PineconeDatabase extends VectorDatabase {
   private pinecone!: PineconeClient
-  private index!: PineconeIndex
+  private index: PineconeIndex | null = null
+  /** Dimension of the existing index, or null when it still has to be created. */
+  private indexDimension: number | null = null
+
+  private get indexName(): string {
+    return this.config.indexName || "pdf-documents"
+  }
 
   async initialize(): Promise<void> {
     try {
@@ -82,30 +88,15 @@ class PineconeDatabase extends VectorDatabase {
         apiKey: this.config.apiKey,
       })
 
-      const indexName = this.config.indexName || "pdf-documents"
-
       try {
-        // Try to get existing index
-        this.index = this.pinecone.index(indexName)
-        await this.index.describeIndexStats()
+        this.index = this.pinecone.index(this.indexName)
+        const stats = await this.index.describeIndexStats()
+        this.indexDimension = stats.dimension ?? null
       } catch {
-        // Index doesn't exist, create it
-        logger.debug(`Creating Pinecone index: ${indexName}`)
-        await this.pinecone.createIndex({
-          name: indexName,
-          dimension: getEmbeddingDimension(this.config.dimension),
-          metric: "cosine",
-          spec: {
-            serverless: {
-              cloud: "aws",
-              region: "us-east-1",
-            },
-          },
-        })
-
-        // Wait for index to be ready
-        await new Promise((resolve) => setTimeout(resolve, 10000))
-        this.index = this.pinecone.index(indexName)
+        // Index doesn't exist yet. It is created on the first upsert, when the
+        // real embedding dimension is known (it differs per embedding model).
+        this.index = null
+        this.indexDimension = null
       }
 
       this.isInitialized = true
@@ -116,25 +107,58 @@ class PineconeDatabase extends VectorDatabase {
     }
   }
 
+  private async ensureIndex(dimension: number): Promise<PineconeIndex> {
+    if (!this.index) {
+      logger.debug(`Creating Pinecone index: ${this.indexName} (dimension ${dimension})`)
+      await this.pinecone.createIndex({
+        name: this.indexName,
+        dimension,
+        metric: "cosine",
+        spec: { serverless: { cloud: "aws", region: "us-east-1" } },
+        waitUntilReady: true,
+        suppressConflicts: true,
+      })
+      this.index = this.pinecone.index(this.indexName)
+      this.indexDimension = dimension
+    }
+    if (this.indexDimension && this.indexDimension !== dimension) {
+      throw new Error(
+        `Pinecone index "${this.indexName}" has dimension ${this.indexDimension}, but the current embedding model produces ${dimension}. ` +
+          `Use a different index name or delete the index.`,
+      )
+    }
+    return this.index
+  }
+
   async addDocuments(documents: VectorDocument[]): Promise<void> {
     if (!this.isInitialized) {
       await this.initialize()
     }
+    if (documents.length === 0) return
 
     try {
-      const vectors = documents.map((doc) => ({
-        id: doc.id,
-        values: doc.embedding,
-        metadata: {
-          content: doc.content.substring(0, 40000), // Pinecone metadata limit
-          source: doc.metadata.source,
-          documentId: doc.metadata.documentId,
-          chunkIndex: doc.metadata.chunkIndex,
-          timestamp: doc.metadata.timestamp.toISOString(),
-        },
-      }))
+      const index = await this.ensureIndex(documents[0].embedding.length)
+      const records = documents.map((doc) => {
+        const ts = doc.metadata.timestamp
+        return {
+          id: doc.id,
+          values: doc.embedding,
+          metadata: {
+            // Pinecone caps metadata at 40KB per record, including the other fields.
+            content: doc.content.substring(0, 30000),
+            source: String(doc.metadata.source ?? ""),
+            documentId: String(doc.metadata.documentId ?? ""),
+            chunkIndex: Number(doc.metadata.chunkIndex ?? 0),
+            // Arrives as a string after the JSON hop through /api/vector-db.
+            timestamp: new Date(ts ?? Date.now()).toISOString(),
+          },
+        }
+      })
 
-      await this.index.upsert(vectors)
+      // Pinecone limits a request to 2MB / 1000 records; 100 keeps large vectors safe.
+      for (let i = 0; i < records.length; i += 100) {
+        await index.upsert({ records: records.slice(i, i + 100) })
+      }
     } catch (error) {
       console.error("Failed to add documents to Pinecone:", error)
       throw error
@@ -145,6 +169,7 @@ class PineconeDatabase extends VectorDatabase {
     if (!this.isInitialized) {
       await this.initialize()
     }
+    if (!this.index) return [] // Nothing has been indexed yet
 
     try {
       let results: SearchResult[] = []
@@ -344,6 +369,8 @@ class PineconeDatabase extends VectorDatabase {
       await this.initialize()
     }
 
+    if (!this.index) return
+
     try {
       await this.index.deleteMany({
         filter: { documentId: { $eq: documentId } },
@@ -358,6 +385,8 @@ class PineconeDatabase extends VectorDatabase {
     if (!this.isInitialized) {
       await this.initialize()
     }
+
+    if (!this.index) return
 
     try {
       await this.index.deleteAll()

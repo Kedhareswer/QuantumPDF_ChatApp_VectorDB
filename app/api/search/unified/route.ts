@@ -1,4 +1,4 @@
-import { AIClient } from "@/lib/ai-client"
+import { AIClient, type AIProvider } from "@/lib/ai-client"
 import { EnhancedURLProcessor } from "@/lib/enhanced-url-processor"
 import { createVectorDatabase } from "@/lib/vector-database"
 import type { VectorDBConfig } from "@/lib/vector-database-types"
@@ -294,7 +294,7 @@ async function localSearchProvider(query: string, maxResults: number, cfg?: Vect
     await vdb.initialize()
 
     // Create AI client for embeddings
-    const ai = new AIClient({ provider: aiConf.provider as unknown, apiKey: aiConf.apiKey, model: aiConf.model, baseUrl: aiConf.baseUrl })
+    const ai = new AIClient({ provider: aiConf.provider as AIProvider, apiKey: aiConf.apiKey, model: aiConf.model, baseUrl: aiConf.baseUrl })
     let embedding: number[] = []
     try {
       embedding = await ai.generateEmbedding(query)

@@ -4,7 +4,7 @@
  */
 
 import { logger } from "./logger"
-import { AIClient } from './ai-client'
+import { AIClient, type AIProvider } from './ai-client'
 
 // PDF.js will be dynamically imported only in browser context to avoid server-side DOMMatrix issues
 let pdfjsLib: unknown = null
@@ -79,7 +79,7 @@ export class EnhancedURLProcessor {
 
     if (this.config.aiConfig) {
       this.aiClient = new AIClient({
-        provider: this.config.aiConfig.provider as unknown,
+        provider: this.config.aiConfig.provider as AIProvider,
         apiKey: this.config.aiConfig.apiKey,
         model: this.config.aiConfig.model,
         baseUrl: this.config.aiConfig.baseUrl

@@ -38,6 +38,8 @@ QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All
 1. User uploads document → `components/unified-pdf-processor.tsx` dispatches on file type: PDFs to `lib/pdf-document-processor.ts` (server-side liteparse route), everything else to `lib/document-processor.ts` (in-browser anydoc wasm). See the document pipeline below.
 2. Document text is chunked by `lib/advanced-chunking.ts` (semantic-aware, adaptive chunk sizing with overlap)
 3. Chunks are embedded via `lib/ai-client.ts` (with 30-min TTL embedding cache) and stored in the vector DB via `lib/vector-database-client.ts`
+   - Providers with an embeddings API (`PROVIDER_SPECS[...].embeddings`) are called in batches; a failure **throws**. Providers without one (Anthropic, Groq, DeepSeek, xAI, …) always use `generateLexicalEmbedding` (feature-hashed keywords). Never mix the two: vectors from different spaces make cosine scores meaningless. `AIClient.embeddingSpaceId` identifies the space, and `RAGEngine.initialize` re-embeds loaded documents when it changes.
+   - Retrieval itself runs in the browser over `RAGEngine.documents`; the vector DB is currently write-only (nothing calls its `search`).
 4. User query → `lib/guardrails.ts` input validation → `lib/query-processor.ts` (HyDE, step-back prompting, query caching)
 5. `lib/rag-engine.ts` orchestrates 3-phase RAG: **Phase 1** vector retrieval → **Phase 2** self-critique → **Phase 3** refined answer generation
 6. Output passes through `lib/guardrails.ts` output validation (groundedness, hallucination detection) before returning to the UI
