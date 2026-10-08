@@ -1,5 +1,6 @@
 'use client';
 
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { ExtractedEquation } from "@/types/multimodal-types";
 
 export interface EquationExtractionOptions {
@@ -115,7 +116,7 @@ export class EquationExtractor {
    * Extract equations from PDF pages using regex-based pattern detection
    */
   async extractFromPDF(
-    pdf: unknown, // PDFDocumentProxy
+    pdf: PDFDocumentProxy,
     documentId: string,
     options: EquationExtractionOptions = {},
     onProgress?: (progress: EquationExtractionProgress) => void,
@@ -149,7 +150,7 @@ export class EquationExtractor {
 
         const page = await pdf.getPage(pageNum)
         const textContent = await page.getTextContent()
-        const pageText = textContent.items.map((item: unknown) => item.str).join(' ')
+        const pageText = textContent.items.map((item) => item.str).join(' ')
 
         const pageEquations = await this.extractFromText(
           pageText,

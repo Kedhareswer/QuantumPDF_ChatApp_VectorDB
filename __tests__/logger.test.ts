@@ -9,11 +9,12 @@ describe("logger", () => {
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     process.env = { ...originalEnv }
   })
 
   it("silences debug() in production", () => {
-    process.env.NODE_ENV = "production"
+    vi.stubEnv("NODE_ENV", "production")
     delete process.env.NEXT_PUBLIC_DEBUG
     const spy = vi.spyOn(console, "log").mockImplementation(() => {})
     logger.debug("hidden")
@@ -21,14 +22,14 @@ describe("logger", () => {
   })
 
   it("emits debug() outside production", () => {
-    process.env.NODE_ENV = "development"
+    vi.stubEnv("NODE_ENV", "development")
     const spy = vi.spyOn(console, "log").mockImplementation(() => {})
     logger.debug("shown")
     expect(spy).toHaveBeenCalledWith("shown")
   })
 
   it("emits debug() in production when NEXT_PUBLIC_DEBUG=true", () => {
-    process.env.NODE_ENV = "production"
+    vi.stubEnv("NODE_ENV", "production")
     process.env.NEXT_PUBLIC_DEBUG = "true"
     const spy = vi.spyOn(console, "log").mockImplementation(() => {})
     logger.debug("forced")
@@ -36,7 +37,7 @@ describe("logger", () => {
   })
 
   it("always emits warn() and error()", () => {
-    process.env.NODE_ENV = "production"
+    vi.stubEnv("NODE_ENV", "production")
     delete process.env.NEXT_PUBLIC_DEBUG
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})

@@ -29,7 +29,7 @@ Tests live in `__tests__/` with setup at `__tests__/setup.ts`. The path alias `@
 
 ## Architecture Overview
 
-QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All core business logic lives in **`/lib/`** (24 files). UI is in **`/components/`** (19 files + 21 shadcn primitives in `components/ui/`). API routes are in **`/app/api/`**.
+QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All core business logic lives in **`/lib/`** (26 files). UI is in **`/components/`** (19 files + 21 shadcn primitives in `components/ui/`). API routes are in **`/app/api/`**.
 
 **Keep it that way.** An August 2026 sweep deleted 50 unreferenced files (~9,700 lines) and 31 unused dependencies. Before adding a `lib/` module or a `components/ui/` primitive, check that something actually imports it — the accumulation was entirely files that were written, never wired up, and then described in the docs as if they were live. A quick reachability check from `app/**` beats trusting the docs.
 
@@ -39,10 +39,12 @@ QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All
 2. Document text is chunked by `lib/advanced-chunking.ts` (semantic-aware, adaptive chunk sizing with overlap)
 3. Chunks are embedded via `lib/ai-client.ts` (with 30-min TTL embedding cache) and stored in the vector DB via `lib/vector-database-client.ts`
    - Providers with an embeddings API (`PROVIDER_SPECS[...].embeddings`) are called in batches; a failure **throws**. Providers without one (Anthropic, Groq, DeepSeek, xAI, …) always use `generateLexicalEmbedding` (feature-hashed keywords). Never mix the two: vectors from different spaces make cosine scores meaningless. `AIClient.embeddingSpaceId` identifies the space, and `RAGEngine.initialize` re-embeds loaded documents when it changes.
-   - Retrieval itself runs in the browser over `RAGEngine.documents`; the vector DB is currently write-only (nothing calls its `search`).
+   - Retrieval runs in the browser over `RAGEngine.documents`. When Pinecone/Weaviate is configured, `app/page.tsx` attaches it via `ragEngine.setVectorSearch(...)`: its nearest-neighbour hits are *added* to the candidate set and get their own vote in rank fusion. The full in-browser scan always runs too, so a remote index that is missing documents can only add recall, never hide chunks. For the `local` provider, `VectorDatabaseClient` makes no server calls at all.
+   - Documents (chunks + Float32 embeddings + `embeddingSpace`) and chat history persist in IndexedDB via `lib/session-persistence.ts` and are restored on load. The AI API key is deliberately *not* persisted.
+   - PDF chunks carry page numbers: `liteparse-client.ts` joins per-page text (`joinPages`) and `buildChunks(..., pageStarts)` returns `chunkPages`, aligned index-for-index with `chunks`, which travels on the document so citations can say `[file, p.N]`.
 4. User query → `lib/guardrails.ts` input validation → `lib/query-processor.ts` (HyDE, step-back prompting, query caching)
-5. `lib/rag-engine.ts` orchestrates 3-phase RAG: **Phase 1** vector retrieval → **Phase 2** self-critique → **Phase 3** refined answer generation
-6. Output passes through `lib/guardrails.ts` output validation (groundedness, hallucination detection) before returning to the UI
+5. `lib/rag-engine.ts` orchestrates 3-phase RAG: **Phase 1** hybrid retrieval + draft answer → **Phase 2** LLM fact-check (`verifyAnswer`: per-claim supported/unsupported verdicts as JSON) → **Phase 3** revision, only when the check says `revise`, followed by a re-check of the revised answer
+6. `groundednessScore` / `hallucinationDetected` come from the verifier's claim verdicts on the *final* answer; the lexical `checkGroundedness` heuristic is only the fallback when the verifier's JSON doesn't parse. `lib/guardrails.ts` output validation is logged, not enforced
 
 ### Key Modules
 
@@ -52,7 +54,8 @@ QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All
 | `lib/rag-engine.ts` | 3-phase RAG orchestrator with quality metrics (accuracy, completeness, clarity, confidence) |
 | `lib/query-processor.ts` | HyDE + step-back prompting, query type classification, per-document-hash cache |
 | `lib/advanced-chunking.ts` | Semantic-aware chunking with metadata (keywords, importance, word count) |
-| `lib/vector-database-client.ts` | Abstraction over Pinecone, Weaviate, and local in-memory implementations |
+| `lib/vector-database-client.ts` | Browser client for `/api/vector-db` (Pinecone, Weaviate); no-op for `local` |
+| `lib/session-persistence.ts` | IndexedDB persistence of documents + chat history across reloads |
 | `lib/guardrails.ts` | PII detection, injection prevention, rate limiting, output groundedness checks |
 | `lib/store.ts` | Zustand store (persistent) — messages, documents, AI config, vector DB config, UI state |
 

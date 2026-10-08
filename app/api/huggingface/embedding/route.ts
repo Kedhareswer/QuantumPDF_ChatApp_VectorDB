@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
       } else {
         throw new Error("Unexpected embedding response format: array contains non-numeric elements or invalid structure");
       }
-    } else if (typeof response === 'object' && response !== null && 'embedding' in response && Array.isArray((response as unknown).embedding)) {
-      embedding = (response as unknown).embedding as number[];
+    } else if (typeof response === 'object' && response !== null && 'embedding' in response && Array.isArray((response as { embedding: unknown }).embedding)) {
+      embedding = (response as { embedding: number[] }).embedding;
     } else {
       throw new Error("Unexpected embedding response format: not an array or a known object structure");
     }

@@ -481,10 +481,12 @@ export class TelemetryCollector {
   private updateMetrics(event: TelemetryEvent): void {
     // Additional metric updates based on event
     if (event.category === 'cache') {
+      const metaType = event.metadata?.type
+      const cacheType = typeof metaType === 'string' && metaType ? metaType : 'unknown'
       if (event.action === 'hit') {
-        this.trackCacheHit(event.metadata?.type || 'unknown')
+        this.trackCacheHit(cacheType)
       } else if (event.action === 'miss') {
-        this.trackCacheMiss(event.metadata?.type || 'unknown')
+        this.trackCacheMiss(cacheType)
       }
     }
   }

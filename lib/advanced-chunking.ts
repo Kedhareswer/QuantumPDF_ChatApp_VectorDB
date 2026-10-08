@@ -592,11 +592,62 @@ export const DEFAULT_CHUNK_OPTIONS: ChunkingOptions = {
   adaptiveThreshold: true,
 }
 
-/** Chunk extracted text, dropping any chunk that is only whitespace. */
-export function buildChunks(text: string, fileName?: string, documentId?: string) {
-  const advancedChunks = new AdvancedChunker(DEFAULT_CHUNK_OPTIONS).chunkText(text, documentId, fileName)
-  const chunks = advancedChunks.map((c) => c.content).filter((c) => c.trim().length > 0)
-  return { advancedChunks, chunks }
+/**
+ * 1-based page containing character `offset`, given each page's start offset
+ * in the joined text (ascending). Binary search; null when no pages are known.
+ */
+export function pageAtOffset(pageStarts: number[], offset: number): number | null {
+  if (pageStarts.length === 0) return null
+  let lo = 0
+  let hi = pageStarts.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (pageStarts[mid] <= offset) lo = mid
+    else hi = mid - 1
+  }
+  return lo + 1
+}
+
+/**
+ * Chunk extracted text, dropping any chunk that is only whitespace.
+ *
+ * When `pageStarts` (the character offset where each page begins in `text`) is
+ * given, every chunk is tagged with the page it starts on: `metadata.page` on
+ * the advanced chunks and `chunkPages`, aligned index-for-index with `chunks`.
+ */
+export function buildChunks(text: string, fileName?: string, documentId?: string, pageStarts?: number[]) {
+  const advancedChunks = new AdvancedChunker(DEFAULT_CHUNK_OPTIONS)
+    .chunkText(text, documentId, fileName)
+    .filter((c) => c.content.trim().length > 0)
+
+  if (pageStarts && pageStarts.length > 0) {
+    let searchFrom = 0
+    for (const chunk of advancedChunks) {
+      // startChar can drift once overlap is prepended; locate the chunk's own
+      // text (its first line) and fall back to the recorded offset.
+      const probe = chunk.content.trim().split("\n")[0].slice(0, 80)
+      let offset = probe ? text.indexOf(probe, Math.max(0, searchFrom - 2000)) : -1
+      if (offset === -1) offset = chunk.metadata.startChar
+      searchFrom = offset
+      chunk.metadata.page = pageAtOffset(pageStarts, offset) ?? undefined
+    }
+  }
+
+  const chunks = advancedChunks.map((c) => c.content)
+  const chunkPages = pageStarts && pageStarts.length > 0 ? advancedChunks.map((c) => c.metadata.page ?? null) : undefined
+  return { advancedChunks, chunks, chunkPages }
+}
+
+/** Join per-page texts with blank lines, recording where each page starts. */
+export function joinPages(pageTexts: string[]): { text: string; pageStarts: number[] } {
+  const pageStarts: number[] = []
+  let text = ""
+  for (const page of pageTexts) {
+    if (text) text += "\n\n"
+    pageStarts.push(text.length)
+    text += page.trim()
+  }
+  return { text, pageStarts }
 }
 
 export type ExtractionQuality = "high" | "medium" | "low" | "none"

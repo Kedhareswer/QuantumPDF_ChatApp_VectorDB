@@ -7,19 +7,10 @@
  * during `next build` page-data collection — only at request time — and a native
  * load failure degrades gracefully to the PDF.js fallback below.
  */
-import { AdvancedChunker, type TextChunk } from "./advanced-chunking"
+import { buildChunks, joinPages, type TextChunk } from "./advanced-chunking"
 import { logger } from "./logger"
 import type { ExtractedImage } from "@/types/multimodal-types"
 
-const CHUNK_OPTIONS = {
-  maxChunkSize: 1000,
-  minChunkSize: 250,
-  overlap: 100,
-  preserveStructure: true,
-  semanticSplitting: true,
-  documentAware: true,
-  adaptiveThreshold: true,
-}
 
 export interface PdfExtractionOptions {
   enableOCR?: boolean
@@ -34,6 +25,8 @@ export interface PdfExtraction {
   text: string
   chunks: string[]
   advancedChunks: TextChunk[]
+  /** 1-based page each chunk starts on, aligned with `chunks` (null if unknown). */
+  chunkPages: Array<number | null>
   pages: number
   ocrUsed: boolean
   previews: ExtractedImage[]
@@ -48,11 +41,6 @@ function newId(): string {
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
-function buildChunks(text: string, fileName?: string, documentId?: string) {
-  const advancedChunks = new AdvancedChunker(CHUNK_OPTIONS).chunkText(text, documentId, fileName)
-  const chunks = advancedChunks.map((c) => c.content).filter((c) => c.trim().length > 0)
-  return { advancedChunks, chunks }
-}
 
 function assessQuality(text: string): PdfExtraction["extractionQuality"] {
   if (!text) return "none"
@@ -66,16 +54,19 @@ function assessQuality(text: string): PdfExtraction["extractionQuality"] {
  * Uses unpdf (a pdfjs build configured for Node/edge runtimes) so it works in
  * serverless functions where raw pdfjs-dist throws "DOMMatrix is not defined".
  */
-async function extractTextFallback(buffer: Buffer): Promise<{ text: string; pages: number }> {
+async function extractTextFallback(buffer: Buffer): Promise<{ pageTexts: string[]; pages: number }> {
   const { extractText, getDocumentProxy } = await import("unpdf")
   const pdf = await getDocumentProxy(new Uint8Array(buffer))
-  const { totalPages, text } = await extractText(pdf, { mergePages: true })
-  const merged = (Array.isArray(text) ? text.join("\n\n") : text)
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim()
-  return { text: merged, pages: totalPages }
+  // Per page (not merged) so chunks can be traced back to their page.
+  const { totalPages, text } = await extractText(pdf, { mergePages: false })
+  const pageTexts = (Array.isArray(text) ? text : [text]).map((page) =>
+    page
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim(),
+  )
+  return { pageTexts, pages: totalPages }
 }
 
 /**
@@ -101,10 +92,13 @@ export async function extractPdf(
       quiet: true,
     })
     const result = await parser.parse(buffer)
-    const text = (result.text ?? "").trim()
+    // Rebuild the text from per-page output so every chunk maps to its page.
+    const { text, pageStarts } = result.pages.length > 0
+      ? joinPages([...result.pages].sort((a, b) => a.pageNum - b.pageNum).map((page) => page.text ?? ""))
+      : { text: (result.text ?? "").trim(), pageStarts: [] as number[] }
 
-    if (text) {
-      const { advancedChunks, chunks } = buildChunks(text, options.fileName, documentId)
+    if (text.trim()) {
+      const { advancedChunks, chunks, chunkPages } = buildChunks(text, options.fileName, documentId, pageStarts)
       const ocrUsed =
         !!options.enableOCR &&
         result.pages.some((page) => page.textItems.some((item) => typeof item.confidence === "number"))
@@ -137,6 +131,7 @@ export async function extractPdf(
         text,
         chunks,
         advancedChunks,
+        chunkPages: chunkPages ?? chunks.map(() => null),
         pages: result.pages.length,
         ocrUsed,
         previews,
@@ -154,12 +149,14 @@ export async function extractPdf(
   }
 
   // Fallback engine: serverless-safe text extraction via unpdf.
-  const { text, pages } = await extractTextFallback(buffer)
-  const { advancedChunks, chunks } = buildChunks(text, options.fileName, documentId)
+  const { pageTexts, pages } = await extractTextFallback(buffer)
+  const { text, pageStarts } = joinPages(pageTexts)
+  const { advancedChunks, chunks, chunkPages } = buildChunks(text, options.fileName, documentId, pageStarts)
   return {
-    text,
+    text: text.trim(),
     chunks,
     advancedChunks,
+    chunkPages: chunkPages ?? chunks.map(() => null),
     pages,
     ocrUsed: false,
     previews: [],

@@ -13,7 +13,9 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { AIConfig } from "@/lib/ai-client"
 import { useAppStore } from "@/lib/store"
+import type { VectorDBConfig } from "@/lib/vector-database-types"
 import { AlertTriangle, Check, Cpu, Database, ExternalLink, Eye, EyeOff, Info, Loader2, X, Zap } from "lucide-react"
 import { useState } from "react"
 
@@ -355,16 +357,17 @@ const AI_PROVIDER_CATEGORIES = [...new Set(Object.values(AI_PROVIDERS).map((p) =
 const VECTOR_DB_PROVIDERS = {
   local: {
     name: "Local Storage",
-    description: "In-memory vector storage (no persistence)",
+    description: "In-browser index, saved in this browser (IndexedDB) across reloads",
     category: "Free",
     requiresApiKey: false,
+    optionalApiKey: false,
     requiresUrl: false,
-    features: ["Free", "No Setup", "Local Only"],
-    limitations: ["No Persistence", "Limited Scale"],
+    features: ["Free", "No Setup", "Private — never leaves the browser"],
+    limitations: ["This browser only", "Limited Scale"],
     icon: <Database className="w-4 h-4" />,
     difficulty: "Easy",
     defaultUrl: "",
-    setupInstructions: "No setup required. Data is stored in memory.",
+    setupInstructions: "No setup required. Documents and embeddings are stored in this browser.",
     signupUrl: "",
   },
   pinecone: {
@@ -372,6 +375,7 @@ const VECTOR_DB_PROVIDERS = {
     description: "Managed vector database with high performance",
     category: "Managed",
     requiresApiKey: true,
+    optionalApiKey: false,
     requiresUrl: false,
     features: ["Managed", "Scalable", "Fast Search", "Real-time"],
     limitations: ["Paid Service", "API Limits"],
@@ -379,13 +383,28 @@ const VECTOR_DB_PROVIDERS = {
     icon: <Zap className="w-4 h-4" />,
     difficulty: "Easy",
     defaultUrl: "",
-    setupInstructions: "Create an account at Pinecone.io and create an index with the dimensions set to match your embedding model",
+    setupInstructions: "Create an account at Pinecone.io. The index is created automatically on first upload, sized to your embedding model",
+  },
+  weaviate: {
+    name: "Weaviate",
+    description: "Open-source vector database — Weaviate Cloud or self-hosted",
+    category: "Self-hosted",
+    requiresApiKey: false,
+    optionalApiKey: true,
+    requiresUrl: true,
+    features: ["Open Source", "Hybrid Search", "Self-host or Cloud"],
+    limitations: ["Needs a running instance"],
+    signupUrl: "https://console.weaviate.cloud/",
+    icon: <Database className="w-4 h-4" />,
+    difficulty: "Medium",
+    defaultUrl: "http://localhost:8080",
+    setupInstructions: "Enter your cluster URL (e.g. https://xyz.weaviate.cloud or http://localhost:8080). The API key is only needed for Weaviate Cloud or auth-enabled clusters",
   },
 }
 
 interface UnifiedConfigurationProps {
-  onTestAI: (config: unknown) => Promise<boolean>
-  onTestVectorDB: (config: unknown) => Promise<boolean>
+  onTestAI: (config: AIConfig) => Promise<boolean>
+  onTestVectorDB: (config: VectorDBConfig) => Promise<boolean>
 }
 
 export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfigurationProps) {
@@ -408,7 +427,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
     const providerInfo = AI_PROVIDERS[provider]
     setAIConfig({
       ...aiConfig,
-      provider: provider as unknown,
+      provider,
       model: providerInfo.defaultModel,
       baseUrl: providerInfo.defaultBaseUrl,
       apiKey: "",
@@ -420,7 +439,7 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
     const providerInfo = VECTOR_DB_PROVIDERS[provider]
     setVectorDBConfig({
       ...vectorDBConfig,
-      provider: provider as unknown,
+      provider,
       apiKey: "",
       url: providerInfo.defaultUrl || "",
       indexName: "pdf-documents",
@@ -873,9 +892,13 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
               </Alert>
 
               {/* Configuration Fields */}
-              {VECTOR_DB_PROVIDERS[vectorDBConfig.provider as keyof typeof VECTOR_DB_PROVIDERS].requiresApiKey && (
+              {(VECTOR_DB_PROVIDERS[vectorDBConfig.provider as keyof typeof VECTOR_DB_PROVIDERS].requiresApiKey ||
+                VECTOR_DB_PROVIDERS[vectorDBConfig.provider as keyof typeof VECTOR_DB_PROVIDERS].optionalApiKey) && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">API Key</label>
+                  <label className="text-sm font-medium">
+                    API Key
+                    {VECTOR_DB_PROVIDERS[vectorDBConfig.provider as keyof typeof VECTOR_DB_PROVIDERS].optionalApiKey && " (optional)"}
+                  </label>
                   <div className="relative">
                     <Input
                       type={showApiKeys.vectordb ? "text" : "password"}

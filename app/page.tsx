@@ -25,10 +25,12 @@ import { TabContentLoadingSkeleton } from "@/components/skeleton-loaders"
 import { SystemStatus } from "@/components/system-status"
 import { UnifiedConfiguration } from "@/components/unified-configuration"
 import { UnifiedPDFProcessor } from "@/components/unified-pdf-processor"
-import { AIClient } from "@/lib/ai-client"
+import { AIClient, type AIConfig } from "@/lib/ai-client"
 import { prefetchAnydoc } from "@/lib/anydoc-client"
-import { RAGEngine } from "@/lib/rag-engine"
-import { useAppStore } from "@/lib/store"
+import { RAGEngine, type EnhancedQueryResponse } from "@/lib/rag-engine"
+import { SessionPersistence, createIndexedDBStore } from "@/lib/session-persistence"
+import { useAppStore, type Document } from "@/lib/store"
+import type { VectorDBConfig } from "@/lib/vector-database-types"
 import { VectorDatabaseClient } from "@/lib/vector-database-client"
 
 /**
@@ -71,9 +73,13 @@ export default function QuantumPDFChatbot() {
     addError,
     removeError,
     updateMessage,
+    restoreSession,
   } = useAppStore()
 
   const [ragEngine] = useState(() => new RAGEngine())
+  // Documents (with embeddings) and chat history survive reloads via IndexedDB.
+  const [persistence] = useState(() => new SessionPersistence(createIndexedDBStore()))
+  const [sessionRestored, setSessionRestored] = useState(false)
   const vectorDB = useMemo(() => new VectorDatabaseClient(vectorDBConfig), [vectorDBConfig])
   const [embeddingStatus, setEmbeddingStatus] = useState<{
     active: boolean
@@ -104,6 +110,47 @@ export default function QuantumPDFChatbot() {
     prefetchAnydoc()
   }, [])
 
+  // Query the external vector store (Pinecone/Weaviate) at retrieval time too.
+  useEffect(() => {
+    ragEngine.setVectorSearch(
+      vectorDB.isRemote ? (embedding, limit, documentIds) => vectorDB.searchChunks(embedding, limit, documentIds) : null,
+    )
+  }, [ragEngine, vectorDB])
+
+  // Restore the previous session once, before anything is saved over it.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [savedDocuments, savedMessages] = await Promise.all([persistence.loadDocuments(), persistence.loadMessages()])
+      if (cancelled) return
+      for (const doc of savedDocuments) {
+        try {
+          // Embeddings are restored with the document; the engine re-embeds
+          // only if the current provider uses a different embedding model.
+          await ragEngine.addDocument(doc)
+        } catch (error) {
+          console.error(`Failed to restore document ${doc.name}:`, error)
+        }
+      }
+      if (cancelled) return
+      if (savedDocuments.length > 0 || savedMessages.length > 0) {
+        restoreSession({ documents: savedDocuments, messages: savedMessages })
+        logger.debug(`Restored ${savedDocuments.length} document(s) and ${savedMessages.length} message(s)`)
+      }
+      setSessionRestored(true)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [persistence, ragEngine, restoreSession])
+
+  // Save the chat history (debounced; streaming updates a message many times).
+  useEffect(() => {
+    if (!sessionRestored) return
+    const timer = setTimeout(() => void persistence.saveMessages(messages), 500)
+    return () => clearTimeout(timer)
+  }, [messages, persistence, sessionRestored])
+
   // Initialize RAG engine with store config. Debounced: aiConfig changes on
   // every API-key keystroke and slider tick, and each initialize() makes live
   // API calls. `cancelled` drops results from a run a newer config superseded.
@@ -119,8 +166,12 @@ export default function QuantumPDFChatbot() {
             hasApiKey: !!aiConfig.apiKey
           })
 
-          await ragEngine.initialize(aiConfig)
+          const { reembeddedDocuments } = await ragEngine.initialize(aiConfig)
           if (cancelled) return
+          if (reembeddedDocuments > 0) {
+            // New embedding model: persist the re-embedded vectors.
+            await Promise.all(ragEngine.getDocuments().map((doc) => persistence.saveDocument(doc)))
+          }
           setModelStatus("ready")
           logger.debug("RAG engine initialized successfully")
         } else {
@@ -143,7 +194,7 @@ export default function QuantumPDFChatbot() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [addError, aiConfig, ragEngine, setModelStatus]) // Re-initialize when config changes
+  }, [addError, aiConfig, persistence, ragEngine, setModelStatus]) // Re-initialize when config changes
 
   useEffect(() => {
     // Initialize the (memoized) vector database client whenever it is recreated.
@@ -192,7 +243,7 @@ export default function QuantumPDFChatbot() {
 
       let responseAnswer = ""
       let responseSources: string[] = []
-      let responseMeta: unknown = {}
+      let responseMeta: Partial<EnhancedQueryResponse> = {}
 
       if (options?.useContext === false) {
         const client = new AIClient(aiConfig)
@@ -263,17 +314,18 @@ export default function QuantumPDFChatbot() {
       addMessage(assistantMessage)
 
       // Show quality metrics as info if they're particularly good or bad
-      if (responseMeta.qualityMetrics?.finalRating >= 85) {
+      const rating = responseMeta.qualityMetrics?.finalRating
+      if (rating !== undefined && rating >= 85) {
         addError({
           type: "success",
           title: "High Quality Response",
-          message: `Response quality: ${responseMeta.qualityMetrics.finalRating.toFixed(1)}% - Enhanced analysis completed`,
+          message: `Response quality: ${rating.toFixed(1)}% - Enhanced analysis completed`,
         })
-      } else if (responseMeta.qualityMetrics?.finalRating < 60) {
+      } else if (rating !== undefined && rating < 60) {
         addError({
           type: "warning",
           title: "Response Quality Notice",
-          message: `Response quality: ${responseMeta.qualityMetrics.finalRating.toFixed(1)}% - Consider rephrasing your question for better results`,
+          message: `Response quality: ${rating.toFixed(1)}% - Consider rephrasing your question for better results`,
         })
       }
 
@@ -317,7 +369,7 @@ export default function QuantumPDFChatbot() {
     return 'normal'
   }
 
-  const handleDocumentUpload = async (document: unknown) => {
+  const handleDocumentUpload = async (document: Document) => {
     try {
       logger.debug("=== Page: Document upload started ===")
       logger.debug("Received document:", {
@@ -368,6 +420,7 @@ export default function QuantumPDFChatbot() {
       
       logger.debug("🔄 Adding document to store...")
       addDocument(document)
+      void persistence.saveDocument(document)
       logger.debug("✅ Document successfully added to store")
 
       // Add to vector database
@@ -381,6 +434,7 @@ export default function QuantumPDFChatbot() {
           chunkIndex: index,
           documentId: document.id,
           timestamp: document.uploadedAt,
+          ...(typeof document.chunkPages?.[index] === "number" && { page: document.chunkPages[index] }),
         },
       }))
       logger.debug("- Vector documents prepared:", vectorDocuments.length)
@@ -441,8 +495,9 @@ export default function QuantumPDFChatbot() {
   const handleRemoveDocument = async (id: string) => {
     try {
       ragEngine.removeDocument(id)
-      await vectorDB.deleteDocument(id)
       removeDocument(id)
+      await persistence.deleteDocument(id)
+      await vectorDB.deleteDocument(id)
 
       addError({
         type: "info",
@@ -470,13 +525,14 @@ export default function QuantumPDFChatbot() {
       clearMessages()
       clearDocuments()
       ragEngine.clearDocuments()
+      void persistence.clear()
       vectorDB.clear().catch((error) => console.error("Failed to clear vector database:", error))
       setActiveTab("documents")
     }
   }
 
 
-  const handleTestAI = async (config: unknown): Promise<boolean> => {
+  const handleTestAI = async (config: AIConfig): Promise<boolean> => {
     try {
       setModelStatus("loading")
       await ragEngine.updateConfig(config)
@@ -489,7 +545,7 @@ export default function QuantumPDFChatbot() {
     }
   }
 
-  const handleTestVectorDB = async (config: unknown): Promise<boolean> => {
+  const handleTestVectorDB = async (config: VectorDBConfig): Promise<boolean> => {
     try {
       const testDB = new VectorDatabaseClient(config)
       await testDB.initialize()

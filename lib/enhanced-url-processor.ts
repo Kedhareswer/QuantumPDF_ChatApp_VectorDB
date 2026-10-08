@@ -7,7 +7,51 @@ import { logger } from "./logger"
 import { AIClient, type AIProvider } from './ai-client'
 
 // PDF.js will be dynamically imported only in browser context to avoid server-side DOMMatrix issues
-let pdfjsLib: unknown = null
+/**
+ * The ambient `pdfjs-dist` shim in types/pdf-types.d.ts omits `version` and only declares the
+ * `Uint8Array | { url }` form of getDocument; the real module also exports `version` and
+ * accepts a DocumentInitParameters object, which is what this module uses.
+ */
+type PdfjsModule = Omit<typeof import('pdfjs-dist'), 'getDocument'> & {
+  version?: string
+  getDocument(
+    src:
+      | Uint8Array
+      | { url: string }
+      | { data: Uint8Array; useWorkerFetch?: boolean; isEvalSupported?: boolean; useSystemFonts?: boolean }
+  ): import('pdfjs-dist').PDFDocumentLoadingTask
+}
+
+let pdfjsLib: PdfjsModule | null = null
+
+/** Fields of the PDF document information dictionary read by this module (pdfjs types `info` as `Object`). */
+interface PdfInfoDictionary {
+  Title?: string
+  Author?: string
+  Subject?: string
+  Keywords?: string
+  Creator?: string
+  Producer?: string
+  CreationDate?: string
+}
+
+interface PdfUrlMetadata {
+  title?: string
+  author?: string
+  subject?: string
+  keywords?: string
+  creator?: string
+  producer?: string
+  creationDate?: string
+}
+
+interface ArxivMetadata {
+  title?: string
+  abstract?: string
+  authors?: string[]
+  publishedAt?: string
+  keywords?: string[]
+}
 
 async function getPdfjs() {
   if (typeof window === 'undefined') {
@@ -15,7 +59,7 @@ async function getPdfjs() {
     return null
   }
   if (!pdfjsLib) {
-    pdfjsLib = await import('pdfjs-dist')
+    pdfjsLib = (await import('pdfjs-dist')) as PdfjsModule
     const workerOptions = pdfjsLib.GlobalWorkerOptions
     const pdfjsVersion = pdfjsLib.version || '3.11.174'
     if (workerOptions) {
@@ -208,7 +252,7 @@ export class EnhancedURLProcessor {
       // Extract text using PDF.js
       let extractedText = ''
       let pageCount = 0
-      let pdfMetadata: unknown = {}
+      let pdfMetadata: PdfUrlMetadata = {}
 
       try {
         const pdfjs = await getPdfjs()
@@ -242,14 +286,15 @@ export class EnhancedURLProcessor {
         // Get metadata
         try {
           const metadata = await pdf.getMetadata()
+          const info = metadata.info as PdfInfoDictionary | undefined
           pdfMetadata = {
-            title: metadata.info?.Title || title,
-            author: metadata.info?.Author,
-            subject: metadata.info?.Subject,
-            keywords: metadata.info?.Keywords,
-            creator: metadata.info?.Creator,
-            producer: metadata.info?.Producer,
-            creationDate: metadata.info?.CreationDate,
+            title: info?.Title || title,
+            author: info?.Author,
+            subject: info?.Subject,
+            keywords: info?.Keywords,
+            creator: info?.Creator,
+            producer: info?.Producer,
+            creationDate: info?.CreationDate,
           }
         } catch (metaError) {
           console.warn('Could not extract PDF metadata:', metaError)
@@ -261,8 +306,8 @@ export class EnhancedURLProcessor {
             const page = await pdf.getPage(i)
             const textContent = await page.getTextContent()
             const pageText = textContent.items
-              .filter((item: unknown) => 'str' in item)
-              .map((item: unknown) => item.str)
+              .filter((item): item is Extract<typeof item, { str: string }> => 'str' in item)
+              .map((item) => item.str)
               .join(' ')
             
             if (pageText.trim()) {
@@ -426,7 +471,7 @@ For full content analysis of image-based PDFs:
     return ''
   }
 
-  private parseArxivXML(xml: string): unknown {
+  private parseArxivXML(xml: string): ArxivMetadata {
     const entry = xml.split('<entry>')[1]?.split('</entry>')[0]
     if (!entry) return {}
 
@@ -445,7 +490,7 @@ For full content analysis of image-based PDFs:
     }
   }
 
-  private combineArxivContent(metadata: unknown, abstractContent: string): string {
+  private combineArxivContent(metadata: ArxivMetadata, abstractContent: string): string {
     let content = ''
     
     if (metadata.title) {
@@ -474,7 +519,7 @@ For full content analysis of image-based PDFs:
     return content
   }
 
-  private createContentChunks(content: string, url: string, metadata: unknown): Array<{ id: string; content: string; metadata: Record<string, unknown> }> {
+  private createContentChunks(content: string, url: string, metadata: object): Array<{ id: string; content: string; metadata: Record<string, unknown> }> {
     const chunks = []
     const chunkSize = this.config.chunkSize!
     const overlap = this.config.chunkOverlap!
