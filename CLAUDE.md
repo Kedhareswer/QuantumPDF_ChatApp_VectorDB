@@ -19,13 +19,14 @@ npm run lint         # Run Next.js ESLint
 npm test             # Run tests once (no watch)
 npx vitest           # Watch mode
 npx vitest run <file> # Run a single test file
+npm run test:e2e     # Playwright: production build + real browser, provider stubbed (e2e/)
 
 # PWA
 npm run pwa:icons    # Regenerate every PWA icon from public/brain.png (needs sharp)
 npm run pwa:test     # Build + start for PWA testing
 ```
 
-Tests live in `__tests__/` with setup at `__tests__/setup.ts`. The path alias `@/*` resolves to the repo root.
+Unit tests live in `__tests__/` with setup at `__tests__/setup.ts`; Playwright specs live in `e2e/` (config: `playwright.config.ts`, which uses `/opt/pw-browsers/chromium` when present). The path alias `@/*` resolves to the repo root.
 
 ## Architecture Overview
 
@@ -44,7 +45,9 @@ QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All
    - PDF chunks carry page numbers: `liteparse-client.ts` joins per-page text (`joinPages`) and `buildChunks(..., pageStarts)` returns `chunkPages`, aligned index-for-index with `chunks`, which travels on the document so citations can say `[file, p.N]`.
 4. User query → `lib/guardrails.ts` input validation → `lib/query-processor.ts` (HyDE, step-back prompting, query caching)
 5. `lib/rag-engine.ts` orchestrates 3-phase RAG: **Phase 1** hybrid retrieval + draft answer → **Phase 2** LLM fact-check (`verifyAnswer`: per-claim supported/unsupported verdicts as JSON) → **Phase 3** revision, only when the check says `revise`, followed by a re-check of the revised answer
-6. `groundednessScore` / `hallucinationDetected` come from the verifier's claim verdicts on the *final* answer; the lexical `checkGroundedness` heuristic is only the fallback when the verifier's JSON doesn't parse. `lib/guardrails.ts` output validation is logged, not enforced
+6. `groundednessScore` / `hallucinationDetected` come from the verifier's claim verdicts on the *final* answer; the lexical `checkGroundedness` heuristic is only the fallback when the verifier's JSON doesn't parse (or in fast mode).
+7. `lib/guardrails.ts` `validateOutput` is **enforced**: the displayed answer is its `sanitizedOutput` (control characters stripped; emails/phones/SSNs/Luhn-valid card numbers that appear in no retrieved source are redacted), and its remaining findings ride along as `warnings` shown under the answer.
+8. **Fast answers** (store `fastMode`, toggle in the chat's advanced controls) skip follow-up resolution, query rewriting/HyDE/step-back and the fact check: one LLM call per question. Retrieval keeps only chunks within `RAGEngine.RELATIVE_FLOOR` (50%) of the best match.
 
 ### Key Modules
 
@@ -86,14 +89,14 @@ The client orchestrator `lib/pdf-document-processor.ts` POSTs the uploaded file 
 - `table-extractor.ts` — structured table extraction
 - `equation-extractor.ts` — math equations via KaTeX
 
-`pdfjs-dist` is no longer the primary text engine — it now backs only these client-side extractors (loaded via `lib/pdf-client.js`), the server-side fallback in `liteparse-client.ts`, and URL-based PDF fetching in `lib/enhanced-url-processor.ts`.
+`pdfjs-dist` is no longer the primary text engine — it now backs only these client-side extractors (loaded via `lib/pdf-client.js`) and the server-side fallback in `liteparse-client.ts`. (The unused URL-ingestion module `enhanced-url-processor.ts` and the `/api/search/unified` route were removed in October 2026.)
 
 ### API Routes
 
 - `POST /api/pdf/extract` — server-side PDF text/OCR/preview extraction via liteparse (Node.js runtime)
-- `POST /api/search/unified` — unified vector + keyword search
 - `GET|POST /api/vector-db` — vector DB CRUD operations
-- `POST /api/huggingface/*` — proxies to HuggingFace Inference API
+- `POST /api/huggingface/text`, `POST /api/huggingface/embedding` — proxies to Hugging Face Inference Providers. They use the caller's key; the server's `HUGGINGFACE_API_KEY` is only used for same-origin requests and is rate-limited per IP (`lib/server-key-guard.ts`). Set `HUGGINGFACE_SERVER_KEY=disabled` to never share it.
+- `GET /api/ping` — health check
 
 ### State Management
 

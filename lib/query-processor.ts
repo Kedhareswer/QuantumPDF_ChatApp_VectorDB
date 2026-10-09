@@ -323,7 +323,8 @@ export class QueryProcessor {
   /**
    * Analyze and classify a query to determine optimal processing strategy
    */
-  async analyzeQuery(query: string): Promise<QueryAnalysis> {
+  async analyzeQuery(query: string, options: { useLLM?: boolean } = {}): Promise<QueryAnalysis> {
+    const useLLM = options.useLLM ?? true
     const queryLower = query.toLowerCase().trim()
     
     // Classify query type
@@ -351,19 +352,19 @@ export class QueryProcessor {
     // Rewriting, HyDE and step-back are independent LLM calls: run them
     // concurrently (they used to be awaited one after another, tripling latency).
     const [rewriteResult, hypotheticalAnswer, stepBackQuestion] = await Promise.all([
-      this.config.rewriteEnabled && this.aiClient && complexity !== 'simple'
+      useLLM && this.config.rewriteEnabled && this.aiClient && complexity !== 'simple'
         ? this.rewriteQuery(query, queryType).catch((error) => {
             console.warn('Query rewriting failed, using original:', error)
             return null
           })
         : null,
-      requiresHyDE && this.config.hydeEnabled && this.aiClient
+      useLLM && requiresHyDE && this.config.hydeEnabled && this.aiClient
         ? this.generateHypotheticalAnswer(query, queryType).catch((error) => {
             console.warn('HyDE generation failed:', error)
             return undefined
           })
         : undefined,
-      requiresStepBack && this.config.stepBackEnabled && this.aiClient
+      useLLM && requiresStepBack && this.config.stepBackEnabled && this.aiClient
         ? this.generateStepBackQuestion(query, queryType).catch((error) => {
             console.warn('Step-back generation failed:', error)
             return undefined

@@ -83,7 +83,7 @@
 ### Prerequisites
 
 - Node.js 20.9+ (required by Next.js 16)
-- npm 9+ (pnpm works too)
+- npm 9+ (the repo standardizes on npm; `package-lock.json` is the only lockfile)
 - API key (OpenAI, Anthropic, or other supported provider)
 
 ### Installation
@@ -296,6 +296,13 @@ npx vitest
 
 # Run a single test file
 npx vitest run liteparse-client
+```
+
+End-to-end (production build, real Chromium, AI provider stubbed at the network layer):
+
+```bash
+npx playwright install chromium   # once, unless a Chromium is preinstalled
+npm run test:e2e
 ```
 
 ---

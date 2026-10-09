@@ -35,3 +35,8 @@ nul
 .tmp-strict-lint-after.json
 .tmp-strict-lint.json
 .planning/debug/tsc-audit.txt
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/

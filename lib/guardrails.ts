@@ -194,14 +194,50 @@ function detectContentType(content: string): string {
 
 export interface OutputValidationResult {
   isValid: boolean
+  /** Problems found, phrased for the user (shown under the answer). */
   issues: string[]
-  sanitizedOutput?: string
-  toxicityScore: number
+  /** The answer to display: control characters stripped, unsourced sensitive data redacted. */
+  sanitizedOutput: string
+  /** Sensitive values removed because no retrieved source contains them. */
+  redactions: string[]
   qualityScore: number
 }
 
+/** Luhn checksum, so ordinary 16-digit numbers are not mistaken for card numbers. */
+function passesLuhn(digits: string): boolean {
+  let sum = 0
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i])
+    if (i % 2 === 1) {
+      d *= 2
+      if (d > 9) d -= 9
+    }
+    sum += d
+  }
+  return digits.length >= 13 && sum % 10 === 0
+}
+
+const SENSITIVE_PATTERNS: Array<{ label: string; pattern: RegExp; valid?: (match: string) => boolean }> = [
+  { label: "email address", pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g },
+  { label: "card number", pattern: /\b(?:\d[ -]?){13,19}\b/g, valid: (m) => passesLuhn(m.replace(/\D/g, "")) },
+  { label: "US SSN", pattern: /\b\d{3}-\d{2}-\d{4}\b/g },
+  { label: "phone number", pattern: /(?:\+\d{1,3}[\s.-]?)?\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g },
+]
+
+/** Compare ignoring formatting, so "555 123 4567" in a source matches "555-123-4567". */
+const normalizeValue = (value: string) => value.toLowerCase().replace(/[\s().-]/g, "")
+
 /**
- * Validate and sanitize LLM output
+ * Validate and sanitize LLM output before it is shown.
+ *
+ * Enforced: control characters are stripped, and emails, phone numbers, SSNs
+ * and (Luhn-valid) card numbers that appear in the answer but in none of the
+ * retrieved sources are redacted — the documents are the user's own, so
+ * values found there are fine to repeat; values that are not were invented
+ * by the model or pulled from somewhere else.
+ *
+ * Reported (shown with the answer, not blocked): hedging language and missing
+ * citations.
  */
 export function validateOutput(
   response: string,
@@ -209,67 +245,52 @@ export function validateOutput(
   chunks: Array<{ content: string; source: string }>
 ): OutputValidationResult {
   const issues: string[] = []
-  let toxicityScore = 0
+  const redactions: string[] = []
   let qualityScore = 1.0
-  
-  // Check for empty response
+
   if (!response || response.trim().length === 0) {
-    issues.push('Response is empty')
-    return { isValid: false, issues, toxicityScore: 0, qualityScore: 0 }
+    return { isValid: false, issues: ['Response is empty'], sanitizedOutput: '', redactions, qualityScore: 0 }
   }
-  
-  // Check response length
+
   if (response.length > 50000) {
     issues.push('Response exceeds maximum length')
     qualityScore -= 0.2
   }
-  
-  // Check for potential harmful content (simplified)
-  const harmfulPatterns = [
-    /\b(hack|exploit|attack|steal|kill|bomb)\b/i,
-    /\b(password|credit.?card|ssn|social.?security)\b/i,
-  ]
-  
-  for (const pattern of harmfulPatterns) {
-    if (pattern.test(response) && !pattern.test(context)) {
-      toxicityScore += 0.3
-      issues.push('Response may contain sensitive content not from source documents')
-    }
+
+  let sanitizedOutput = response.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim()
+
+  // Redact sensitive values the sources do not contain.
+  const sourceText = normalizeValue(`${context}\n${chunks.map((c) => c.content).join('\n')}`)
+  for (const { label, pattern, valid } of SENSITIVE_PATTERNS) {
+    sanitizedOutput = sanitizedOutput.replace(pattern, (match) => {
+      if (valid && !valid(match)) return match
+      if (sourceText.includes(normalizeValue(match))) return match
+      redactions.push(label)
+      return `[${label} removed]`
+    })
   }
-  
-  // Check for hallucination indicators
-  const hallucinationIndicators = [
-    /I\s+(think|believe|assume|guess)/i,
-    /probably|likely|might be|could be/i,
-    /as far as I know/i,
-    /I don't have.*information.*but/i,
-  ]
-  
-  for (const pattern of hallucinationIndicators) {
-    if (pattern.test(response)) {
-      issues.push('Response contains uncertainty indicators - verify against sources')
-      qualityScore -= 0.1
-    }
-  }
-  
-  // Check for citation presence
-  const hasCitations = /\[.*\]/.test(response)
-  if (!hasCitations && chunks.length > 0) {
-    issues.push('Response lacks citations despite having source documents')
+  if (redactions.length > 0) {
+    issues.push(`Removed ${redactions.length} ${redactions.length === 1 ? 'value' : 'values'} (${[...new Set(redactions)].join(', ')}) not found in your documents`)
     qualityScore -= 0.2
   }
-  
-  // Sanitize output
-  const sanitizedOutput = response
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
-    .trim()
-  
+
+  const hedging = [/\bI\s+(think|believe|assume|guess)\b/i, /\bas far as I know\b/i, /I don't have.*information.*but/i]
+  if (hedging.some((p) => p.test(sanitizedOutput))) {
+    issues.push('The answer contains hedging language; verify it against the sources')
+    qualityScore -= 0.1
+  }
+
+  if (chunks.length > 0 && !/\[[^\]]+\]/.test(sanitizedOutput) && !/not found in the provided documents/i.test(sanitizedOutput)) {
+    issues.push('The answer has no citations')
+    qualityScore -= 0.2
+  }
+
   return {
     isValid: issues.length === 0,
     issues,
     sanitizedOutput,
-    toxicityScore: Math.min(1, toxicityScore),
-    qualityScore: Math.max(0, qualityScore)
+    redactions,
+    qualityScore: Math.max(0, qualityScore),
   }
 }
 

@@ -1,5 +1,6 @@
 import { InferenceClient } from "@huggingface/inference"
 import { type NextRequest, NextResponse } from "next/server"
+import { resolveApiKey } from "@/lib/server-key-guard"
 
 export const runtime = "nodejs"
 
@@ -16,15 +17,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const messages: ChatMessage[] = Array.isArray(body?.messages) ? body.messages : []
-    const token =
-      typeof body?.apiKey === "string" && body.apiKey.trim() ? body.apiKey.trim() : process.env.HUGGINGFACE_API_KEY
-
-    if (!token) {
-      return NextResponse.json(
-        { error: "No Hugging Face token: enter one in settings or set HUGGINGFACE_API_KEY on the server." },
-        { status: 401 },
-      )
+    // The user's own key, or the server's key for same-origin, rate-limited use only.
+    const key = resolveApiKey(request, body?.apiKey, {
+      provider: "huggingface",
+      serverKey: process.env.HUGGINGFACE_API_KEY,
+      perMinute: 30,
+    })
+    if (!key.ok) {
+      return NextResponse.json({ error: key.error }, { status: key.status })
     }
+    const token = key.token
     if (
       messages.length === 0 ||
       !messages.every((m) => ["system", "user", "assistant"].includes(m?.role) && typeof m?.content === "string")

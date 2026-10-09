@@ -731,18 +731,15 @@ export class AIClient {
         return (result.embeddings || []).map((e: { values: number[] }) => e.values)
       }
       case "huggingface": {
-        // Proxied so a server-side HUGGINGFACE_API_KEY works when the user has none.
-        return Promise.all(
-          inputs.map(async (text) => {
-            const response = await fetchWithRetry("huggingface", "/api/huggingface/embedding", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ text, model, apiKey: this.config.apiKey || undefined }),
-            })
-            const result = await response.json()
-            return result.embedding
-          }),
-        )
+        // Proxied so a server-side HUGGINGFACE_API_KEY works when the user has none;
+        // one request per batch (the route accepts up to EMBEDDING_BATCH_SIZE texts).
+        const response = await fetchWithRetry("huggingface", "/api/huggingface/embedding", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ texts: inputs, model, apiKey: this.config.apiKey || undefined }),
+        })
+        const result = await response.json()
+        return result.embeddings
       }
       case "openai": {
         const response = await fetchWithRetry(this.config.provider, `${this.baseUrl}/embeddings`, {

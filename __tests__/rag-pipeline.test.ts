@@ -200,6 +200,66 @@ describe("RAGEngine.query", () => {
   })
 })
 
+describe("RAGEngine fast mode and relevance floor", () => {
+  it("answers with a single LLM call in fast mode", async () => {
+    const calls = stubChat([PASS])
+    const engine = await engineWithDocs()
+    calls.length = 0
+
+    const res = await engine.query(QUESTION, {
+      complexityLevel: "normal",
+      fastMode: true,
+      conversationHistory: [{ role: "user", content: "hi" }, { role: "assistant", content: "hello" }],
+    })
+    expect(calls.map((c) => c.kind)).toEqual(["answer"])
+    expect(res.answer).toContain("24 months")
+    expect(res.verifiedClaims).toBeUndefined() // groundedness is the lexical estimate
+  })
+
+  it("drops chunks far below the best match", async () => {
+    stubChat([PASS])
+    const engine = new RAGEngine()
+    await engine.initialize({ provider: "groq", apiKey: "k", model: "openai/gpt-oss-120b" })
+    const chunks = [
+      "The product warranty lasts 24 months from the date of purchase and covers manufacturing defects.",
+      "Zebras graze quietly beneath violet nebulae near Quokka Station.",
+    ]
+    await engine.addDocument({ id: "d3", name: "m.pdf", content: "", chunks, embeddings: [], uploadedAt: new Date() })
+    const res = await engine.query(QUESTION, { complexityLevel: "normal" })
+    expect(res.retrievedChunks.map((c) => c.content)).toEqual([chunks[0]])
+  })
+
+  it("shows guardrail findings and redactions on the answer", async () => {
+    stubChat([PASS], "Email the CEO at ceo@acme.com about the 24 month warranty [handbook.pdf, p.2].")
+    const engine = await engineWithDocs()
+    const res = await engine.query(QUESTION, { complexityLevel: "normal" })
+    expect(res.answer).toContain("[email address removed]")
+    expect(res.warnings?.join(" ")).toMatch(/not found in your documents/)
+  })
+})
+
+describe("RAGEngine section labels (non-PDF)", () => {
+  it("labels sources and context with the chunk's heading or sheet", async () => {
+    const calls = stubChat([PASS])
+    const engine = new RAGEngine()
+    await engine.initialize({ provider: "groq", apiKey: "k", model: "openai/gpt-oss-120b" })
+    await engine.addDocument({
+      id: "x1",
+      name: "budget.xlsx",
+      content: "",
+      chunks: ["The product warranty lasts 24 months from the date of purchase and covers manufacturing defects."],
+      chunkSections: ["Warranty"],
+      embeddings: [],
+      uploadedAt: new Date(),
+    })
+    calls.length = 0
+    const res = await engine.query(QUESTION, { complexityLevel: "normal" })
+    expect(res.retrievedChunks[0].source).toBe("budget.xlsx · Warranty")
+    expect(res.retrievedChunks[0].section).toBe("Warranty")
+    expect(calls.find((c) => c.kind === "answer")!.user).toContain("[SOURCE: budget.xlsx | Section: Warranty]")
+  })
+})
+
 describe("RAGEngine document embedding spaces", () => {
   it("re-embeds a restored document produced by a different embedding model", async () => {
     stubChat([PASS])

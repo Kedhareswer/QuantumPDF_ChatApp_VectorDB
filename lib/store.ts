@@ -42,6 +42,12 @@ export interface Message {
       criticalReview: string
       finalRefinement: string
     }
+    /** Share 0-1 of answer claims the LLM verifier found supported. */
+    groundednessScore?: number
+    hallucinationDetected?: boolean
+    verifiedClaims?: { total: number; supported: number; unsupportedClaims: string[] }
+    /** Output-guardrail findings (redactions, missing citations, hedging). */
+    warnings?: string[]
     queryAnalysis?: {
       originalQuery: string
       rewrittenQuery: string
@@ -64,6 +70,8 @@ export interface Document {
   chunks: string[]
   /** 1-based page each chunk starts on, aligned with `chunks` (PDFs only). */
   chunkPages?: Array<number | null>
+  /** Nearest heading / sheet name for each chunk, aligned with `chunks` (non-PDF formats). */
+  chunkSections?: Array<string | null>
   embeddings: number[][]
   /** AIClient.embeddingSpaceId the embeddings were produced in. */
   embeddingSpace?: string
@@ -137,6 +145,11 @@ interface AppState {
   // Error handling
   errors: AppError[]
 
+  /** Fast answers: one LLM call per question (no query rewriting, no fact check). */
+  fastMode: boolean
+  /** Keep documents and chat history in this browser (IndexedDB) across reloads. */
+  rememberSession: boolean
+
   // Actions
   addMessage: (message: Message) => void
   updateMessage: (id: string, partial: Partial<Message>) => void
@@ -156,6 +169,8 @@ interface AppState {
   addError: (error: Omit<AppError, "id" | "timestamp">) => void
   removeError: (id: string) => void
   clearErrors: () => void
+  setFastMode: (fast: boolean) => void
+  setRememberSession: (remember: boolean) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -182,6 +197,8 @@ export const useAppStore = create<AppState>()(
       sidebarOpen: false,
       sidebarCollapsed: false,
       errors: [],
+      fastMode: false,
+      rememberSession: true,
 
       // Actions
       addMessage: (message) =>
@@ -209,6 +226,9 @@ export const useAppStore = create<AppState>()(
       clearDocuments: () => set({ documents: [] }),
 
       restoreSession: ({ documents, messages }) => set({ documents, messages }),
+
+      setFastMode: (fastMode) => set({ fastMode }),
+      setRememberSession: (rememberSession) => set({ rememberSession }),
 
       setAIConfig: (config) => {
         // Validate provider and fallback to openai if invalid
@@ -266,6 +286,8 @@ export const useAppStore = create<AppState>()(
         vectorDBConfig: state.vectorDBConfig,
         sidebarCollapsed: state.sidebarCollapsed,
         activeTab: state.activeTab,
+        fastMode: state.fastMode,
+        rememberSession: state.rememberSession,
       }),
       // Add version and migration logic
       version: 3,
