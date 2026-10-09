@@ -237,17 +237,15 @@ export const useAppStore = create<AppState>()(
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
 
-      addError: (error) =>
-        set((state) => ({
-          errors: [
-            ...state.errors,
-            {
-              ...error,
-              id: Date.now().toString(),
-              timestamp: new Date(),
-            },
-          ],
-        })),
+      addError: (error) => {
+        // Random suffix: two toasts in the same millisecond must not share an id,
+        // or one auto-dismiss would remove both.
+        const id = Date.now().toString() + Math.random().toString(36).slice(2, 8)
+        set((state) => ({ errors: [...state.errors, { ...error, id, timestamp: new Date() }] }))
+        // Failures linger longer so they can be read; everything auto-dismisses.
+        const ttl = error.type === "error" || error.type === "warning" ? 10000 : 5000
+        setTimeout(() => set((state) => ({ errors: state.errors.filter((e) => e.id !== id) })), ttl)
+      },
 
       removeError: (id) =>
         set((state) => ({

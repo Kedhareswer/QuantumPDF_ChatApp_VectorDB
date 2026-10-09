@@ -67,7 +67,7 @@ GROQ_API_KEY=gsk_...
 
 ### Enhanced UI Features
 
-1. **Inline Citations**: Compact superscript references with a single "Sources" line under each answer
+1. **Inline Citations**: Numbered chips on each claim; click one to jump to its retrieved chunk
 2. **Document Filtering**: Use filter chips above input to search specific documents
 3. **Chunk Visualization**: Expand "View Retrieved Chunks" to see retrieval details
 4. **Query History**: Click History button in the chat header to access previous queries

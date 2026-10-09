@@ -95,7 +95,7 @@ lib/
 ├── rag-engine.ts         # Core RAG with 3-phase processing
 ├── liteparse-client.ts   # Server-side PDF extraction (+ unpdf fallback)
 ├── anydoc-client.ts      # In-browser wasm extraction, all non-PDF formats
-├── citation-format.ts    # Superscript citation rendering
+├── citation-format.ts    # Citation → chunk chip linking
 ├── store.ts              # Zustand state management
 └── vector-database-client.ts  # Vector DB abstraction
 ```
@@ -375,18 +375,16 @@ if (!check.withinBudget) {
 
 ### Inline Citations
 
-Citations render as compact superscripts inside the answer, followed by a
-`Sources:` line. This replaced the earlier `SourceCards` / `CitationBadge`
-components, which were removed — the formatting now lives in a plain helper
-rather than a component tree.
+Citations render as numbered chips inside the answer. Chip N is chunk N in
+**View Retrieved Chunks**; clicking it opens the panel and highlights that
+chunk. There is no separate `Sources:` footer.
 
 ```typescript
-// lib/citation-format.ts — exports toSuperscript(n) and formatCitationsForDisplay(content)
-import { formatCitationsForDisplay } from '@/lib/citation-format'
+// lib/citation-format.ts — exports linkCitations(content, chunks) and findCitedChunk(label, chunks)
+import { linkCitations } from '@/lib/citation-format'
 
-// Rewrites [1] / [1,2] markers in the answer body into superscripts (¹ ²).
-// Used in components/chat-interface.tsx before handing content to react-markdown.
-return formatCitationsForDisplay(cleaned.trim())
+// Rewrites [File.pdf, p.N] markers into [n](#cite-n) links; chat-interface renders those as chips.
+return linkCitations(cleaned.trim(), getNumberedChunks(message))
 ```
 
 ### Document Filtering

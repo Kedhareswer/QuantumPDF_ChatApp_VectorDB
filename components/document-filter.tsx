@@ -65,7 +65,7 @@ export function DocumentFilter({
         {isAllSelected ? (
           <Badge 
             variant="outline" 
-            className="border-purple-300 bg-purple-50 text-purple-700 px-3 py-1.5 text-xs font-medium"
+            className="rounded-none border-black bg-white text-black px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-wider"
           >
             All Documents ({documents.length})
           </Badge>
@@ -78,12 +78,12 @@ export function DocumentFilter({
                 <Badge
                   key={docId}
                   variant="outline"
-                  className="border-purple-300 bg-purple-100 text-purple-700 px-3 py-1.5 text-xs font-medium group"
+                  className="rounded-none border-black bg-black text-white px-2.5 py-1 text-xs font-medium group"
                 >
                   <span className="truncate max-w-[120px] sm:max-w-[200px]">{doc.name}</span>
                   <button
                     onClick={() => handleToggleDocument(docId)}
-                    className="ml-1.5 hover:bg-purple-200 rounded-full p-0.5 -mr-1"
+                    className="ml-1.5 hover:bg-white hover:text-black p-0.5 -mr-1"
                     aria-label={`Remove ${doc.name} filter`}
                   >
                     <X className="w-3 h-3" />
@@ -111,7 +111,7 @@ export function DocumentFilter({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 px-3 border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 shrink-0"
+            className="h-8 px-3 rounded-none border-2 border-black bg-white hover:bg-black hover:text-white text-black text-xs font-bold uppercase tracking-wider shrink-0"
           >
             <Filter className="w-3 h-3 sm:w-4 sm:h-4 mr-1.5" />
             <span className="hidden sm:inline">Filter</span>

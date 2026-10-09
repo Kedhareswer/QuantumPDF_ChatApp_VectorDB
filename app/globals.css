@@ -21,6 +21,14 @@
   --color-input: hsl(0 0% 0%);
   --color-ring: hsl(0 0% 0%);
   --radius: 0rem;
+  /* Tailwind 4's rounded-* utilities read these, not --radius, so the square
+     brand corners never applied. Zero them; rounded-full (pills/dots) is unaffected. */
+  --radius-xs: 0rem;
+  --radius-sm: 0rem;
+  --radius-md: 0rem;
+  --radius-lg: 0rem;
+  --radius-xl: 0rem;
+  --radius-2xl: 0rem;
 }
 
 :root {
@@ -168,25 +176,25 @@
 
 /* Message bubble improvements */
 .message-bubble {
-  padding: 1.5rem;
-  border: 2px solid;
-  transition: all 0.2s;
+  border: 2px solid #000;
   word-wrap: break-word;
-  hyphens: auto;
+  min-width: 0;
 }
 
+/* Question: a compact black block on the right */
 .message-bubble-user {
-  border-color: var(--color-foreground);
-  background-color: var(--color-foreground);
-  color: var(--color-background);
-  margin-left: 10%;
+  background-color: #000;
+  color: #fff;
+  padding: 0.75rem 1rem;
+  max-width: min(85%, 42rem);
 }
 
+/* Answer: full-width white card with the hard offset shadow used across the brand */
 .message-bubble-assistant {
-  border-color: #d1d5db;
-  background-color: var(--color-background);
-  color: var(--color-foreground);
-  margin-right: 10%;
+  background-color: #fff;
+  color: #000;
+  padding: 1.5rem 1.75rem;
+  box-shadow: 4px 4px 0 0 #000;
 }
 
 /* Loading animation improvements */
@@ -262,12 +270,6 @@
     margin-top: var(--spacing-sm);
   }
 
-  .message-bubble-user,
-  .message-bubble-assistant {
-    margin-left: 0;
-    margin-right: 0;
-  }
-
   /* Mobile typography adjustments */
   .text-hierarchy-1 {
     font-size: 1.125rem;
@@ -302,8 +304,12 @@
 
   /* Message bubble improvements for mobile */
   .message-bubble {
-    padding: 0.75rem;
     word-break: break-word;
+  }
+
+  .message-bubble-assistant {
+    padding: 1rem;
+    box-shadow: 3px 3px 0 0 #000;
   }
 
   /* Reduce padding on cards for mobile */

@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from 'react-markdown'
-import { formatCitationsForDisplay } from '@/lib/citation-format'
+import { CITE_HREF_PREFIX, linkCitations } from '@/lib/citation-format'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import Mermaid from '@/components/mermaid'
@@ -30,16 +30,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/hooks/use-toast"
 import { useAppStore } from "@/lib/store"
+import Image from "next/image"
 import {
+    ArrowUpRight,
     Brain,
     ChevronDown,
     ChevronRight,
     Clock,
     Eye,
-    FileText,
     HelpCircle,
     Loader2,
-    MessageSquare,
     Send,
     Settings,
     Sparkles,
@@ -129,6 +129,8 @@ interface ChatInterfaceProps {
     textPreview: string
     startedAt: number | null
   }
+  /** Saved chat is still loading from IndexedDB; hold the empty state so it doesn't flash. */
+  isRestoring?: boolean
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -140,8 +142,15 @@ const SUGGESTED_QUESTIONS = [
   "Identify and define all acronyms found in the text.",
 ]
 
+// Shown in place of suggestions until a provider is ready and a document is indexed
+const SETUP_STEPS = [
+  { title: "Connect an AI provider", hint: "Setup tab → pick a provider and add its API key" },
+  { title: "Upload a document", hint: "Docs tab → PDF, Word, Excel, PowerPoint and more" },
+  { title: "Ask a question", hint: "Answers link each claim to the chunk it came from" },
+]
+
 // Component to parse and render message content with thinking sections
-function MessageContent({ content }: { content: string }) {
+function MessageContent({ content, onCite }: { content: string; onCite?: (index: number) => void }) {
   const [expandedThinking, setExpandedThinking] = useState<{[key: string]: boolean}>({})
 
   // Parse content to extract thinking sections
@@ -265,22 +274,23 @@ function MessageContent({ content }: { content: string }) {
           )
         } else {
           return (
-            <div key={part.id} className="markdown-content">
+            <div key={part.id} className="markdown-content text-sm md:text-[15px] leading-7">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
                 rehypePlugins={[rehypeKatex]}
                 components={{
                   // Custom styling for markdown elements
-                  h1: ({ children }) => <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 mt-4 sm:mt-6 first:mt-0 break-words">{children}</h1>,
-                  h2: ({ children }) => <h2 className="text-base sm:text-lg md:text-xl font-bold mb-2 sm:mb-3 mt-3 sm:mt-5 first:mt-0 break-words">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-sm sm:text-base md:text-lg font-bold mb-2 mt-3 sm:mt-4 first:mt-0 break-words">{children}</h3>,
-                  h4: ({ children }) => <h4 className="text-xs sm:text-sm md:text-base font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h4>,
-                  h5: ({ children }) => <h5 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h5>,
-                  h6: ({ children }) => <h6 className="text-xs sm:text-sm font-bold mb-2 mt-2 sm:mt-3 first:mt-0 break-words">{children}</h6>,
-                  p: ({ children }) => <p className="mb-3 sm:mb-4 last:mb-0 leading-relaxed text-xs sm:text-sm md:text-base break-words">{children}</p>,
-                  ul: ({ children }) => <ul className="list-disc list-inside mb-3 sm:mb-4 space-y-1 text-xs sm:text-sm">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal list-inside mb-3 sm:mb-4 space-y-1 text-xs sm:text-sm">{children}</ol>,
-                  li: ({ children }) => <li className="leading-relaxed break-words">{children}</li>,
+                  // One body size (set on the wrapper) for p / ul / ol so lists no longer shrink below paragraphs.
+                  h1: ({ children }) => <h1 className="text-xl md:text-2xl font-black tracking-tight mb-3 mt-6 first:mt-0 break-words">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-base md:text-lg font-bold tracking-tight mb-3 mt-7 first:mt-0 pb-1.5 border-b-2 border-black break-words">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-[0.95em] font-bold mb-2 mt-5 first:mt-0 break-words">{children}</h3>,
+                  h4: ({ children }) => <h4 className="font-bold mb-2 mt-4 first:mt-0 break-words">{children}</h4>,
+                  h5: ({ children }) => <h5 className="font-bold mb-2 mt-4 first:mt-0 break-words">{children}</h5>,
+                  h6: ({ children }) => <h6 className="font-bold mb-2 mt-4 first:mt-0 break-words">{children}</h6>,
+                  p: ({ children }) => <p className="mb-4 last:mb-0 break-words">{children}</p>,
+                  ul: ({ children }) => <ul className="list-disc marker:text-black pl-5 mb-4 last:mb-0 space-y-2">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal marker:font-mono marker:text-xs pl-5 mb-4 last:mb-0 space-y-2">{children}</ol>,
+                  li: ({ children }) => <li className="pl-1 break-words">{children}</li>,
                   blockquote: ({ children }) => (
                     <blockquote className="border-l-4 border-gray-300 pl-3 sm:pl-4 my-3 sm:my-4 italic text-gray-700 bg-gray-50 py-2 text-xs sm:text-sm">
                       {children}
@@ -336,9 +346,21 @@ function MessageContent({ content }: { content: string }) {
                       {children}
                     </td>
                   ),
-                  strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+                  strong: ({ children }) => <strong className="font-bold">{children}</strong>,
                   em: ({ children }) => <em className="italic">{children}</em>,
-                  a: ({ href, children }) => (
+                  a: ({ href, children }) => href?.startsWith(CITE_HREF_PREFIX) ? (
+                    // Citation chip from linkCitations — opens the matching retrieved chunk.
+                    <button
+                      type="button"
+                      onClick={() => onCite?.(Number(href.slice(CITE_HREF_PREFIX.length)) - 1)}
+                      // before: pseudo-element widens the tap area without making the chip look bigger
+                      className="relative inline-flex items-center justify-center align-super ml-0.5 min-w-[1.15rem] h-[1.15rem] px-1 border border-black bg-white hover:bg-black hover:text-white font-mono text-[10px] leading-none font-bold text-black transition-colors before:absolute before:-inset-2 before:content-['']"
+                      aria-label={`Show source chunk ${children}`}
+                      title={`Show source chunk ${children}`}
+                    >
+                      {children}
+                    </button>
+                  ) : (
                     <a
                       href={href}
                       className="text-blue-600 hover:text-blue-800 underline text-xs sm:text-sm break-all"
@@ -372,8 +394,11 @@ export function ChatInterface({
   disabled, 
   ragEngine,
   embeddingStatus,
+  isRestoring = false,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("")
+  // Last citation chip clicked: which message, which chunk (nonce re-fires a repeat click)
+  const [citeFocus, setCiteFocus] = useState<{ messageId: string; index: number; nonce: number } | null>(null)
   const [showAdvancedControls, setShowAdvancedControls] = useState(false)
   const [isRunningDiagnostics, setIsRunningDiagnostics] = useState(false)
   const [enhancedOptions, setEnhancedOptions] = useState({
@@ -492,6 +517,10 @@ export function ChatInterface({
 
     return matched.length > 0 ? matched : chunks
   }
+
+  // Display order of the chunk panel; citation chip n points at entry n - 1.
+  const getNumberedChunks = (message: Message): RetrievedChunk[] =>
+    [...getCitationAlignedChunks(message)].sort((a, b) => b.similarity - a.similarity)
 
   const renderEmbeddingStatusCard = (variant: "inline" | "spotlight" = "inline") => {
     if (!embeddingStatus?.active) return null
@@ -650,9 +679,10 @@ ${diagnostics.documents.length === 0
   return (
     <div className="flex flex-col h-full min-h-0 bg-white">
       {/* Chat Header with Controls */}
-      <div className="border-b border-gray-200 p-2 sm:p-3 md:p-4">
+      {/* max-lg:pl-16 keeps the title clear of the fixed mobile menu button (app/page.tsx) */}
+      <div className="border-b border-gray-200 p-2 sm:p-3 md:p-4 max-lg:pl-16">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-sm sm:text-base md:text-lg font-semibold">Chat</h2>
+          <h2 className="max-sm:sr-only text-sm sm:text-base md:text-lg font-semibold">Chat</h2>
           <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap">
             {/* Query History */}
             <QueryHistory onSelectQuery={handleSelectQuery} />
@@ -662,10 +692,12 @@ ${diagnostics.documents.length === 0
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     onClick={() => setShowAdvancedControls(!showAdvancedControls)}
-                    className={`${showAdvancedControls ? "bg-purple-50 text-purple-700" : ""} h-7 sm:h-8 w-7 sm:w-8 p-0`}
+                    aria-label="Enhanced AI controls"
+                    aria-pressed={showAdvancedControls}
+                    className={`rounded-none border-2 border-black h-9 w-9 p-0 hover:bg-black hover:text-white ${showAdvancedControls ? "bg-black text-white" : "bg-white text-black"}`}
                   >
                     <Settings className="w-3 h-3 sm:w-4 sm:h-4" />
                   </Button>
@@ -823,118 +855,98 @@ ${diagnostics.documents.length === 0
       <ScrollArea className="flex-1 h-0 px-4 sm:px-6 lg:px-8" ref={scrollAreaRef}>
         <div id="chat-messages" className="max-w-4xl mx-auto py-6 space-content-lg">
           {messages.length === 0 ? (
-            showEmbeddingSpotlight ? (
+            isRestoring ? null : showEmbeddingSpotlight ? (
               <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="w-full max-w-3xl px-4">
                   {renderEmbeddingStatusCard("spotlight")}
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center min-h-[60vh]">
-                <div className="text-center space-y-8 max-w-2xl px-4">
-                  <div className="w-24 h-24 border-4 border-black mx-auto flex items-center justify-center bg-gray-50 card-enhanced">
-                    <Brain className="w-12 h-12" />
+              <div className="flex items-center justify-center min-h-[60vh] py-6">
+                <div className="w-full max-w-2xl space-y-10">
+                  <div className="flex flex-col items-center text-center gap-5">
+                    <div className="w-20 h-20 border-2 border-black bg-white shadow-[4px_4px_0_0_#000] flex items-center justify-center">
+                      <Image src="/brain.png" alt="" width={52} height={52} className="object-contain" priority />
+                    </div>
+                    <div className="space-y-2">
+                      <h1 className="text-3xl md:text-4xl font-black tracking-tight">Ask your documents.</h1>
+                      <p className="text-gray-600">Every answer cites the page it came from.</p>
+                    </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <h1 className="text-hierarchy-1">QUANTUM PDF READY</h1>
-                    <p className="text-lg text-gray-600 leading-relaxed">
-                      {disabled
-                        ? "Configure AI Providers and Upload PDFs to start chatting"
-                        : "Ask questions about your uploaded documents"}
-                    </p>
-                  </div>
-
-                  {!disabled && (
-                    <div className="space-y-6">
-                      <h2 className="text-hierarchy-3 text-gray-800">SUGGESTED QUESTIONS:</h2>
-                      <div className="grid gap-3 max-w-xl mx-auto">
+                  {disabled ? (
+                    <ol className="max-w-md mx-auto border-2 border-black divide-y-2 divide-black bg-white">
+                      {SETUP_STEPS.map((step, index) => (
+                        <li key={step.title} className="flex gap-4 p-4">
+                          <span className="font-mono text-xs font-bold pt-0.5">{String(index + 1).padStart(2, "0")}</span>
+                          <div className="space-y-0.5">
+                            <p className="font-semibold text-sm">{step.title}</p>
+                            <p className="text-xs text-gray-500">{step.hint}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <div className="space-y-3">
+                      <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-gray-500">Try asking</h2>
+                      <div className="grid sm:grid-cols-2 gap-3">
                         {SUGGESTED_QUESTIONS.map((question, index) => (
                           <button
-                            key={index}
+                            key={question}
                             onClick={() => handleSuggestedQuestion(question)}
-                            className="p-4 text-left border-2 border-gray-300 hover:border-black hover:bg-gray-50 transition-all duration-200 text-sm group btn-enhanced"
+                            className="group flex items-start gap-3 p-4 text-left text-sm border-2 border-black bg-white transition-all duration-150 hover:bg-black hover:text-white hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_#000] active:translate-x-0 active:translate-y-0 active:shadow-none disabled:opacity-50 disabled:pointer-events-none"
                             disabled={isProcessing}
                             aria-label={`Ask: ${question}`}
                           >
-                            <div className="flex items-start space-x-3">
-                              <Sparkles className="w-4 h-4 mt-0.5 text-gray-500 group-hover:text-black transition-colors" />
-                              <span className="leading-relaxed">{question}</span>
-                            </div>
+                            <span className="font-mono text-[11px] font-bold pt-0.5 text-gray-400 group-hover:text-gray-300">
+                              {String(index + 1).padStart(2, "0")}
+                            </span>
+                            <span className="flex-1 leading-snug">{question}</span>
+                            <ArrowUpRight className="w-4 h-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-8 text-sm text-gray-500">
-                    <div className="text-center space-y-2">
-                      <MessageSquare className="w-8 h-8 mx-auto" />
-                      <p className="font-medium">Multi-document chat</p>
-                    </div>
-                    <div className="text-center space-y-2">
-                      <Brain className="w-8 h-8 mx-auto" />
-                      <p className="font-medium">AI-powered analysis</p>
-                    </div>
-                    <div className="text-center space-y-2">
-                      <FileText className="w-8 h-8 mx-auto" />
-                      <p className="font-medium">Source citations</p>
-                    </div>
-                  </div>
                 </div>
               </div>
             )
           ) : (
             <div className="space-y-8">
               {messages.map((message) => (
-                <div key={message.id} className="space-y-4 min-w-0" role="article" aria-label={`${message.role} message`}>
-                  {/* Message Header */}
-                  <div className="flex items-start justify-between flex-wrap gap-2 min-w-0">
-                    <div className="flex items-center space-x-4">
-                      <Badge
-                        variant="outline"
-                        className={`border-2 font-bold px-3 py-1 ${
-                          message.role === "user" ? "border-black bg-black text-white" : "border-gray-400 text-gray-700"
-                        }`}
-                      >
-                        {message.role === "user" ? "USER" : "ASSISTANT"}
-                      </Badge>
-                      <time className="text-sm text-gray-500 font-mono" dateTime={message.timestamp.toISOString()}>
-                        {formatTimestamp(message.timestamp)}
-                      </time>
-                    </div>
+                <div
+                  key={message.id}
+                  className={`min-w-0 flex flex-col gap-2 ${message.role === "user" ? "items-end" : "items-stretch"}`}
+                  role="article"
+                  aria-label={`${message.role} message`}
+                >
+                  {/* Meta line: who · when, plus run stats on answers */}
+                  <div className={`flex items-center gap-x-3 gap-y-1 flex-wrap font-mono text-[11px] uppercase tracking-wider text-gray-500 ${message.role === "user" ? "justify-end" : ""}`}>
+                    <span className="font-bold text-black">{message.role === "user" ? "You" : "Quantum"}</span>
+                    <time dateTime={message.timestamp.toISOString()}>{formatTimestamp(message.timestamp)}</time>
 
-                    {message.metadata && (
-                      <div className="flex items-center justify-end gap-2 flex-wrap max-w-full">
+                    {message.role === "assistant" && message.metadata && (
+                      <>
                         {message.metadata.responseTime !== undefined && (
-                          <Badge variant="outline" className="text-xs border-gray-300">
-                            <Clock className="w-3 h-3 mr-1" />
+                          <span className="inline-flex items-center gap-1" title="Response time">
+                            <Clock className="w-3 h-3" />
                             {formatResponseTime(message.metadata.responseTime)}
-                          </Badge>
+                          </span>
                         )}
                         {message.metadata.relevanceScore !== undefined && (
-                          <Badge variant="outline" className="text-xs border-gray-300">
-                            <Target className="w-3 h-3 mr-1" />
-                            {(message.metadata.relevanceScore * 100).toFixed(1)}%
-                          </Badge>
+                          <span className="inline-flex items-center gap-1" title="Retrieval relevance">
+                            <Target className="w-3 h-3" />
+                            {(message.metadata.relevanceScore * 100).toFixed(0)}%
+                          </span>
                         )}
                         {message.metadata.qualityMetrics && (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Badge 
-                                  variant="outline" 
-                                  className={`text-xs cursor-help ${
-                                    message.metadata.qualityMetrics.finalRating >= 85 
-                                      ? 'border-green-500 text-green-700 bg-green-50' 
-                                      : message.metadata.qualityMetrics.finalRating >= 70
-                                      ? 'border-yellow-500 text-yellow-700 bg-yellow-50'
-                                      : 'border-red-500 text-red-700 bg-red-50'
-                                  }`}
-                                >
-                                  <Sparkles className="w-3 h-3 mr-1" />
-                                  Q: {message.metadata.qualityMetrics.finalRating.toFixed(0)}%
-                                </Badge>
+                                <span className="inline-flex items-center gap-1 cursor-help underline decoration-dotted underline-offset-2">
+                                  <Sparkles className="w-3 h-3" />
+                                  Q {message.metadata.qualityMetrics.finalRating.toFixed(0)}
+                                </span>
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs">
                                 <div className="text-sm space-y-1">
@@ -954,18 +966,18 @@ ${diagnostics.documents.length === 0
                           </TooltipProvider>
                         )}
                         {message.metadata.tokenUsage && (
-                          <Badge variant="outline" className="text-xs border-gray-300">
-                            <Zap className="w-3 h-3 mr-1" />
-                            {message.metadata.tokenUsage.totalTokens}t
-                          </Badge>
+                          <span className="inline-flex items-center gap-1" title="Tokens used">
+                            <Zap className="w-3 h-3" />
+                            {message.metadata.tokenUsage.totalTokens.toLocaleString()}
+                          </span>
                         )}
                         {message.metadata.reasoning && (
-                          <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 bg-purple-50">
-                            <Brain className="w-3 h-3 mr-1" />
+                          <span className="inline-flex items-center gap-1 px-1.5 py-px bg-black text-white">
+                            <Brain className="w-3 h-3" />
                             Enhanced
-                          </Badge>
+                          </span>
                         )}
-                      </div>
+                      </>
                     )}
                   </div>
 
@@ -994,36 +1006,40 @@ ${diagnostics.documents.length === 0
                               // Fallback: if still contains Final Enhancement before Response, trim again
                               cleaned = cleaned.replace(/^[\s\S]*?Final Enhancement[\s\S]*?Response\s*/i, "")
 
-                              // Convert verbose inline [File, p.N] citations into compact
-                              // superscript refs + a Sources line (display only; the raw
-                              // markers stay in message.content for chunk alignment below).
-                              return formatCitationsForDisplay(cleaned.trim())
+                              // Turn verbose inline [File, p.N] citations into numbered chips
+                              // that open the matching chunk below (display only; the raw
+                              // markers stay in message.content for chunk alignment).
+                              return linkCitations(cleaned.trim(), getNumberedChunks(message))
                             })()}
+                            onCite={(index) => setCiteFocus({ messageId: message.id, index, nonce: Date.now() })}
                           />
                       </div>
                     </div>
 
-                    {/* Chunk Visualization */}
+                    {/* Answer footer: sources + query breakdown */}
+                    {message.role === "assistant" && (message.metadata?.retrievedChunks?.length || message.metadata?.queryAnalysis) ? (
+                    <div className="border-t border-gray-200 pt-4 space-y-2">
                     {message.metadata?.retrievedChunks && message.metadata.retrievedChunks.length > 0 && (
                       <ChunkVisualization
-                        chunks={getCitationAlignedChunks(message)}
+                        chunks={getNumberedChunks(message)}
                         onViewPage={handleViewPage}
+                        focus={citeFocus?.messageId === message.id ? citeFocus : undefined}
                       />
                     )}
 
-                    {message.role === "assistant" && message.metadata?.queryAnalysis && (
+                    {message.metadata?.queryAnalysis && (
                       <Collapsible>
                         <CollapsibleTrigger asChild>
-                          <Button variant="outline" size="sm" className="justify-between w-full text-xs">
+                          <Button variant="ghost" size="sm" className="group/qb justify-between w-full h-8 rounded-none px-2 font-mono text-[11px] uppercase tracking-wider text-gray-500 hover:text-black hover:bg-gray-100">
                             <span className="flex items-center gap-2">
                               <Brain className="w-3 h-3" />
-                              Query Breakdown
+                              Query breakdown
                             </span>
-                            <ChevronDown className="w-3 h-3" />
+                            <ChevronDown className="w-3 h-3 transition-transform group-data-[state=open]/qb:rotate-180" />
                           </Button>
                         </CollapsibleTrigger>
                         <CollapsibleContent className="pt-2">
-                          <div className="border rounded-md p-3 bg-gray-50 text-xs space-y-3">
+                          <div className="border-2 border-black p-3 bg-gray-50 text-xs space-y-3">
                             <div className="space-y-1">
                               <p className="font-semibold text-gray-700">Rewritten Query</p>
                               <p className="text-gray-800 break-words">{message.metadata.queryAnalysis.rewrittenQuery}</p>
@@ -1056,6 +1072,8 @@ ${diagnostics.documents.length === 0
                       </Collapsible>
                     )}
                     </div>
+                    ) : null}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1070,7 +1088,7 @@ ${diagnostics.documents.length === 0
 
       {/* Input Area */}
       <div className="border-t-2 border-black bg-white sticky bottom-0 z-10">
-        <div className="max-w-4xl mx-auto px-2 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-4 md:py-6">
+        <div className="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 pb-3 sm:pt-4">
           {/* Document Filter */}
           {filterDocuments.length > 0 && (
             <div className="mb-3">
@@ -1082,58 +1100,54 @@ ${diagnostics.documents.length === 0
             </div>
           )}
 
-          <form onSubmit={handleSubmitStreaming} className="space-y-4 form-enhanced">
-            {/* Search mode removed */}
-
-            {/* Search URL guidance removed */}
-
-            <div className="flex items-end gap-2 w-full">
-              {/* Mode selector removed (Docs-only) */}
-
-              {/* Output mode selector removed */}
-
-              {/* Text input */}
-              <div className="flex-1 min-w-0">
-                <Textarea
-                  id="chat-input"
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={disabled ? 'Configure AI provider and upload documents to start chatting...' : 'Ask a question about your documents... (Shift+Enter for new line)'}
-                  disabled={disabled || isProcessing}
-                  className="min-h-10 h-10 sm:min-h-12 sm:h-12 max-h-[120px] resize-none border-2 border-black focus:ring-0 focus:border-black font-mono text-xs sm:text-sm md:text-base leading-relaxed w-full p-2 sm:p-3"
-                  rows={1}
-                />
-              </div>
-
-              {/* Submit button */}
-              <div className="shrink-0">
-                <Button
-                  type="submit"
-                  disabled={(disabled || isProcessing) || !input.trim()}
-                  className="border-2 border-black bg-black text-white hover:bg-white hover:text-black px-2 sm:px-3 md:px-6 h-10 sm:h-12 btn-enhanced"
-                  aria-label={'Send message'}
-                >
-                  {isProcessing ? (
-                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4 sm:w-5 sm:h-5" />
-                  )}
-                </Button>
-              </div>
+          <form onSubmit={handleSubmitStreaming}>
+            {/* One box: textarea grows with content (field-sizing), send button sits inside */}
+            <div
+              className={`flex items-end gap-2 border-2 border-black bg-white p-1.5 pl-3 transition-shadow focus-within:shadow-[4px_4px_0_0_#000] ${
+                disabled ? "bg-gray-50" : ""
+              }`}
+            >
+              <Textarea
+                id="chat-input"
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={disabled ? "Add a provider and a document to start" : "Ask anything about your documents…"}
+                disabled={disabled || isProcessing}
+                aria-label="Message"
+                className="flex-1 min-w-0 min-h-10 max-h-40 [field-sizing:content] resize-none border-0 shadow-none rounded-none bg-transparent px-0 py-2 text-sm md:text-[15px] leading-6 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed"
+                rows={1}
+              />
+              <Button
+                type="submit"
+                disabled={(disabled || isProcessing) || !input.trim()}
+                className="shrink-0 h-10 w-10 sm:w-auto sm:px-4 rounded-none border-2 border-black bg-black text-white hover:bg-white hover:text-black disabled:bg-gray-200 disabled:border-gray-200 disabled:text-gray-400 disabled:opacity-100 gap-2"
+                aria-label="Send message"
+              >
+                {isProcessing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Send</span>
+              </Button>
             </div>
 
-            {/* Search badges removed */}
-
-            {!disabled && (
-              <div className="text-center text-xs sm:text-sm text-gray-500 space-y-1 mt-2">
-                <p>
-                  pls star the{' '}
-                  <a href="https://github.com/Kedhareswer/QuantumPDF_ChatApp" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 underline">repo</a>{' '}if you liked it
-                </p>
-              </div>
-            )}
+            <div className="flex items-center justify-between gap-3 mt-2 font-mono text-[11px] text-gray-500">
+              <span className="hidden sm:inline">
+                <kbd className="px-1 border border-gray-300">Enter</kbd> send ·{" "}
+                <kbd className="px-1 border border-gray-300">Shift</kbd>+<kbd className="px-1 border border-gray-300">Enter</kbd> new line
+              </span>
+              <a
+                href="https://github.com/Kedhareswer/QuantumPDF_ChatApp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto hover:text-black underline-offset-2 hover:underline"
+              >
+                ★ Star on GitHub
+              </a>
+            </div>
           </form>
         </div>
       </div>

@@ -331,21 +331,21 @@ Display interactive source cards with document metadata, page numbers, and simil
 />
 ```
 
-#### Inline Citations (display-only superscripts)
+#### Inline Citations (display-only chips)
 The RAG engine forces verbose inline citations on every claim, e.g.
 `...for MCH [Common_Labs.pdf, p.1].`. Before rendering, `lib/citation-format.ts`
-rewrites those `[Filename, p.N]` markers into compact, deduped **superscript**
-references and appends a single **"Sources"** footnote line. This is a
-**display-only** transform — the original message content keeps the raw markers
-so source/chunk alignment elsewhere keeps working.
+rewrites each `[Filename, p.N]` marker into a numbered chip whose number is the
+cited chunk's position in **View Retrieved Chunks** (matched on file + page).
+Clicking a chip opens that panel, scrolls to the chunk and highlights it. There
+is no separate "Sources" footer — the chunk panel is the source list. This is a
+**display-only** transform — the original message content keeps the raw markers.
 
 ```typescript
-// components/chat-interface.tsx renders the transformed content
-import { formatCitationsForDisplay } from '@/lib/citation-format'
+import { linkCitations } from '@/lib/citation-format'
 
-// "...for MCH [Common_Labs.pdf, p.1]."  ->  "...for MCH¹."
-//   + a trailing line:  **Sources:** ¹ Common_Labs.pdf, p.1
-const display = formatCitationsForDisplay(cleaned.trim())
+// "...for MCH [Common_Labs.pdf, p.1]."  ->  "...for MCH[2](#cite-2)."
+// chat-interface renders #cite-N links as chips that focus chunk N.
+const display = linkCitations(cleaned.trim(), numberedChunks)
 ```
 
 #### Document Filtering

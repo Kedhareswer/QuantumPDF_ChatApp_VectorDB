@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChevronDown, ChevronUp, FileText, Layers, Target } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 interface RetrievedChunk {
   content: string
@@ -19,17 +19,44 @@ interface RetrievedChunk {
 }
 
 interface ChunkVisualizationProps {
+  /** Shown in this order; chunk i is citation number i + 1 in the answer. */
   chunks: RetrievedChunk[]
   onViewPage?: (documentId: string, page: number) => void
+  /** Set when a citation chip is clicked; nonce re-triggers a repeat click. */
+  focus?: { index: number; nonce: number }
 }
 
-export function ChunkVisualization({ chunks, onViewPage }: ChunkVisualizationProps) {
+export function ChunkVisualization({ chunks, onViewPage, focus }: ChunkVisualizationProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [expandedChunks, setExpandedChunks] = useState<Set<number>>(new Set())
+  const [highlighted, setHighlighted] = useState<number | null>(null)
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([])
+  const [seenNonce, setSeenNonce] = useState<number | undefined>(undefined)
+
+  // New chip click: open the panel on the cited chunk (state derived from the prop, during render).
+  if (focus && focus.nonce !== seenNonce) {
+    setSeenNonce(focus.nonce)
+    setIsOpen(true)
+    setExpandedChunks((prev) => new Set(prev).add(focus.index))
+    setHighlighted(focus.index)
+  }
+
+  useEffect(() => {
+    if (!focus) return
+    // Wait a frame so the collapsible has mounted its content before scrolling.
+    const raf = requestAnimationFrame(() =>
+      cardRefs.current[focus.index]?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
+    )
+    const clear = setTimeout(() => setHighlighted(null), 2000)
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(clear)
+    }
+  }, [focus])
 
   if (!chunks || chunks.length === 0) return null
 
-  const sortedChunks = [...chunks].sort((a, b) => b.similarity - a.similarity)
+  const sortedChunks = chunks
 
   const toggleChunk = (index: number) => {
     const newExpanded = new Set(expandedChunks)
@@ -43,30 +70,31 @@ export function ChunkVisualization({ chunks, onViewPage }: ChunkVisualizationPro
 
   const getSimilarityColor = (similarity: number) => {
     const percent = Math.round(similarity * 100)
-    if (percent >= 80) return "bg-green-500"
-    if (percent >= 60) return "bg-yellow-500"
+    if (percent >= 80) return "bg-black"
+    if (percent >= 60) return "bg-gray-600"
     return "bg-gray-400"
   }
 
   const getSimilarityBadgeColor = (similarity: number) => {
     const percent = Math.round(similarity * 100)
-    if (percent >= 80) return "bg-green-50 text-green-700 border-green-300"
-    if (percent >= 60) return "bg-yellow-50 text-yellow-700 border-yellow-300"
-    return "bg-gray-50 text-gray-700 border-gray-300"
+    if (percent >= 80) return "bg-black text-white border-black"
+    if (percent >= 60) return "bg-white text-black border-black"
+    return "bg-white text-gray-500 border-gray-300"
   }
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mt-4">
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <CollapsibleTrigger asChild>
         <Button
           variant="outline"
-          className="w-full justify-between border-gray-300 hover:bg-gray-50"
+          className={`w-full justify-between h-9 rounded-none border-2 border-black px-3 transition-colors ${
+            isOpen ? "bg-black text-white hover:bg-black hover:text-white" : "bg-white hover:bg-black hover:text-white"
+          }`}
         >
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4" />
-            <span className="text-sm font-medium">
-              View Retrieved Chunks ({chunks.length})
-            </span>
+            <span className="text-xs font-bold uppercase tracking-wider">Sources</span>
+            <span className="font-mono text-[11px] px-1 border border-current leading-tight">{chunks.length}</span>
           </div>
           {isOpen ? (
             <ChevronUp className="w-4 h-4" />
@@ -76,7 +104,7 @@ export function ChunkVisualization({ chunks, onViewPage }: ChunkVisualizationPro
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <Card className="mt-2 border-gray-200">
+        <Card className="mt-2 rounded-none border-2 border-black shadow-none">
           <CardContent className="p-3 sm:p-4">
             <ScrollArea className="h-[300px] sm:h-[400px] pr-4">
               <div className="space-y-3">
@@ -89,12 +117,18 @@ export function ChunkVisualization({ chunks, onViewPage }: ChunkVisualizationPro
                   return (
                     <Card
                       key={index}
-                      className="border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all"
+                      ref={(el) => { cardRefs.current[index] = el }}
+                      className={`border hover:shadow-sm transition-all ${
+                        highlighted === index ? "border-blue-500 ring-2 ring-blue-200" : "border-gray-200 hover:border-gray-300"
+                      }`}
                     >
                       <CardHeader className="pb-2 p-3 sm:p-4">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded bg-gray-900 text-white text-[11px] font-semibold shrink-0">
+                                {index + 1}
+                              </span>
                               <FileText className="w-4 h-4 text-gray-600 shrink-0" />
                               <span className="text-xs sm:text-sm font-semibold text-gray-900 truncate">
                                 {chunk.documentName || chunk.source}

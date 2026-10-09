@@ -307,7 +307,7 @@ Powered by QuantumPDF ChatApp`
         variant="outline"
         onClick={onClearChat}
         disabled={disabled}
-        className="border-black text-black hover:bg-black hover:text-white"
+        className="rounded-none border-2 border-black text-black hover:bg-black hover:text-white"
         title="Clear Chat History"
       >
         <Trash2 className="w-4 h-4" />
@@ -318,7 +318,7 @@ Powered by QuantumPDF ChatApp`
         variant="outline"
         onClick={onNewSession}
         disabled={disabled}
-        className="border-black text-black hover:bg-black hover:text-white"
+        className="rounded-none border-2 border-black text-black hover:bg-black hover:text-white"
         title="New Session"
       >
         <RotateCcw className="w-4 h-4" />
@@ -331,7 +331,7 @@ Powered by QuantumPDF ChatApp`
         size="sm"
         variant="outline"
             disabled={disabled || !messages.length}
-        className="border-black text-black hover:bg-black hover:text-white"
+        className="rounded-none border-2 border-black text-black hover:bg-black hover:text-white"
         title="Export Chat"
       >
         <Download className="w-4 h-4" />
@@ -366,7 +366,7 @@ Powered by QuantumPDF ChatApp`
         size="sm"
         variant="outline"
             disabled={disabled || !messages.length}
-        className="border-black text-black hover:bg-black hover:text-white"
+        className="rounded-none border-2 border-black text-black hover:bg-black hover:text-white"
         title="Share Session"
       >
         <Share className="w-4 h-4" />

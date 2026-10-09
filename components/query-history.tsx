@@ -136,7 +136,7 @@ export function QueryHistory({ onSelectQuery, className = "" }: QueryHistoryProp
           <Button
             variant="outline"
             size="sm"
-            className={`h-8 px-3 border-2 border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 ${className}`}
+            className={`h-8 px-3 rounded-none border-2 border-black bg-white hover:bg-black hover:text-white text-black text-xs font-bold uppercase tracking-wider ${className}`}
           >
             <History className="w-4 h-4 mr-1.5" />
             <span className="hidden sm:inline">History</span>

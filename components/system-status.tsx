@@ -1,10 +1,8 @@
 "use client"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import { Activity, Brain, FileText, Gauge, MessageSquare, Target } from "lucide-react"
+import type React from "react"
 import { useMemo } from "react"
 
 interface SystemStatusProps {
@@ -108,202 +106,114 @@ export function SystemStatus({
       ? "text-red-700"
       : "text-gray-700"
 
+  const lastQuery = String(asRecord(stats.lastUser).content || "-")
+  const lastSnippet = String(asRecord(stats.lastAssistant).content || "-").slice(0, 200)
+
   return (
     <div className="space-y-4">
-      <Card className="border-2 border-black shadow-none">
-        <CardHeader className="border-b border-black">
-          <CardTitle className="flex items-center space-x-2">
-            <Activity className="w-5 h-5" />
-            <span>SYSTEM SNAPSHOT</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 space-y-3 text-sm">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">AI Status</span>
-              <Badge variant="outline" className={statusTone}>{modelStatus.toUpperCase()}</Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">RAG Engine</span>
-              <Badge variant="outline" className={engineHealthy ? "text-green-700" : "text-red-700"}>
-                {engineHealthy ? "HEALTHY" : engineInitialized ? "DEGRADED" : "NOT READY"}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Provider</span>
-              <span className="font-mono text-xs">{provider}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Model</span>
-              <span className="font-mono text-xs">{model}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Documents</span>
-              <span className="font-bold">{safeDocuments.length}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Chunks</span>
-              <span className="font-bold">{stats.documentChunks}</span>
-            </div>
+      <Panel icon={<Activity className="w-4 h-4" />} title="System snapshot">
+        <StatGrid>
+          <Stat label="AI status"><span className={statusTone}>{modelStatus.toUpperCase()}</span></Stat>
+          <Stat label="RAG engine">
+            <span className={engineHealthy ? "text-green-700" : "text-red-700"}>
+              {engineHealthy ? "HEALTHY" : engineInitialized ? "DEGRADED" : "NOT READY"}
+            </span>
+          </Stat>
+          <Stat label="Provider" mono>{provider}</Stat>
+          <Stat label="Model" mono>{model}</Stat>
+          <Stat label="Documents">{safeDocuments.length}</Stat>
+          <Stat label="Chunks">{stats.documentChunks}</Stat>
+          <Stat label="Queries">{stats.queries}</Stat>
+          <Stat label="Responses">{stats.responses}</Stat>
+          <Stat label="Avg response">{stats.avgResponseTime}ms</Stat>
+          <Stat label="Cache">
+            {(queryCache.size as number) || 0}/{(queryCache.maxSize as number) || 0}
+          </Stat>
+        </StatGrid>
+      </Panel>
+
+      <Panel icon={<Brain className="w-4 h-4" />} title="Query pipeline">
+        {stats.queryAnalysis ? (
+          <div className="space-y-3">
+            <Quote label="Original query">{stats.queryAnalysis.originalQuery}</Quote>
+            <Quote label="Rewritten query">{stats.queryAnalysis.rewrittenQuery}</Quote>
+            <StatGrid>
+              <Stat label="Type">{stats.queryAnalysis.queryType}</Stat>
+              <Stat label="Complexity">{stats.queryAnalysis.complexity}</Stat>
+              <Stat label="HyDE">{stats.queryAnalysis.requiresHyDE ? "ON" : "OFF"}</Stat>
+              <Stat label="Step-back">{stats.queryAnalysis.requiresStepBack ? "ON" : "OFF"}</Stat>
+              <Stat label="Alt queries">{stats.queryAnalysis.alternativeQueries?.length || 0}</Stat>
+              <Stat label="Confidence">{Math.round((stats.queryAnalysis.confidence || 0) * 100)}%</Stat>
+            </StatGrid>
           </div>
+        ) : (
+          <Alert>
+            <AlertDescription>Query pipeline data will appear after the next assistant response.</AlertDescription>
+          </Alert>
+        )}
+      </Panel>
 
-          <Separator />
+      <Panel icon={<Gauge className="w-4 h-4" />} title="Last response">
+        <div className="space-y-3">
+          <StatGrid>
+            <Stat label="Quality">{Math.round(stats.lastAssistantMeta.qualityMetrics?.finalRating || 0)}%</Stat>
+            <Stat label="Relevance">{Math.round((stats.lastAssistantMeta.relevanceScore || 0) * 100)}%</Stat>
+            <Stat label="Latency">{((stats.lastAssistantMeta.responseTime || 0) / 1000).toFixed(1)}s</Stat>
+            <Stat label="Tokens">{(stats.lastAssistantMeta.tokenUsage?.totalTokens || 0).toLocaleString()}</Stat>
+          </StatGrid>
+          <Quote label="Last user query" icon={<MessageSquare className="w-3 h-3" />}>{lastQuery}</Quote>
+          <Quote label="Last answer snippet" icon={<FileText className="w-3 h-3" />}>{lastSnippet}</Quote>
+        </div>
+      </Panel>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Queries</span>
-              <span className="font-bold">{stats.queries}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Responses</span>
-              <span className="font-bold">{stats.responses}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Avg Response</span>
-              <span className="font-bold">{stats.avgResponseTime}ms</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Cache</span>
-              <span className="font-bold">
-                {(queryCache.size as number) || 0}/{(queryCache.maxSize as number) || 0}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <Panel icon={<Target className="w-4 h-4" />} title="Runtime flags">
+        <StatGrid>
+          <Stat label="Initialized">{engineInitialized ? "YES" : "NO"}</Stat>
+          <Stat label="Healthy">{engineHealthy ? "YES" : "NO"}</Stat>
+          <Stat label="Cache hit rate">{Number(queryCache.hitRate || 0).toFixed(2)}</Stat>
+          <Stat label="Vector mode" mono>{String(asRecord(ai).provider || "-")}</Stat>
+        </StatGrid>
+      </Panel>
+    </div>
+  )
+}
 
-      <Card className="border-2 border-black shadow-none">
-        <CardHeader className="border-b border-black">
-          <CardTitle className="flex items-center space-x-2">
-            <Brain className="w-5 h-5" />
-            <span>QUERY PIPELINE</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 space-y-3 text-sm">
-          {stats.queryAnalysis ? (
-            <>
-              <div className="space-y-1">
-                <div className="text-gray-600">Original Query</div>
-                <div className="text-xs bg-gray-50 p-2 border rounded">{stats.queryAnalysis.originalQuery}</div>
-              </div>
+// Sidebar is ~280px wide, so every stat stacks label over value; side-by-side
+// label/value pairs in a 2-col grid collided ("Latency13918ms").
+function Panel({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <section className="border-2 border-black bg-white">
+      <h3 className="flex items-center gap-2 px-3 py-2 border-b-2 border-black text-xs font-bold uppercase tracking-wider">
+        {icon}
+        {title}
+      </h3>
+      <div className="p-3 text-sm">{children}</div>
+    </section>
+  )
+}
 
-              <div className="space-y-1">
-                <div className="text-gray-600">Rewritten Query</div>
-                <div className="text-xs bg-gray-50 p-2 border rounded">{stats.queryAnalysis.rewrittenQuery}</div>
-              </div>
+function StatGrid({ children }: { children: React.ReactNode }) {
+  // gap-px on a black background draws 1px rules between tiles
+  return <div className="grid grid-cols-2 gap-px bg-black border border-black">{children}</div>
+}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Type</span>
-                  <Badge variant="outline">{stats.queryAnalysis.queryType}</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Complexity</span>
-                  <Badge variant="outline">{stats.queryAnalysis.complexity}</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">HyDE</span>
-                  <span className="font-bold">{stats.queryAnalysis.requiresHyDE ? "ON" : "OFF"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Step-back</span>
-                  <span className="font-bold">{stats.queryAnalysis.requiresStepBack ? "ON" : "OFF"}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Alt Queries</span>
-                  <span className="font-bold">{stats.queryAnalysis.alternativeQueries?.length || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Confidence</span>
-                  <span className="font-bold">{Math.round((stats.queryAnalysis.confidence || 0) * 100)}%</span>
-                </div>
-              </div>
-            </>
-          ) : (
-            <Alert>
-              <AlertDescription>
-                Query pipeline data will appear after the next assistant response.
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
+function Stat({ label, mono, children }: { label: string; mono?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0 bg-white px-2.5 py-2">
+      <div className="font-mono text-[10px] uppercase tracking-wider text-gray-500 truncate">{label}</div>
+      <div className={`font-bold truncate ${mono ? "font-mono text-xs" : "text-sm"}`}>{children}</div>
+    </div>
+  )
+}
 
-      <Card className="border-2 border-black shadow-none">
-        <CardHeader className="border-b border-black">
-          <CardTitle className="flex items-center space-x-2">
-            <Gauge className="w-5 h-5" />
-            <span>LAST RESPONSE METRICS</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 text-sm">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Quality</span>
-              <span className="font-bold">{Math.round(stats.lastAssistantMeta.qualityMetrics?.finalRating || 0)}%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Relevance</span>
-              <span className="font-bold">{Math.round((stats.lastAssistantMeta.relevanceScore || 0) * 100)}%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Latency</span>
-              <span className="font-bold">{stats.lastAssistantMeta.responseTime || 0}ms</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Tokens</span>
-              <span className="font-bold">{stats.lastAssistantMeta.tokenUsage?.totalTokens || 0}</span>
-            </div>
-          </div>
-
-          <Separator className="my-3" />
-
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center space-x-2 text-gray-600">
-              <MessageSquare className="w-3 h-3" />
-              <span>Last User Query</span>
-            </div>
-            <div className="bg-gray-50 p-2 border rounded">{String(asRecord(stats.lastUser).content || "-")}</div>
-
-            <div className="flex items-center space-x-2 text-gray-600">
-              <FileText className="w-3 h-3" />
-              <span>Last Assistant Snippet</span>
-            </div>
-            <div className="bg-gray-50 p-2 border rounded">
-              {String(asRecord(stats.lastAssistant).content || "-").slice(0, 200)}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-2 border-black shadow-none">
-        <CardHeader className="border-b border-black">
-          <CardTitle className="flex items-center space-x-2">
-            <Target className="w-5 h-5" />
-            <span>RUNTIME FLAGS</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 text-sm">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Initialized</span>
-              <span className="font-bold">{engineInitialized ? "YES" : "NO"}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Healthy</span>
-              <span className="font-bold">{engineHealthy ? "YES" : "NO"}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Cache Hit Rate</span>
-              <span className="font-bold">{Number(queryCache.hitRate || 0).toFixed(2)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-600">Vector Mode</span>
-              <span className="font-bold">{String(asRecord(ai).provider || "-")}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+function Quote({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-gray-500">
+        {icon}
+        {label}
+      </div>
+      <div className="text-xs bg-gray-50 p-2 border border-black break-words">{children}</div>
     </div>
   )
 }

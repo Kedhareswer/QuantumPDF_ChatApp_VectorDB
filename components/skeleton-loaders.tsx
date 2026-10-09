@@ -1064,39 +1064,6 @@ export function RealTimeMetricsLoadingSkeleton() {
   )
 }
 
-export function TabContentLoadingSkeleton() {
-  return (
-    <div className="space-y-6 p-4">
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-8 w-32" />
-      </div>
-      <div className="grid gap-4">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <Card key={i} className="border-2 border-gray-200">
-            <CardHeader className="border-b border-gray-200">
-              <div className="flex items-center space-x-3">
-                <Skeleton className="h-5 w-5" />
-                <Skeleton className="h-5 w-40" />
-              </div>
-            </CardHeader>
-            <CardContent className="p-6 space-y-4">
-              <div className="space-y-3">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-              <div className="space-y-3">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 export function MainAppLoadingSkeleton() {
   return (
     <div className="min-h-screen bg-gray-50 flex">

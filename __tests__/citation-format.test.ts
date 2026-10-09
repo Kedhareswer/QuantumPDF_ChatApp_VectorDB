@@ -1,49 +1,52 @@
 import { describe, expect, it } from "vitest"
-import { formatCitationsForDisplay, toSuperscript } from "@/lib/citation-format"
+import { findCitedChunk, linkCitations } from "@/lib/citation-format"
 
-describe("toSuperscript", () => {
-  it("maps multi-digit numbers", () => {
-    expect(toSuperscript(1)).toBe("¹")
-    expect(toSuperscript(10)).toBe("¹⁰")
+const chunks = [
+  { documentName: "Common_Labs.pdf", page: 3 },
+  { documentName: "Common_Labs.pdf", page: 1 },
+  { documentName: "Other Report.docx" },
+]
+
+describe("findCitedChunk", () => {
+  it("matches file and page exactly", () => {
+    expect(findCitedChunk("Common_Labs.pdf, p.1", chunks)).toBe(1)
+  })
+
+  it("falls back to the first chunk of the file when the page is missing", () => {
+    expect(findCitedChunk("Common_Labs.pdf, p.99", chunks)).toBe(0)
+    expect(findCitedChunk("Other Report.docx", chunks)).toBe(2)
+  })
+
+  it("returns -1 for an unknown file", () => {
+    expect(findCitedChunk("Nope.pdf, p.1", chunks)).toBe(-1)
   })
 })
 
-describe("formatCitationsForDisplay", () => {
-  it("replaces an inline citation with a superscript and a Sources line", () => {
-    const out = formatCitationsForDisplay("MCH normal range is 27-31 pg [Common_Labs.pdf, p.1].")
-    expect(out).not.toContain("[Common_Labs.pdf, p.1]")
-    expect(out).toContain("pg¹.")
-    expect(out).toContain("**Sources:**")
-    expect(out).toContain("¹ Common_Labs.pdf, p.1")
+describe("linkCitations", () => {
+  it("numbers citations by chunk position, not by order of appearance", () => {
+    const out = linkCitations("A [Common_Labs.pdf, p.1]. B [Common_Labs.pdf, p.3].", chunks)
+    expect(out).toBe("A[2](#cite-2). B[1](#cite-1).")
   })
 
-  it("dedupes repeated citations to the same number", () => {
-    const out = formatCitationsForDisplay(
-      "A [Common_Labs.pdf, p.1]. B [Common_Labs.pdf, p.1]. C [Common_Labs.pdf, p.3].",
-    )
-    // Two distinct sources -> ¹ and ²
-    expect(out).toContain("A¹.")
-    expect(out).toContain("B¹.")
-    expect(out).toContain("C².")
-    // Sources line lists each unique source once
-    expect(out.match(/Common_Labs\.pdf, p\.1/g)?.length).toBe(1)
-    expect(out).toContain("² Common_Labs.pdf, p.3")
+  it("emits one link per citation when a claim cites several chunks", () => {
+    const out = linkCitations("X [Common_Labs.pdf, p.3] [Other Report.docx].", chunks)
+    expect(out).toBe("X[1](#cite-1)[3](#cite-3).")
   })
 
-  it("returns content unchanged when there are no citations", () => {
-    const input = "Just a plain answer with no citations."
-    expect(formatCitationsForDisplay(input)).toBe(input)
+  it("collapses a repeated citation on the same claim", () => {
+    expect(linkCitations("X [Common_Labs.pdf, p.3] [Common_Labs.pdf, p.3].", chunks)).toBe("X[1](#cite-1).")
+  })
+
+  it("adds no Sources footer", () => {
+    expect(linkCitations("A [Common_Labs.pdf, p.1].", chunks)).not.toContain("Sources")
+  })
+
+  it("keeps an unmatched citation as written", () => {
+    expect(linkCitations("A [Nope.pdf, p.2].", chunks)).toBe("A [Nope.pdf, p.2].")
   })
 
   it("does not touch markdown links or numeric arrays", () => {
     const input = "See [the docs](https://example.com) and the list [1, 2, 3]."
-    expect(formatCitationsForDisplay(input)).toBe(input)
-  })
-
-  it("handles a bare filename citation without a page", () => {
-    const out = formatCitationsForDisplay("Sodium range is 135-145 mmol/L [Common_Labs.pdf].")
-    expect(out).not.toContain("[Common_Labs.pdf]")
-    expect(out).toContain("mmol/L¹.")
-    expect(out).toContain("¹ Common_Labs.pdf")
+    expect(linkCitations(input, chunks)).toBe(input)
   })
 })

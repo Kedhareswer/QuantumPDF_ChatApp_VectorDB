@@ -2,73 +2,65 @@
  * Citation display formatting (render-only).
  *
  * The RAG engine forces verbose inline citations on every claim, e.g.
- * "...for MCH [Common_Labs.pdf, p.1]." That is great for groundedness checks
- * but reads as clutter. This converts those markers into compact, deduped
- * superscript references plus a single "Sources" footnote line.
+ * "...for MCH [Common_Labs.pdf, p.1]." This rewrites each marker into a
+ * numbered `[n](#cite-n)` link, where n is the 1-based position of the cited
+ * chunk in the list shown under "View Retrieved Chunks". The chat renderer
+ * turns those links into chips that open that chunk, so the chunk panel is the
+ * one and only source list — no separate "Sources" footer.
  *
  * IMPORTANT: this is for DISPLAY only. The original message content must keep
  * the raw markers so source/chunk alignment elsewhere keeps working.
  */
 
-const SUPERSCRIPT_DIGITS: Record<string, string> = {
-  "0": "⁰",
-  "1": "¹",
-  "2": "²",
-  "3": "³",
-  "4": "⁴",
-  "5": "⁵",
-  "6": "⁶",
-  "7": "⁷",
-  "8": "⁸",
-  "9": "⁹",
+export interface CitableChunk {
+  source?: string
+  documentName?: string
+  page?: number
 }
 
-export function toSuperscript(n: number): string {
-  return String(n)
-    .split("")
-    .map((d) => SUPERSCRIPT_DIGITS[d] ?? d)
-    .join("")
-}
+export const CITE_HREF_PREFIX = "#cite-"
 
 // Matches a bracketed citation that contains either a known document extension
 // or a page reference (", p.N"). This deliberately avoids matching markdown
 // links like [text](url) or numeric arrays like [1, 2].
 const CITATION_MARKER =
-  /\s*\[([^\]\n]*?(?:\.(?:pdf|docx?|docm|odt|rtf|epub|pptx?|pps|odp|xlsx?|xlsm|xlsb|ods|csv|tsv|txt)|,\s*p\.?\s*\d+)[^\]\n]*?)\]/gi
+  /\s*\[([^\]\n]*?(?:\.(?:pdf|docx?|docm|odt|rtf|epub|pptx?|pps|odp|xlsx?|xlsm|xlsb|ods|csv|tsv|txt)|,\s*p\.?\s*\d+)[^\]\n]*?)\](?!\()/gi
 
-const keyOf = (label: string): string => label.trim().toLowerCase().replace(/\s+/g, " ")
+const PAGE_SUFFIX = /,\s*p\.?\s*(\d+)\s*$/i
+
+const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, "")
+
+/** 0-based index of the chunk a `File.pdf, p.N` label points at, or -1. */
+export function findCitedChunk(label: string, chunks: CitableChunk[]): number {
+  const pageMatch = label.match(PAGE_SUFFIX)
+  const page = pageMatch ? Number(pageMatch[1]) : undefined
+  const file = norm(label.replace(PAGE_SUFFIX, ""))
+  if (!file) return -1
+
+  const sameFile = (c: CitableChunk) => {
+    const name = norm(c.documentName || c.source || "")
+    return !!name && (name.includes(file) || file.includes(name))
+  }
+  if (page !== undefined) {
+    const exact = chunks.findIndex((c) => sameFile(c) && c.page === page)
+    if (exact !== -1) return exact
+  }
+  return chunks.findIndex(sameFile)
+}
 
 /**
- * Replace inline `[Filename, p.N]` markers with compact superscript references
- * and append a deduped "Sources" line. Returns the input unchanged when no
- * citation markers are present.
+ * Replace inline `[Filename, p.N]` markers with `[n](#cite-n)` links into
+ * `chunks`. A marker that matches no chunk (e.g. an old message saved without
+ * its chunks) is left as written so the claim keeps its attribution.
  */
-export function formatCitationsForDisplay(content: string): string {
+export function linkCitations(content: string, chunks: CitableChunk[]): string {
   if (!content) return content
-
-  // Pass 1 — collect unique citations in order of first appearance.
-  const order: string[] = []
-  const labels = new Map<string, string>()
-  for (const match of content.matchAll(CITATION_MARKER)) {
-    const label = match[1].trim()
-    const key = keyOf(label)
-    if (!labels.has(key)) {
-      labels.set(key, label)
-      order.push(key)
-    }
-  }
-  if (order.length === 0) return content
-
-  const numberOf = new Map(order.map((key, index) => [key, index + 1]))
-
-  // Pass 2 — replace each marker with its superscript number, then tidy spacing.
-  const body = content
-    .replace(CITATION_MARKER, (_full, inner: string) => toSuperscript(numberOf.get(keyOf(inner)) ?? 0))
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\s+([.,;:!?])/g, "$1")
-    .trim()
-
-  const sources = order.map((key, index) => `${toSuperscript(index + 1)} ${labels.get(key)}`).join("  ·  ")
-
-  return `${body}\n\n**Sources:** ${sources}`
+  return content
+    .replace(CITATION_MARKER, (full, inner: string) => {
+      const index = findCitedChunk(inner.trim(), chunks)
+      return index === -1 ? full : `[${index + 1}](${CITE_HREF_PREFIX}${index + 1})`
+    })
+    // "[File, p.1] [File, p.1]" on one claim → a single chip, not "1 1"
+    .replace(/(\[\d+\]\(#cite-\d+\))(?:\s*\1)+/g, "$1")
+    .replace(/[ \t]+([.,;:!?])/g, "$1")
 }

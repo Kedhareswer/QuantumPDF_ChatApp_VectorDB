@@ -1,9 +1,7 @@
 "use client"
 
 import { logger } from "@/lib/logger"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     Activity,
@@ -21,7 +19,6 @@ import { DocumentLibrary } from "@/components/document-library"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { ErrorHandler } from "@/components/error-handler"
 import { OnboardingTour } from "@/components/onboarding-tour"
-import { TabContentLoadingSkeleton } from "@/components/skeleton-loaders"
 import { SystemStatus } from "@/components/system-status"
 import { UnifiedConfiguration } from "@/components/unified-configuration"
 import { UnifiedPDFProcessor } from "@/components/unified-pdf-processor"
@@ -32,6 +29,10 @@ import { SessionPersistence, createIndexedDBStore } from "@/lib/session-persiste
 import { useAppStore, type Document } from "@/lib/store"
 import type { VectorDBConfig } from "@/lib/vector-database-types"
 import { VectorDatabaseClient } from "@/lib/vector-database-client"
+
+const SIDEBAR_TAB_CLASS =
+  "rounded-none h-10 gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 hover:text-black data-[state=active]:bg-black data-[state=active]:text-white data-[state=active]:shadow-none"
+const SIDEBAR_HEADING_CLASS = "font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-gray-500"
 
 /**
  * Generates a unique id for chat messages. Defined at module scope so the
@@ -99,8 +100,6 @@ export default function QuantumPDFChatbot() {
     startedAt: null,
   })
   
-  // Search state
-  const [isTabLoading, setIsTabLoading] = useState(false)
 
   // Check if chat is ready
   const isChatReady = modelStatus === "ready" && documents.length > 0
@@ -556,32 +555,16 @@ export default function QuantumPDFChatbot() {
     }
   }
 
-  const getTabBadgeCount = (tab: string) => {
-    switch (tab) {
-      case "documents":
-        return documents.length
-      default:
-        return null
-    }
-  }
-
-  const handleTabChange = async (newTab: string) => {
-    if (newTab === activeTab) return
-    
-    setIsTabLoading(true)
-    
-    // Simulate tab content loading
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
-    setActiveTab(newTab)
-    setIsTabLoading(false)
+  const handleTabChange = (newTab: string) => {
+    if (newTab !== activeTab) setActiveTab(newTab)
   }
 
   const sidebarTabValue = activeTab === "chat" ? "documents" : activeTab
 
   return (
     <ErrorBoundary>
-      <div className="h-screen overflow-hidden bg-gray-50 flex">
+      {/* h-dvh, not h-screen: on phones 100vh sits behind the browser toolbar and hides the chat input */}
+      <div className="h-dvh overflow-hidden bg-gray-50 flex">
         {/* First-run product tour */}
         <OnboardingTour />
 
@@ -606,11 +589,11 @@ export default function QuantumPDFChatbot() {
           ${sidebarCollapsed ? "lg:w-16" : "lg:w-80"}
           ${sidebarOpen ? "w-full sm:w-80 translate-x-0" : "w-full sm:w-80 -translate-x-full lg:translate-x-0"}
           transition-all duration-300 ease-in-out
-          bg-white border-r-2 border-black flex flex-col h-screen shrink-0
+          bg-white border-r-2 border-black flex flex-col h-dvh shrink-0
         `}
         >
-          {/* Sidebar Header */}
-          <div className="p-6 border-b-2 border-black bg-black text-white">
+          {/* Sidebar Header (max-lg:pl-16 clears the fixed mobile menu button) */}
+          <div className="p-6 max-lg:pl-16 border-b-2 border-black bg-black text-white">
             <div className="flex items-center justify-between">
               {!sidebarCollapsed && (
                 <div className="space-y-1">
@@ -634,59 +617,52 @@ export default function QuantumPDFChatbot() {
           <div className="flex-1 min-h-0 overflow-auto">
             {!sidebarCollapsed ? (
               <Tabs value={sidebarTabValue} onValueChange={handleTabChange} className="h-full flex flex-col">
-                <TabsList className="grid w-full grid-cols-3 m-4 border-2 border-black bg-white">
+                <TabsList className="grid w-auto h-auto grid-cols-3 m-4 p-0 gap-0 rounded-none border-2 border-black bg-white">
                   <TabsTrigger
                     value="documents"
                     data-tour="tab-documents"
-                    className="data-[state=active]:bg-black data-[state=active]:text-white flex items-center space-x-1"
+                    className={SIDEBAR_TAB_CLASS}
                   >
                     <FileText className="w-4 h-4" />
-                    {getTabBadgeCount("documents") !== null && getTabBadgeCount("documents")! > 0 && (
-                      <Badge variant="secondary" className="ml-1 text-xs">
-                        {getTabBadgeCount("documents")}
-                      </Badge>
+                    <span>Docs</span>
+                    {documents.length > 0 && (
+                      <span className="font-mono text-[10px] leading-none px-1 py-0.5 border border-current">{documents.length}</span>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="settings" data-tour="tab-settings" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                  <TabsTrigger value="settings" data-tour="tab-settings" className={`${SIDEBAR_TAB_CLASS} border-x-2 border-black`}>
                     <Settings className="w-4 h-4" />
+                    <span>Setup</span>
                   </TabsTrigger>
-                  <TabsTrigger value="status" className="data-[state=active]:bg-black data-[state=active]:text-white">
+                  <TabsTrigger value="status" className={SIDEBAR_TAB_CLASS}>
                     <Activity className="w-4 h-4" />
+                    <span>Status</span>
                   </TabsTrigger>
                 </TabsList>
 
                 <div className="flex-1 min-h-0 overflow-auto">
-                  <TabsContent value="documents" className="h-full m-0 p-4 overflow-auto">
-                    {isTabLoading ? (
-                      <TabContentLoadingSkeleton />
-                    ) : (
-                    <div className="space-y-4">
-                      <h2 className="font-bold text-lg">Document Management</h2>
-                      <UnifiedPDFProcessor onDocumentProcessed={handleDocumentUpload} />
-                      <Separator className="bg-black" />
-                      <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />
+                  <TabsContent value="documents" className="h-full m-0 px-4 pb-4 overflow-auto">
+                    <div className="space-y-6">
+                      <section className="space-y-3">
+                        <h2 className={SIDEBAR_HEADING_CLASS}>Upload</h2>
+                        <UnifiedPDFProcessor onDocumentProcessed={handleDocumentUpload} />
+                      </section>
+                      <section className="space-y-3">
+                        <h2 className={SIDEBAR_HEADING_CLASS}>Library</h2>
+                        <DocumentLibrary documents={documents} onRemoveDocument={handleRemoveDocument} />
+                      </section>
                     </div>
-                    )}
                   </TabsContent>
 
-
-                  <TabsContent value="settings" className="h-full m-0 p-4 overflow-auto">
-                    {isTabLoading ? (
-                      <TabContentLoadingSkeleton />
-                    ) : (
+                  <TabsContent value="settings" className="h-full m-0 px-4 pb-4 overflow-auto">
                     <UnifiedConfiguration
                       onTestAI={handleTestAI}
                       onTestVectorDB={handleTestVectorDB}
                     />
-                    )}
                   </TabsContent>
 
-                  <TabsContent value="status" className="h-full m-0 p-4 overflow-auto">
-                    {isTabLoading ? (
-                      <TabContentLoadingSkeleton />
-                    ) : (
-                    <div className="space-y-4">
-                      <h2 className="font-bold text-lg">System Monitor</h2>
+                  <TabsContent value="status" className="h-full m-0 px-4 pb-4 overflow-auto">
+                    <section className="space-y-3">
+                      <h2 className={SIDEBAR_HEADING_CLASS}>System Monitor</h2>
                       <SystemStatus
                         modelStatus={modelStatus}
                         apiConfig={aiConfig}
@@ -694,8 +670,7 @@ export default function QuantumPDFChatbot() {
                         messages={messages}
                         ragEngine={ragEngine ? ragEngine.getStatus() : {}}
                       />
-                    </div>
-                    )}
+                    </section>
                   </TabsContent>
                 </div>
               </Tabs>
@@ -738,7 +713,7 @@ export default function QuantumPDFChatbot() {
 
         {/* Overlay for mobile */}
           <div
-          className={`fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden transition-opacity ${sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+          className={`fixed inset-0 bg-black/50 z-30 lg:hidden transition-opacity ${sidebarOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
@@ -758,6 +733,7 @@ export default function QuantumPDFChatbot() {
               documentContext={documents.map(d => d.chunks?.join('\n') || '').join('\n\n')}
               aiClient={modelStatus === 'ready' ? new AIClient(aiConfig) : undefined}
               embeddingStatus={embeddingStatus}
+              isRestoring={!sessionRestored}
             />
           </div>
         </main>
