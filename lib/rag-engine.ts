@@ -59,6 +59,10 @@ export interface RetrievedChunk {
   semanticImportance?: number
   chunkIndex?: number
   page?: number
+  /** Last page, when the chunk spans several (short) pages. */
+  pageEnd?: number
+  /** Heading or sheet name the chunk sits under (non-PDF formats). */
+  section?: string
   bbox?: unknown
   level?: number
   chunkType?: string
@@ -125,6 +129,8 @@ export interface EnhancedQueryResponse {
   }
   groundednessScore?: number // Share 0-1 of answer claims the LLM verifier found supported by the sources
   hallucinationDetected?: boolean // True when the verifier found unsupported claims in the final answer
+  /** Output-guardrail findings for this answer (redactions, missing citations, hedging). */
+  warnings?: string[]
   /** Per-claim verifier counts for the final answer, when available. */
   verifiedClaims?: { total: number; supported: number; unsupportedClaims: string[] }
 }
@@ -163,6 +169,10 @@ export interface Document {
   chunks: string[] | TextChunk[] // Support both simple strings and rich TextChunk objects
   /** 1-based page each chunk starts on, aligned with `chunks` (PDFs only). */
   chunkPages?: Array<number | null>
+  /** 1-based page each chunk ends on (a chunk can span short pages). */
+  chunkPageEnds?: Array<number | null>
+  /** Nearest heading / sheet name for each chunk, aligned with `chunks` (non-PDF formats). */
+  chunkSections?: Array<string | null>
   embeddings: number[][]
   /** AIClient.embeddingSpaceId the embeddings were produced in. */
   embeddingSpace?: string
@@ -216,6 +226,9 @@ export interface RAGEngineStatus {
 }
 
 export class RAGEngine {
+  /** Chunks scoring below this fraction of the best match are dropped (see findRelevantChunks). */
+  static RELATIVE_FLOOR = 0.5
+
   private documents: Document[] = []
   private aiClient: AIClient | null = null
   private isInitialized = false
@@ -564,6 +577,8 @@ export class RAGEngine {
       remoteRank?: number;
       // Optional metadata
       page?: number;
+      section?: string;
+      pageEnd?: number;
       bbox?: unknown;
       level?: number;
       chunkType?: string;
@@ -736,9 +751,13 @@ export class RAGEngine {
 
                   // Build enhanced source string with metadata
                   const page = this.pageOf(doc, chunk, chunkIndex)
+                  const pageEnd = this.pageEndOf(doc, chunkIndex, page)
+                  const section = this.sectionOf(doc, chunkIndex)
                   let sourceString = `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`
                   if (page !== undefined) {
-                    sourceString = `${doc.name} · p.${page}` + (chunkMetadata?.level ? ` · ${this.formatChunkType(chunkMetadata.type, chunkMetadata.level)}` : '')
+                    sourceString = `${doc.name} · p.${RAGEngine.pageRange(page, pageEnd)}` + (chunkMetadata?.level ? ` · ${this.formatChunkType(chunkMetadata.type, chunkMetadata.level)}` : '')
+                  } else if (section !== undefined) {
+                    sourceString = `${doc.name} · ${section}`
                   } else if (chunkMetadata?.type) {
                     sourceString += ` · ${this.formatChunkType(chunkMetadata.type)}`
                   }
@@ -754,6 +773,8 @@ export class RAGEngine {
                     ...(remoteRank !== undefined && { remoteRank }),
                     // Include metadata if available
                     ...(page !== undefined && { page }),
+                    ...(pageEnd !== undefined && { pageEnd }),
+                    ...(section !== undefined && { section }),
                     ...(chunkMetadata?.bbox !== undefined && { bbox: chunkMetadata.bbox }),
                     ...(chunkMetadata?.level !== undefined && { level: chunkMetadata.level }),
                     ...(chunkMetadata?.type && { chunkType: chunkMetadata.type }),
@@ -798,7 +819,20 @@ export class RAGEngine {
       }
 
       const isMultiDocQuery = question ? this.isMultiDocumentQuery(question) : false
+
+      // Relative floor: the absolute threshold (0.03) is below the noise floor of
+      // every embedding model, so on small documents it let every chunk through.
+      // Keep chunks within RELATIVE_FLOOR of the best match. Skipped for the
+      // deliberately permissive fallback searches (threshold < 0.03); chunks the
+      // external vector store ranked are always kept.
       let candidateChunks = allChunks
+      if (minSimilarityThreshold >= 0.03) {
+        const best = Math.max(...allChunks.map((c) => c.similarity))
+        const floor = best * RAGEngine.RELATIVE_FLOOR
+        const kept = allChunks.filter((c) => c.similarity >= floor || c.remoteRank !== undefined)
+        logger.debug(`Relative floor ${floor.toFixed(3)} (best ${best.toFixed(3)}): kept ${kept.length}/${allChunks.length} chunks`)
+        candidateChunks = kept
+      }
 
       // For single-document intent, keep candidates from top-relevance documents only.
       // This avoids low-relevance cross-document bleed into citations.
@@ -821,7 +855,7 @@ export class RAGEngine {
           eligibleDocIds.add(docScores[0].docId)
         }
 
-        candidateChunks = allChunks.filter((chunk) => eligibleDocIds.has(chunk.documentId))
+        candidateChunks = candidateChunks.filter((chunk) => eligibleDocIds.has(chunk.documentId))
         logger.debug(
           `Single-doc gating: ${candidateChunks.length}/${allChunks.length} chunks retained from ${eligibleDocIds.size} document(s); floor=${scoreFloor.toFixed(3)}`
         )
@@ -1500,6 +1534,11 @@ export class RAGEngine {
     filters?: RAGFilterOptions,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     sessionId?: string // For rate limiting
+    /**
+     * One LLM call: skip context resolution, query rewriting/HyDE/step-back and
+     * the fact check. Groundedness then falls back to the lexical estimate.
+     */
+    fastMode?: boolean
   }): Promise<EnhancedQueryResponse> {
     const queryStartTime = Date.now()
     const queryId = `query_${queryStartTime}_${Math.random().toString(36).substring(7)}`
@@ -1580,7 +1619,9 @@ export class RAGEngine {
       // *before* analysis, so rewriting, HyDE, embedding and the cache all see
       // the subject.
       const history = options?.conversationHistory ?? []
-      const resolvedQuestion = history.length > 0
+      const fastMode = options?.fastMode ?? false
+      // Fast mode leaves follow-up resolution to the answering call, which sees the history.
+      const resolvedQuestion = history.length > 0 && !fastMode
         ? await this.resolveConversationContext(sanitizedQuestion, history)
         : sanitizedQuestion
 
@@ -1588,7 +1629,12 @@ export class RAGEngine {
       // Keyed on the standalone question plus the active document filter, so a
       // document-scoped question never gets an answer computed over everything.
       const filterIds = filters?.documentIds?.length ? [...filters.documentIds].sort() : []
-      const cacheScope = [...this.documents.map(d => d.id), ...(filterIds.length ? ['|filter', ...filterIds] : [])]
+      const cacheScope = [
+        ...this.documents.map(d => d.id),
+        ...(filterIds.length ? ['|filter', ...filterIds] : []),
+        // Fast answers are unverified; never serve one where a verified answer was asked for.
+        ...(fastMode ? ['|fast'] : []),
+      ]
       const cachedResponse = this.queryProcessor.getCachedResponse(resolvedQuestion, cacheScope)
       if (cachedResponse) {
         logger.debug(`[${queryId}] Cache HIT - returning cached response`)
@@ -1604,7 +1650,7 @@ export class RAGEngine {
       logger.debug(`[${queryId}] Cache MISS - processing query`)
 
       // ==================== ADVANCED QUERY ANALYSIS ====================
-      const queryAnalysis = await this.queryProcessor.analyzeQuery(resolvedQuestion)
+      const queryAnalysis = await this.queryProcessor.analyzeQuery(resolvedQuestion, { useLLM: !fastMode })
       logger.debug(`[${queryId}] Query analysis:`, {
         type: queryAnalysis.queryType,
         complexity: queryAnalysis.complexity,
@@ -1623,7 +1669,8 @@ export class RAGEngine {
         showThinking, 
         filters, 
         options?.conversationHistory,
-        queryAnalysis // Pass query analysis for HyDE and step-back
+        queryAnalysis, // Pass query analysis for HyDE and step-back
+        fastMode
       )
 
       // ==================== CACHE STORE ====================
@@ -1671,7 +1718,8 @@ export class RAGEngine {
     showThinking: boolean,
     filters?: RAGFilterOptions,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
-    queryAnalysis?: QueryAnalysis
+    queryAnalysis?: QueryAnalysis,
+    fastMode = false
   ): Promise<EnhancedQueryResponse> {
     const processStartTime = Date.now()
     const queryId = `eval_${processStartTime}`
@@ -1696,7 +1744,7 @@ export class RAGEngine {
     const hasContext = (phase1Result.relevantChunks?.length ?? 0) > 0
     // Every answer grounded in documents is fact-checked, including "simple" ones:
     // the groundedness score shown to the user comes from this check.
-    const phase2Result = hasContext ? await this.phase2_SelfCritique(phase1Result) : null
+    const phase2Result = hasContext && !fastMode ? await this.phase2_SelfCritique(phase1Result) : null
     
     // ==================== PHASE 3: Generation ====================
     const generationStartTime = Date.now()
@@ -1709,19 +1757,17 @@ export class RAGEngine {
     const generationLatencyMs = Date.now() - generationStartTime
 
     // ==================== GUARDRAILS: Output Validation ====================
+    // Enforced: the sanitized answer (unsourced sensitive values redacted) is
+    // what the user sees; the remaining issues travel with it as warnings.
     const outputValidation = Guardrails.validateOutput(
       phase3Result.answer,
       phase1Result.context || '',
       phase1Result.relevantChunks || []
     )
-    
-    if (!outputValidation.isValid) {
+    phase3Result.answer = outputValidation.sanitizedOutput || phase3Result.answer
+    if (outputValidation.issues.length > 0) {
+      phase3Result.warnings = outputValidation.issues
       console.warn(`[${queryId}] Output validation issues:`, outputValidation.issues)
-    }
-    
-    if (outputValidation.toxicityScore > 0.5) {
-      console.warn(`[${queryId}] High toxicity score: ${outputValidation.toxicityScore}`)
-      // In production, you might want to filter or flag the response
     }
 
     // ==================== EVALUATION: Track Metrics ====================
@@ -2011,8 +2057,10 @@ export class RAGEngine {
       // Label each chunk with its source so the model can cite accurately
       const context = optimizedChunks.map((chunk) => {
         const name = chunk.documentName || chunk.source || 'Unknown'
-        const page = chunk.page != null ? ` | Page ${chunk.page}` : ''
-        return `[SOURCE: ${name}${page}]\n${chunk.content}`
+        const where = chunk.page != null
+          ? chunk.pageEnd != null ? ` | Pages ${chunk.page}–${chunk.pageEnd}` : ` | Page ${chunk.page}`
+          : chunk.section ? ` | Section: ${chunk.section}` : ''
+        return `[SOURCE: ${name}${where}]\n${chunk.content}`
       }).join("\n\n---\n\n")
       logger.debug("Context length:", context.length, "characters")
 
@@ -2426,6 +2474,23 @@ Only output the expanded query and alternatives, nothing else.`
     return typeof page === 'number' && page > 0 ? page : undefined
   }
 
+  /** Last page of a chunk that spans several pages; undefined when it sits on one. */
+  private pageEndOf(doc: Document, index: number, start: number | undefined): number | undefined {
+    const end = doc.chunkPageEnds?.[index]
+    return start !== undefined && typeof end === 'number' && end > start ? end : undefined
+  }
+
+  /** "4" or "4–5". */
+  static pageRange(start: number, end?: number): string {
+    return end !== undefined && end > start ? `${start}–${end}` : `${start}`
+  }
+
+  /** Heading / sheet name a chunk sits under (non-PDF formats), from the document's chunkSections. */
+  private sectionOf(doc: Document, index: number): string | undefined {
+    const section = doc.chunkSections?.[index]
+    return typeof section === 'string' && section.trim() ? section.trim() : undefined
+  }
+
   /** Documents allowed by the user's document filter (the fallback paths must honour it too). */
   private documentsMatching(filters?: RAGFilterOptions): Document[] {
     const ids = filters?.documentIds
@@ -2523,9 +2588,13 @@ Only output the expanded query and alternatives, nothing else.`
           if (combinedScore > 0.05 || matchCount >= 2) {
             const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
             const page = this.pageOf(doc, chunk, i)
+            const pageEnd = this.pageEndOf(doc, i, page)
+            const section = this.sectionOf(doc, i)
             const sourceString = page !== undefined
-              ? `${doc.name} · p.${page}`
-              : `${doc.name || "Unknown Document"} (chunk ${i + 1})`
+              ? `${doc.name} · p.${RAGEngine.pageRange(page, pageEnd)}`
+              : section !== undefined
+                ? `${doc.name} · ${section}`
+                : `${doc.name || "Unknown Document"} (chunk ${i + 1})`
             
             results.push({
               content: chunkContent,
@@ -2538,6 +2607,8 @@ Only output the expanded query and alternatives, nothing else.`
               ...(chunkMetadata || {}),
               chunkIndex: i,
               ...(page !== undefined && { page }),
+              ...(pageEnd !== undefined && { pageEnd }),
+              ...(section !== undefined && { section }),
             })
           }
         }
@@ -2595,9 +2666,13 @@ Only output the expanded query and alternatives, nothing else.`
         }
         
         const page = this.pageOf(doc, chunk, i)
+        const pageEnd = this.pageEndOf(doc, i, page)
+        const section = this.sectionOf(doc, i)
         const sourceString = page !== undefined
-          ? `${doc.name} · p.${page}`
-          : `${doc.name || "Unknown Document"} (chunk ${i + 1})`
+          ? `${doc.name} · p.${RAGEngine.pageRange(page, pageEnd)}`
+          : section !== undefined
+            ? `${doc.name} · ${section}`
+            : `${doc.name || "Unknown Document"} (chunk ${i + 1})`
         
         results.push({
           content: chunkContent,
@@ -2609,6 +2684,8 @@ Only output the expanded query and alternatives, nothing else.`
           ...(chunkMetadata || {}),
           chunkIndex: i,
           ...(page !== undefined && { page }),
+          ...(pageEnd !== undefined && { pageEnd }),
+          ...(section !== undefined && { section }),
         })
       }
     }
@@ -2870,7 +2947,7 @@ Only output the expanded query and alternatives, nothing else.`
 
 Citation rules:
 - Every factual claim must end with a citation in square brackets
-- Each source passage is labelled [SOURCE: Filename] or [SOURCE: Filename | Page N]. Cite it as [Filename], or [Filename, p.N] only when the label shows a page — never invent page numbers
+- Each source passage is labelled [SOURCE: Filename], [SOURCE: Filename | Page N], [SOURCE: Filename | Pages N–M] or [SOURCE: Filename | Section: Name]. Cite it as [Filename], [Filename, p.N], [Filename, p.N–M] or [Filename, Name] — only with pages or a section the label actually shows; never invent page numbers
 - When a fact comes from multiple passages, cite each: [File1] [File2, p.7]
 - If the passages do not contain enough information to answer, write: "Not found in the provided documents."
 
@@ -2889,7 +2966,7 @@ ${context}
 ${historyNote}
 <question>${question}</question>
 
-Answer using only the sources above. Cite every factual claim with its source label in square brackets, copied from the SOURCE header it came from — e.g. [report.pdf] or, when the header shows a page, [report.pdf, p.4]. Never invent page numbers. If the answer is not in the sources, write "Not found in the provided documents."`
+Answer using only the sources above. Cite every factual claim with its source label in square brackets, copied from the SOURCE header it came from — e.g. [report.pdf], [report.pdf, p.4] when the header shows a page, or [budget.xlsx, Q3] when it shows a section. Never invent page numbers. If the answer is not in the sources, write "Not found in the provided documents."`
   }
 
   /**
@@ -2991,7 +3068,7 @@ ${issues}
 
 Revise the draft to fix all issues listed above:
 - Remove or replace any hallucinated or uncited claims
-- Add missing citations using the source labels from the SOURCE headers (add ", p.N" only when the header shows a page)
+- Add missing citations using the source labels from the SOURCE headers (add ", p.N" or ", Section" only when the header shows one)
 - Cover any missing aspects of the question that the sources support
 - Keep all valid, cited content from the draft
 
@@ -3061,7 +3138,7 @@ Output only the final answer — no explanations, no meta-commentary.`
    */
   private enforceCitations(
     response: string,
-    chunks: ReadonlyArray<{ content: string; source: string; documentName?: string; page?: number }>
+    chunks: ReadonlyArray<{ content: string; source: string; documentName?: string; page?: number; pageEnd?: number; section?: string }>
   ): string {
     if (/\[[^\]]+\]/.test(response) || chunks.length === 0) return response
 
@@ -3069,7 +3146,7 @@ Output only the final answer — no explanations, no meta-commentary.`
     const chunkWordSets = chunks.map((c) => new Set(words(c.content || '')))
     const labelOf = (c: typeof chunks[number]) => {
       const name = c.documentName || c.source
-      return c.page != null ? `${name}, p.${c.page}` : name
+      return c.page != null ? `${name}, p.${RAGEngine.pageRange(c.page, c.pageEnd)}` : c.section ? `${name}, ${c.section}` : name
     }
 
     let inCode = false

@@ -8,6 +8,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./__tests__/setup.ts'],
+    // e2e/ holds Playwright specs (npm run test:e2e), not Vitest tests.
+    include: ['__tests__/**/*.test.{ts,tsx}'],
     // Binary payloads Vite must not scan or pre-bundle: liteparse's native
     // .node addon and anydoc's 6MB .wasm. Tests mock both modules, so neither
     // is ever actually loaded.

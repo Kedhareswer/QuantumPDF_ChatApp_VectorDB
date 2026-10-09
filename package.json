@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/copy-pdf-worker.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-pdf-worker.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
     "pwa:icons": "node scripts/generate-pwa-icons.mjs",
-    "pwa:test": "npm run build && npm start"
+    "pwa:test": "npm run build && npm start",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@firecrawl/anydoc-wasm": "^0.1.7",
@@ -54,6 +57,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4.1.17",
     "@types/node": "^24",
     "@types/papaparse": "^5.5.0",

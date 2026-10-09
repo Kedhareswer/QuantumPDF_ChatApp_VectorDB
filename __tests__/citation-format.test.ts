@@ -22,6 +22,33 @@ describe("findCitedChunk", () => {
   })
 })
 
+describe("findCitedChunk with page ranges and sections", () => {
+  const rich = [
+    { documentName: "Labs, 2024 Edition.pdf", page: 4, pageEnd: 5 },
+    { documentName: "Labs, 2024 Edition.pdf", page: 6 },
+    { documentName: "budget.xlsx", section: "Q2" },
+    { documentName: "budget.xlsx", section: "Q3" },
+  ]
+
+  it("matches a page range, en dash or hyphen", () => {
+    expect(findCitedChunk("Labs, 2024 Edition.pdf, p.4–5", rich)).toBe(0)
+    expect(findCitedChunk("Labs, 2024 Edition.pdf, p.4-5", rich)).toBe(0)
+  })
+
+  it("matches a single page inside a chunk's range", () => {
+    expect(findCitedChunk("Labs, 2024 Edition.pdf, p.5", rich)).toBe(0)
+    expect(findCitedChunk("Labs, 2024 Edition.pdf, p.6", rich)).toBe(1)
+  })
+
+  it("matches a section even though the file name contains a comma", () => {
+    expect(findCitedChunk("budget.xlsx, Q3", rich)).toBe(3)
+  })
+
+  it("links section citations end to end", () => {
+    expect(linkCitations("Revenue rose [budget.xlsx, Q3].", rich)).toBe("Revenue rose[4](#cite-4).")
+  })
+})
+
 describe("linkCitations", () => {
   it("numbers citations by chunk position, not by order of appearance", () => {
     const out = linkCitations("A [Common_Labs.pdf, p.1]. B [Common_Labs.pdf, p.3].", chunks)

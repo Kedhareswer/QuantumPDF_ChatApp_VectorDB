@@ -608,34 +608,150 @@ export function pageAtOffset(pageStarts: number[], offset: number): number | nul
   return lo + 1
 }
 
+export interface MarkdownHeading {
+  /** Character offset of the heading line in the text. */
+  offset: number
+  /** Heading text without `#` markers, trimmed and capped at SECTION_LABEL_MAX chars. */
+  label: string
+}
+
+export const SECTION_LABEL_MAX = 60
+
+/**
+ * ATX Markdown headings (`# Title` … `###### Title`) in document order,
+ * skipping lines inside fenced code blocks. anydoc emits one `## <sheet name>`
+ * per spreadsheet sheet and `#`-headings for Word/ODT heading styles.
+ */
+export function findMarkdownHeadings(text: string): MarkdownHeading[] {
+  const headings: MarkdownHeading[] = []
+  let fence: string | null = null
+  let offset = 0
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine
+    const fenceMatch = /^ {0,3}(`{3,}|~{3,})/.exec(line)
+    if (fenceMatch) {
+      const marker = fenceMatch[1]
+      if (fence === null) fence = marker
+      else if (marker[0] === fence[0] && marker.length >= fence.length) fence = null
+    } else if (fence === null) {
+      const match = /^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/.exec(line)
+      const raw = match?.[1].replace(/\s+/g, " ").trim()
+      if (raw) {
+        const label = raw.length > SECTION_LABEL_MAX ? `${raw.slice(0, SECTION_LABEL_MAX - 1).trimEnd()}…` : raw
+        headings.push({ offset, label })
+      }
+    }
+    offset += rawLine.length + 1
+  }
+  return headings
+}
+
+/** Label of the nearest heading at or before `offset` (binary search); null when none. */
+export function sectionAtOffset(headings: MarkdownHeading[], offset: number): string | null {
+  let lo = 0
+  let hi = headings.length - 1
+  let found = -1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (headings[mid].offset <= offset) {
+      found = mid
+      lo = mid + 1
+    } else hi = mid - 1
+  }
+  return found === -1 ? null : headings[found].label
+}
+
+export interface BuildChunksOptions {
+  /**
+   * Also return `chunkSections`: for each chunk, the nearest Markdown heading
+   * at or before where it starts (null when none). Meant for anydoc output.
+   */
+  sections?: boolean
+}
+
+/**
+ * Where each chunk starts in `text`, tolerating offset drift from overlap.
+ *
+ * Default (page tagging, unchanged): the chunk's first line searched from a
+ * 2000-char look-back behind the previous chunk, else the recorded startChar.
+ *
+ * `nearestToRecorded` (section labels): spreadsheets repeat lines — the same
+ * header row in every monthly sheet — so "first match in the look-back" can
+ * land on the previous sheet's copy. Instead take the occurrence closest to the
+ * chunk's recorded startChar (which drifts by tens of characters, not by a
+ * sheet), never before the previous chunk; fall back to the default search.
+ */
+function locateChunkOffsets(text: string, advancedChunks: TextChunk[], nearestToRecorded = false): number[] {
+  const WINDOW = 2000
+  let searchFrom = 0
+  return advancedChunks.map((chunk) => {
+    // startChar can drift once overlap is prepended; locate the chunk's own
+    // text (its first line) and fall back to the recorded offset.
+    const probe = chunk.content.trim().split("\n")[0].slice(0, 80)
+    const recorded = chunk.metadata.startChar
+    let offset = -1
+    if (probe && nearestToRecorded) {
+      let pos = text.indexOf(probe, Math.max(searchFrom, recorded - WINDOW))
+      while (pos !== -1 && pos <= recorded + WINDOW) {
+        if (offset === -1 || Math.abs(pos - recorded) < Math.abs(offset - recorded)) offset = pos
+        if (pos >= recorded) break // later occurrences only get farther away
+        pos = text.indexOf(probe, pos + 1)
+      }
+    }
+    if (offset === -1 && probe) offset = text.indexOf(probe, Math.max(0, searchFrom - WINDOW))
+    if (offset === -1) offset = recorded
+    searchFrom = offset
+    return offset
+  })
+}
+
 /**
  * Chunk extracted text, dropping any chunk that is only whitespace.
  *
  * When `pageStarts` (the character offset where each page begins in `text`) is
- * given, every chunk is tagged with the page it starts on: `metadata.page` on
- * the advanced chunks and `chunkPages`, aligned index-for-index with `chunks`.
+ * given, every chunk is tagged with the page it starts on (`metadata.page`,
+ * `chunkPages`) and the page it ends on (`chunkPageEnds`), aligned
+ * index-for-index with `chunks`. Short pages are merged into one chunk, so a
+ * chunk can span pages; citing only its start page would point at the wrong one.
+ *
+ * With `options.sections`, `chunkSections` is returned too, aligned the same
+ * way (see BuildChunksOptions); otherwise it is undefined.
  */
-export function buildChunks(text: string, fileName?: string, documentId?: string, pageStarts?: number[]) {
+export function buildChunks(
+  text: string,
+  fileName?: string,
+  documentId?: string,
+  pageStarts?: number[],
+  options: BuildChunksOptions = {},
+) {
   const advancedChunks = new AdvancedChunker(DEFAULT_CHUNK_OPTIONS)
     .chunkText(text, documentId, fileName)
     .filter((c) => c.content.trim().length > 0)
 
-  if (pageStarts && pageStarts.length > 0) {
-    let searchFrom = 0
-    for (const chunk of advancedChunks) {
-      // startChar can drift once overlap is prepended; locate the chunk's own
-      // text (its first line) and fall back to the recorded offset.
-      const probe = chunk.content.trim().split("\n")[0].slice(0, 80)
-      let offset = probe ? text.indexOf(probe, Math.max(0, searchFrom - 2000)) : -1
-      if (offset === -1) offset = chunk.metadata.startChar
-      searchFrom = offset
-      chunk.metadata.page = pageAtOffset(pageStarts, offset) ?? undefined
-    }
+  const hasPages = !!pageStarts && pageStarts.length > 0
+  let chunkPageEnds: Array<number | null> | undefined
+  if (pageStarts && hasPages) {
+    const offsets = locateChunkOffsets(text, advancedChunks)
+    chunkPageEnds = advancedChunks.map((chunk, i) => {
+      chunk.metadata.page = pageAtOffset(pageStarts, offsets[i]) ?? undefined
+      // End: where the chunk's last line sits in the text (overlap whitespace can
+      // differ from the source, so search for the tail rather than add lengths).
+      const tail = chunk.content.trim().split("\n").pop()!.slice(-60)
+      const tailAt = tail ? text.indexOf(tail, offsets[i]) : -1
+      const end = tailAt >= 0 ? tailAt + tail.length - 1 : offsets[i] + chunk.content.length - 1
+      return pageAtOffset(pageStarts, Math.max(offsets[i], end))
+    })
+  }
+
+  let chunkSections: Array<string | null> | undefined
+  if (options.sections) {
+    const headings = findMarkdownHeadings(text)
+    chunkSections = locateChunkOffsets(text, advancedChunks, true).map((offset) => sectionAtOffset(headings, offset))
   }
 
   const chunks = advancedChunks.map((c) => c.content)
-  const chunkPages = pageStarts && pageStarts.length > 0 ? advancedChunks.map((c) => c.metadata.page ?? null) : undefined
-  return { advancedChunks, chunks, chunkPages }
+  const chunkPages = hasPages ? advancedChunks.map((c) => c.metadata.page ?? null) : undefined
+  return { advancedChunks, chunks, chunkPages, chunkPageEnds, chunkSections }
 }
 
 /** Join per-page texts with blank lines, recording where each page starts. */

@@ -75,6 +75,8 @@ export default function QuantumPDFChatbot() {
     removeError,
     updateMessage,
     restoreSession,
+    fastMode,
+    rememberSession,
   } = useAppStore()
 
   const [ragEngine] = useState(() => new RAGEngine())
@@ -120,6 +122,11 @@ export default function QuantumPDFChatbot() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      // Read once at mount: the persisted preference is already hydrated.
+      if (!useAppStore.getState().rememberSession) {
+        setSessionRestored(true)
+        return
+      }
       const [savedDocuments, savedMessages] = await Promise.all([persistence.loadDocuments(), persistence.loadMessages()])
       if (cancelled) return
       for (const doc of savedDocuments) {
@@ -145,10 +152,20 @@ export default function QuantumPDFChatbot() {
 
   // Save the chat history (debounced; streaming updates a message many times).
   useEffect(() => {
-    if (!sessionRestored) return
+    if (!sessionRestored || !rememberSession) return
     const timer = setTimeout(() => void persistence.saveMessages(messages), 500)
     return () => clearTimeout(timer)
-  }, [messages, persistence, sessionRestored])
+  }, [messages, persistence, rememberSession, sessionRestored])
+
+  // Turning "remember" off wipes what was saved; turning it on saves what is loaded now.
+  useEffect(() => {
+    if (!sessionRestored) return
+    if (!rememberSession) {
+      void persistence.clear()
+    } else {
+      ragEngine.getDocuments().forEach((doc) => void persistence.saveDocument(doc))
+    }
+  }, [persistence, ragEngine, rememberSession, sessionRestored])
 
   // Initialize RAG engine with store config. Debounced: aiConfig changes on
   // every API-key keystroke and slider tick, and each initialize() makes live
@@ -167,7 +184,7 @@ export default function QuantumPDFChatbot() {
 
           const { reembeddedDocuments } = await ragEngine.initialize(aiConfig)
           if (cancelled) return
-          if (reembeddedDocuments > 0) {
+          if (reembeddedDocuments > 0 && useAppStore.getState().rememberSession) {
             // New embedding model: persist the re-embedded vectors.
             await Promise.all(ragEngine.getDocuments().map((doc) => persistence.saveDocument(doc)))
           }
@@ -286,7 +303,8 @@ export default function QuantumPDFChatbot() {
         complexityLevel: detectedComplexity,
         tokenBudget: 4000,
         conversationHistory: recentHistory,
-        filters
+        filters,
+        fastMode,
       })
         responseAnswer = response.answer
         responseSources = response.sources
@@ -307,6 +325,10 @@ export default function QuantumPDFChatbot() {
           ...(responseMeta.tokenUsage ? {tokenUsage: responseMeta.tokenUsage} : {}),
           ...(responseMeta.reasoning ? {reasoning: responseMeta.reasoning} : {}),
           ...(responseMeta.queryAnalysis ? { queryAnalysis: responseMeta.queryAnalysis } : {}),
+          ...(responseMeta.groundednessScore !== undefined ? { groundednessScore: responseMeta.groundednessScore } : {}),
+          ...(responseMeta.hallucinationDetected !== undefined ? { hallucinationDetected: responseMeta.hallucinationDetected } : {}),
+          ...(responseMeta.verifiedClaims ? { verifiedClaims: responseMeta.verifiedClaims } : {}),
+          ...(responseMeta.warnings?.length ? { warnings: responseMeta.warnings } : {}),
         },
       }
 
@@ -419,7 +441,7 @@ export default function QuantumPDFChatbot() {
       
       logger.debug("🔄 Adding document to store...")
       addDocument(document)
-      void persistence.saveDocument(document)
+      if (rememberSession) void persistence.saveDocument(document)
       logger.debug("✅ Document successfully added to store")
 
       // Add to vector database
@@ -530,6 +552,16 @@ export default function QuantumPDFChatbot() {
     }
   }
 
+
+  /** Forget everything: saved IndexedDB data plus the documents and chat of this session. */
+  const handleClearSavedData = async () => {
+    await persistence.clear()
+    ragEngine.clearDocuments()
+    clearDocuments()
+    clearMessages()
+    vectorDB.clear().catch((error) => console.error("Failed to clear vector database:", error))
+    addError({ type: "success", title: "Saved data cleared", message: "Documents and chat history were removed from this browser." })
+  }
 
   const handleTestAI = async (config: AIConfig): Promise<boolean> => {
     try {
@@ -657,6 +689,7 @@ export default function QuantumPDFChatbot() {
                     <UnifiedConfiguration
                       onTestAI={handleTestAI}
                       onTestVectorDB={handleTestVectorDB}
+                      onClearSavedData={handleClearSavedData}
                     />
                   </TabsContent>
 

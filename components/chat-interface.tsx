@@ -29,9 +29,10 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/hooks/use-toast"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, type Message } from "@/lib/store"
 import Image from "next/image"
 import {
+    AlertTriangle,
     ArrowUpRight,
     Brain,
     ChevronDown,
@@ -42,6 +43,8 @@ import {
     Loader2,
     Send,
     Settings,
+    ShieldAlert,
+    ShieldCheck,
     Sparkles,
     Target,
     Zap,
@@ -54,52 +57,13 @@ interface RetrievedChunk {
   documentId?: string
   documentName?: string
   page?: number
+  /** Last page the chunk covers, when it spans several (citations read "p.4–5"). */
+  pageEnd?: number
+  /** Heading or sheet name for non-PDF chunks (citations read "[file, Section]"). */
+  section?: string
   bbox?: unknown
   level?: number
   chunkType?: string
-}
-
-interface Message {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  timestamp: Date
-  sources?: string[]
-  metadata?: {
-    responseTime?: number
-    relevanceScore?: number
-    retrievedChunks?: RetrievedChunk[] // Full chunks array with metadata
-    qualityMetrics?: {
-      accuracyScore: number
-      completenessScore: number
-      clarityScore: number
-      confidenceScore: number
-      finalRating: number
-    }
-    tokenUsage?: {
-      contextTokens: number
-      reasoningTokens: number
-      responseTokens: number
-      totalTokens: number
-    }
-    reasoning?: {
-      initialThoughts: string
-      criticalReview: string
-      finalRefinement: string
-    }
-    queryAnalysis?: {
-      originalQuery: string
-      rewrittenQuery: string
-      queryType: string
-      complexity: "simple" | "moderate" | "complex"
-      requiresHyDE: boolean
-      requiresStepBack: boolean
-      alternativeQueries: string[]
-      hasHypotheticalAnswer: boolean
-      hasStepBackQuestion: boolean
-      confidence: number
-    }
-  }
 }
 
 type MarkdownCodeProps = React.ComponentPropsWithoutRef<'code'> & ExtraProps & { inline?: boolean }
@@ -422,7 +386,7 @@ export function ChatInterface({
     "One more stir and these chunks become searchable."
   ]
 
-  const { documents: storeDocuments } = useAppStore()
+  const { documents: storeDocuments, fastMode, setFastMode } = useAppStore()
   
   // Get documents for filter
   const filterDocuments = (storeDocuments || []).map(doc => ({
@@ -787,6 +751,18 @@ ${diagnostics.documents.length === 0
                 </div>
 
                 <div className="flex items-center justify-between space-x-3 p-2 rounded-md border border-purple-200 bg-purple-50/50">
+                  <Label htmlFor="fast-mode" className="text-sm font-medium cursor-pointer" title="One AI call per question: skips query rewriting and the fact check. Faster and cheaper; the groundedness score becomes a keyword estimate.">
+                    Fast Answers
+                  </Label>
+                  <div className="flex items-center space-x-2">
+                    <span className={`text-xs font-medium ${fastMode ? 'text-green-600' : 'text-gray-500'}`}>
+                      {fastMode ? 'ON' : 'OFF'}
+                    </span>
+                    <Switch id="fast-mode" checked={fastMode} onCheckedChange={setFastMode} />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between space-x-3 p-2 rounded-md border border-purple-200 bg-purple-50/50">
                   <Label htmlFor="context-toggle" className="text-sm font-medium cursor-pointer">
                     Use Document Context
                   </Label>
@@ -961,6 +937,64 @@ ${diagnostics.documents.length === 0
                                     Overall Rating: {message.metadata.qualityMetrics.finalRating.toFixed(1)}%
                                   </div>
                                 </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {message.metadata.groundednessScore !== undefined && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs cursor-help ${
+                                    message.metadata.hallucinationDetected
+                                      ? 'border-red-500 text-red-700 bg-red-50'
+                                      : 'border-green-500 text-green-700 bg-green-50'
+                                  }`}
+                                >
+                                  {message.metadata.hallucinationDetected
+                                    ? <ShieldAlert className="w-3 h-3 mr-1" />
+                                    : <ShieldCheck className="w-3 h-3 mr-1" />}
+                                  Grounded: {(message.metadata.groundednessScore * 100).toFixed(0)}%
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <div className="text-xs space-y-1">
+                                  {message.metadata.verifiedClaims ? (
+                                    <>
+                                      <div className="font-semibold">
+                                        Fact check: {message.metadata.verifiedClaims.supported} of {message.metadata.verifiedClaims.total} claims supported by your documents
+                                      </div>
+                                      {message.metadata.verifiedClaims.unsupportedClaims.length > 0 && (
+                                        <ul className="list-disc pl-4">
+                                          {message.metadata.verifiedClaims.unsupportedClaims.slice(0, 5).map((claim, i) => (
+                                            <li key={i}>Unsupported: {claim}</li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <div>Estimated from keyword overlap with the sources (the fact check was unavailable).</div>
+                                  )}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        {message.metadata.warnings && message.metadata.warnings.length > 0 && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="text-xs cursor-help border-amber-500 text-amber-700 bg-amber-50">
+                                  <AlertTriangle className="w-3 h-3 mr-1" />
+                                  {message.metadata.warnings.length} {message.metadata.warnings.length === 1 ? 'warning' : 'warnings'}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <ul className="text-xs list-disc pl-4 space-y-1">
+                                  {message.metadata.warnings.map((warning, i) => <li key={i}>{warning}</li>)}
+                                </ul>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>

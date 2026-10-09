@@ -15,6 +15,10 @@ interface RetrievedChunk {
   documentId?: string
   documentName?: string
   page?: number
+  /** Last page the chunk covers, when it spans several (citations read "p.4–5"). */
+  pageEnd?: number
+  /** Heading or sheet name for non-PDF chunks (citations read "[file, Section]"). */
+  section?: string
   chunkType?: string
 }
 
@@ -133,11 +137,15 @@ export function ChunkVisualization({ chunks, onViewPage, focus }: ChunkVisualiza
                               <span className="text-xs sm:text-sm font-semibold text-gray-900 truncate">
                                 {chunk.documentName || chunk.source}
                               </span>
-                              {chunk.page && (
+                              {chunk.page ? (
                                 <Badge variant="outline" className="text-xs border-gray-300 bg-gray-50 shrink-0">
-                                  Page {chunk.page}
+                                  {chunk.pageEnd && chunk.pageEnd > chunk.page ? `Pages ${chunk.page}–${chunk.pageEnd}` : `Page ${chunk.page}`}
                                 </Badge>
-                              )}
+                              ) : chunk.section ? (
+                                <Badge variant="outline" className="text-xs border-gray-300 bg-gray-50 min-w-0 max-w-full truncate">
+                                  {chunk.section}
+                                </Badge>
+                              ) : null}
                               <Badge
                                 variant="outline"
                                 className={`text-xs shrink-0 ${getSimilarityBadgeColor(chunk.similarity)}`}

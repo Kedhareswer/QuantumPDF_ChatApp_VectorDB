@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
+import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { AIConfig } from "@/lib/ai-client"
 import { useAppStore } from "@/lib/store"
@@ -405,10 +406,12 @@ const VECTOR_DB_PROVIDERS = {
 interface UnifiedConfigurationProps {
   onTestAI: (config: AIConfig) => Promise<boolean>
   onTestVectorDB: (config: VectorDBConfig) => Promise<boolean>
+  /** Wipe documents and chat history from this browser (IndexedDB) and the current session. */
+  onClearSavedData?: () => Promise<void> | void
 }
 
-export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfigurationProps) {
-  const { aiConfig, setAIConfig, vectorDBConfig, setVectorDBConfig, addError } =
+export function UnifiedConfiguration({ onTestAI, onTestVectorDB, onClearSavedData }: UnifiedConfigurationProps) {
+  const { aiConfig, setAIConfig, vectorDBConfig, setVectorDBConfig, addError, rememberSession, setRememberSession } =
     useAppStore()
 
   const [showApiKeys, setShowApiKeys] = useState({
@@ -977,6 +980,38 @@ export function UnifiedConfiguration({ onTestAI, onTestVectorDB }: UnifiedConfig
               >
                   Test Connection
               </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Privacy & storage */}
+          <Card className="border-2 border-black">
+            <CardHeader>
+              <CardTitle className="text-base">Saved data on this device</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="remember-session" className="text-sm">
+                  Remember documents and chat history in this browser
+                </Label>
+                <Switch id="remember-session" checked={rememberSession} onCheckedChange={setRememberSession} />
+              </div>
+              <p className="text-xs text-gray-600">
+                Saved data is stored unencrypted in this browser&apos;s IndexedDB and is readable by anyone using this
+                browser profile. Turn this off, or clear it, on shared computers. API keys are never saved.
+              </p>
+              {onClearSavedData && (
+                <Button
+                  variant="outline"
+                  className="w-full border-2 border-red-600 text-red-700 hover:bg-red-600 hover:text-white"
+                  onClick={async () => {
+                    if (window.confirm("Delete all saved documents and chat history from this browser?")) {
+                      await onClearSavedData()
+                    }
+                  }}
+                >
+                  Clear saved data
+                </Button>
               )}
             </CardContent>
           </Card>

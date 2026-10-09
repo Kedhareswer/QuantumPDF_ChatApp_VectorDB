@@ -16,6 +16,8 @@ export interface CitableChunk {
   source?: string
   documentName?: string
   page?: number
+  pageEnd?: number
+  section?: string
 }
 
 export const CITE_HREF_PREFIX = "#cite-"
@@ -26,24 +28,48 @@ export const CITE_HREF_PREFIX = "#cite-"
 const CITATION_MARKER =
   /\s*\[([^\]\n]*?(?:\.(?:pdf|docx?|docm|odt|rtf|epub|pptx?|pps|odp|xlsx?|xlsm|xlsb|ods|csv|tsv|txt)|,\s*p\.?\s*\d+)[^\]\n]*?)\](?!\()/gi
 
-const PAGE_SUFFIX = /,\s*p\.?\s*(\d+)\s*$/i
+// ", p.4" / ", p.4–5" / ", pages 4-5" at the end of a label (en dash or hyphen)
+const PAGE_SUFFIX = /,\s*p(?:ages?|\.)?\s*(\d+)(?:\s*[–-]\s*(\d+))?\s*$/i
 
 const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, "")
 
-/** 0-based index of the chunk a `File.pdf, p.N` label points at, or -1. */
+// A chunk's source reads "file · p.4" or "file · Section"; the file name is the part before " · ".
+const fileOf = (c: CitableChunk): string => norm(c.documentName || (c.source || "").split(" · ")[0])
+
+/**
+ * 0-based index of the chunk a citation label points at, or -1. Labels are
+ * `File`, `File, p.N`, `File, p.N–M` or `File, Section`. File names can
+ * themselves contain commas, so the file is matched as a prefix of the label
+ * rather than split off at the first comma.
+ */
 export function findCitedChunk(label: string, chunks: CitableChunk[]): number {
   const pageMatch = label.match(PAGE_SUFFIX)
-  const page = pageMatch ? Number(pageMatch[1]) : undefined
-  const file = norm(label.replace(PAGE_SUFFIX, ""))
-  if (!file) return -1
+  const start = pageMatch ? Number(pageMatch[1]) : undefined
+  const end = pageMatch?.[2] ? Number(pageMatch[2]) : start
+  const key = norm(label)
+  const keyFile = norm(label.replace(PAGE_SUFFIX, ""))
+  if (!keyFile) return -1
 
   const sameFile = (c: CitableChunk) => {
-    const name = norm(c.documentName || c.source || "")
-    return !!name && (name.includes(file) || file.includes(name))
+    const name = fileOf(c)
+    return !!name && (key.startsWith(name) || name.includes(keyFile) || keyFile.includes(name))
   }
-  if (page !== undefined) {
-    const exact = chunks.findIndex((c) => sameFile(c) && c.page === page)
+
+  if (start !== undefined) {
+    // Exact range first, then any chunk whose pages contain the cited start page.
+    const exact = chunks.findIndex((c) => sameFile(c) && c.page === start && (c.pageEnd ?? c.page) === end)
     if (exact !== -1) return exact
+    const covering = chunks.findIndex(
+      (c) => sameFile(c) && c.page !== undefined && c.page <= start && start <= (c.pageEnd ?? c.page),
+    )
+    if (covering !== -1) return covering
+  } else {
+    // "File, Section": whatever follows the file name (and its comma) is the section.
+    const bySection = chunks.findIndex((c) => {
+      const name = fileOf(c)
+      return !!c.section && !!name && key.startsWith(name) && key.slice(name.length).replace(/^,/, "") === norm(c.section)
+    })
+    if (bySection !== -1) return bySection
   }
   return chunks.findIndex(sameFile)
 }

@@ -56,3 +56,24 @@ describe("page tagging", () => {
     expect(buildChunks("Some text without pages. ".repeat(20)).chunkPages).toBeUndefined()
   })
 })
+
+describe("page ranges", () => {
+  it("records the end page when short pages merge into one chunk", () => {
+    const { text, pageStarts } = joinPages([
+      "Shipping is free for orders above fifty euros within the European Union.",
+      "The product warranty lasts 24 months from the date of purchase.",
+    ])
+    const { chunks, chunkPages, chunkPageEnds } = buildChunks(text, "short.pdf", "d", pageStarts)
+    expect(chunks).toHaveLength(1)
+    expect(chunkPages).toEqual([1])
+    expect(chunkPageEnds).toEqual([2])
+  })
+
+  it("start and end match for chunks inside one page", () => {
+    const page = (n: number) => Array.from({ length: 20 }, (_, i) => `Page ${n} line ${i} has enough words to fill a chunk.`).join(" ")
+    const { text, pageStarts } = joinPages([page(1), page(2)])
+    const { chunkPages, chunkPageEnds } = buildChunks(text, "long.pdf", "d", pageStarts)
+    chunkPages!.forEach((start, i) => expect(chunkPageEnds![i]! - start!).toBeLessThanOrEqual(1))
+    expect(chunkPageEnds![0]).toBe(1)
+  })
+})

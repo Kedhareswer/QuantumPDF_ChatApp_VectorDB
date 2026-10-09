@@ -19,17 +19,18 @@ npm run lint         # Run Next.js ESLint
 npm test             # Run tests once (no watch)
 npx vitest           # Watch mode
 npx vitest run <file> # Run a single test file
+npm run test:e2e     # Playwright: production build + real browser, provider stubbed (e2e/)
 
 # PWA
 npm run pwa:icons    # Regenerate every PWA icon from public/brain.png (needs sharp)
 npm run pwa:test     # Build + start for PWA testing
 ```
 
-Tests live in `__tests__/` with setup at `__tests__/setup.ts`. The path alias `@/*` resolves to the repo root.
+Unit tests live in `__tests__/` with setup at `__tests__/setup.ts`; Playwright specs live in `e2e/` (config: `playwright.config.ts`, which uses `/opt/pw-browsers/chromium` when present). The path alias `@/*` resolves to the repo root.
 
 ## Architecture Overview
 
-QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All core business logic lives in **`/lib/`** (26 files). UI is in **`/components/`** (19 files + 21 shadcn primitives in `components/ui/`). API routes are in **`/app/api/`**.
+QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All core business logic lives in **`/lib/`** (28 files). UI is in **`/components/`** (19 files + 21 shadcn primitives in `components/ui/`). API routes are in **`/app/api/`**.
 
 **Keep it that way.** An August 2026 sweep deleted 50 unreferenced files (~9,700 lines) and 31 unused dependencies. Before adding a `lib/` module or a `components/ui/` primitive, check that something actually imports it — the accumulation was entirely files that were written, never wired up, and then described in the docs as if they were live. A quick reachability check from `app/**` beats trusting the docs.
 
@@ -41,10 +42,13 @@ QuantumPDF is a full-stack Next.js 16 + React 19 document analysis platform. All
    - Providers with an embeddings API (`PROVIDER_SPECS[...].embeddings`) are called in batches; a failure **throws**. Providers without one (Anthropic, Groq, DeepSeek, xAI, …) always use `generateLexicalEmbedding` (feature-hashed keywords). Never mix the two: vectors from different spaces make cosine scores meaningless. `AIClient.embeddingSpaceId` identifies the space, and `RAGEngine.initialize` re-embeds loaded documents when it changes.
    - Retrieval runs in the browser over `RAGEngine.documents`. When Pinecone/Weaviate is configured, `app/page.tsx` attaches it via `ragEngine.setVectorSearch(...)`: its nearest-neighbour hits are *added* to the candidate set and get their own vote in rank fusion. The full in-browser scan always runs too, so a remote index that is missing documents can only add recall, never hide chunks. For the `local` provider, `VectorDatabaseClient` makes no server calls at all.
    - Documents (chunks + Float32 embeddings + `embeddingSpace`) and chat history persist in IndexedDB via `lib/session-persistence.ts` and are restored on load. The AI API key is deliberately *not* persisted.
-   - PDF chunks carry page numbers: `liteparse-client.ts` joins per-page text (`joinPages`) and `buildChunks(..., pageStarts)` returns `chunkPages`, aligned index-for-index with `chunks`, which travels on the document so citations can say `[file, p.N]`.
+   - PDF chunks carry page numbers: `liteparse-client.ts` joins per-page text (`joinPages`) and `buildChunks(..., pageStarts)` returns `chunkPages` and `chunkPageEnds` (short pages merge into one chunk, so a chunk can span pages), aligned index-for-index with `chunks`. They travel on the document so citations say `[file, p.N]` or `[file, p.N–M]`.
+   - Non-PDF chunks carry `chunkSections` (nearest Markdown heading; anydoc emits one `## <Sheet Name>` per spreadsheet sheet), so citations say `[file, Section]`.
 4. User query → `lib/guardrails.ts` input validation → `lib/query-processor.ts` (HyDE, step-back prompting, query caching)
 5. `lib/rag-engine.ts` orchestrates 3-phase RAG: **Phase 1** hybrid retrieval + draft answer → **Phase 2** LLM fact-check (`verifyAnswer`: per-claim supported/unsupported verdicts as JSON) → **Phase 3** revision, only when the check says `revise`, followed by a re-check of the revised answer
-6. `groundednessScore` / `hallucinationDetected` come from the verifier's claim verdicts on the *final* answer; the lexical `checkGroundedness` heuristic is only the fallback when the verifier's JSON doesn't parse. `lib/guardrails.ts` output validation is logged, not enforced
+6. `groundednessScore` / `hallucinationDetected` come from the verifier's claim verdicts on the *final* answer; the lexical `checkGroundedness` heuristic is only the fallback when the verifier's JSON doesn't parse (or in fast mode).
+7. `lib/guardrails.ts` `validateOutput` is **enforced**: the displayed answer is its `sanitizedOutput` (control characters stripped; emails/phones/SSNs/Luhn-valid card numbers that appear in no retrieved source are redacted), and its remaining findings ride along as `warnings` shown under the answer.
+8. **Fast answers** (store `fastMode`, toggle in the chat's advanced controls) skip follow-up resolution, query rewriting/HyDE/step-back and the fact check: one LLM call per question. Retrieval keeps only chunks within `RAGEngine.RELATIVE_FLOOR` (50%) of the best match.
 
 ### Key Modules
 
@@ -73,7 +77,7 @@ PDFs stay on liteparse because **anydoc has no OCR and no page previews** — it
 anydoc notes:
 - **Runs entirely in the tab.** There is no `/api/document/extract` route any more, and no native anydoc addon: document bytes never leave the machine, and there is no per-platform binary to keep alive. `lib/anydoc-client.ts` is a `"use client"` module.
 - The wasm module is ~6MB and is **prefetched on page load**: `app/page.tsx` calls `prefetchAnydoc()` from a `requestIdleCallback` so the download starts in the background without competing with the app's own startup chunks, and the first upload doesn't wait on it. `loadAnydoc()` memoizes the `import()` + `init()`, so an extraction that starts mid-prefetch awaits the same promise rather than fetching twice; a failed init clears the cache so the next upload retries (prefetch failures are swallowed, and surface at the real extraction instead). Turbopack emits the binary to `.next/static/media/*.wasm` via wasm-bindgen's `new URL(..., import.meta.url)` pattern.
-- Calls are **synchronous** and single-threaded — `toMarkdownBytes` returns a `string`, not a promise, and blocks the main thread. Move it to a Worker if a large sheet makes that visible.
+- Conversion runs in a **Web Worker** (`lib/anydoc.worker.ts`, shared code in `lib/anydoc-convert.ts`): `toMarkdownBytes` is synchronous and used to block the main thread on large sheets. `anydoc-client.ts` falls back to the main thread when `Worker` is unavailable or the worker crashes; real conversion errors (with `code`) are rethrown, not retried.
 - No `Buffer` in this module — it is browser code. Use `TextEncoder`/`TextDecoder`.
 - TSV has no byte signature and no anydoc format, so `anydoc-client.ts` re-emits it as CSV via a papaparse round-trip (preserves fields containing commas).
 - Format detection is `formatFromBytes` first, `formatFromExtension` as fallback — legacy `.xls` carries no signature anydoc sniffs and only resolves via the extension. Both return `undefined` (not `null`) when nothing matches.
@@ -86,14 +90,16 @@ The client orchestrator `lib/pdf-document-processor.ts` POSTs the uploaded file 
 - `table-extractor.ts` — structured table extraction
 - `equation-extractor.ts` — math equations via KaTeX
 
-`pdfjs-dist` is no longer the primary text engine — it now backs only these client-side extractors (loaded via `lib/pdf-client.js`), the server-side fallback in `liteparse-client.ts`, and URL-based PDF fetching in `lib/enhanced-url-processor.ts`.
+PDF.js runs its **legacy** build (`pdfjs-dist/legacy/build/pdf.mjs`; the modern build needs very recent JS such as `Map.prototype.getOrInsertComputed`). Its worker is served same-origin from `public/pdf.worker.min.mjs`, copied from `node_modules` by `scripts/copy-pdf-worker.mjs` (`predev`/`prebuild`) — not from a CDN, and not bundled: Turbopack's worker bootstrap uses `importScripts()`, which cannot run in PDF.js's module worker, and every `getDocument()` hung. The multimodal pass has a 30s timeout so it can never stall an upload.
+
+`pdfjs-dist` is no longer the primary text engine — it now backs only these client-side extractors (loaded via `lib/pdf-client.js`) and the server-side fallback in `liteparse-client.ts`. (The unused URL-ingestion module `enhanced-url-processor.ts` and the `/api/search/unified` route were removed in October 2026.)
 
 ### API Routes
 
 - `POST /api/pdf/extract` — server-side PDF text/OCR/preview extraction via liteparse (Node.js runtime)
-- `POST /api/search/unified` — unified vector + keyword search
 - `GET|POST /api/vector-db` — vector DB CRUD operations
-- `POST /api/huggingface/*` — proxies to HuggingFace Inference API
+- `POST /api/huggingface/text`, `POST /api/huggingface/embedding` — proxies to Hugging Face Inference Providers. They use the caller's key; the server's `HUGGINGFACE_API_KEY` is only used for same-origin requests and is rate-limited per IP (`lib/server-key-guard.ts`). Set `HUGGINGFACE_SERVER_KEY=disabled` to never share it.
+- `GET /api/ping` — health check
 
 ### State Management
 

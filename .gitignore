@@ -35,3 +35,11 @@ nul
 .tmp-strict-lint-after.json
 .tmp-strict-lint.json
 .planning/debug/tsc-audit.txt
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+
+# Copied from node_modules by scripts/copy-pdf-worker.mjs
+/public/pdf.worker.min.mjs

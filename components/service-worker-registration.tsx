@@ -10,6 +10,12 @@ export function ServiceWorkerRegistration() {
       'serviceWorker' in navigator &&
       process.env.NODE_ENV === 'production'
     ) {
+      // Reload only when the user accepted an update. sw.js calls skipWaiting()
+      // and clients.claim(), so `controllerchange` also fires on the very first
+      // visit, when the new worker takes control of the page; reloading then
+      // wiped whatever the user had started (e.g. a half-typed API key).
+      let userAcceptedUpdate = false
+
       // Register service worker
       navigator.serviceWorker
         .register('/sw.js')
@@ -33,6 +39,7 @@ export function ServiceWorkerRegistration() {
                 ) {
                   // New service worker available
                   if (confirm('New version available! Reload to update?')) {
+                    userAcceptedUpdate = true
                     newWorker.postMessage({ type: 'SKIP_WAITING' })
                     window.location.reload()
                   }
@@ -48,7 +55,7 @@ export function ServiceWorkerRegistration() {
       // Handle service worker updates
       let refreshing = false
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
+        if (userAcceptedUpdate && !refreshing) {
           refreshing = true
           window.location.reload()
         }
