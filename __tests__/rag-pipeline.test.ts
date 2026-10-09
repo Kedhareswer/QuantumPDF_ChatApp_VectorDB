@@ -238,6 +238,28 @@ describe("RAGEngine fast mode and relevance floor", () => {
   })
 })
 
+describe("RAGEngine page ranges", () => {
+  it("labels a chunk that spans pages with the range", async () => {
+    const calls = stubChat([PASS])
+    const engine = new RAGEngine()
+    await engine.initialize({ provider: "groq", apiKey: "k", model: "openai/gpt-oss-120b" })
+    await engine.addDocument({
+      id: "pr",
+      name: "short.pdf",
+      content: "",
+      chunks: ["Shipping is free. The product warranty lasts 24 months from the date of purchase and covers defects."],
+      chunkPages: [1],
+      chunkPageEnds: [2],
+      embeddings: [],
+      uploadedAt: new Date(),
+    })
+    calls.length = 0
+    const res = await engine.query(QUESTION, { complexityLevel: "normal" })
+    expect(res.retrievedChunks[0].source).toBe("short.pdf · p.1–2")
+    expect(calls.find((c) => c.kind === "answer")!.user).toContain("[SOURCE: short.pdf | Pages 1–2]")
+  })
+})
+
 describe("RAGEngine section labels (non-PDF)", () => {
   it("labels sources and context with the chunk's heading or sheet", async () => {
     const calls = stubChat([PASS])

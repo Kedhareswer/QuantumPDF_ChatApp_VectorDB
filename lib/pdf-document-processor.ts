@@ -17,6 +17,17 @@ import { loadPdfJs } from "./pdf-client"
 import { PDFTableExtractor } from "./table-extractor"
 import { logger } from "./logger"
 
+/** Text is already extracted by then; images/tables/equations are best-effort. */
+const MULTIMODAL_TIMEOUT_MS = 30_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
 export interface ProcessingProgress {
   stage: string
   progress: number
@@ -32,6 +43,8 @@ export interface PDFProcessingResult {
   advancedChunks?: TextChunk[]
   /** 1-based page each chunk starts on, aligned with `chunks`. */
   chunkPages?: Array<number | null>
+  /** 1-based page each chunk ends on, aligned with `chunks`. */
+  chunkPageEnds?: Array<number | null>
   metadata: {
     documentType: "pdf"
     title?: string
@@ -61,6 +74,7 @@ interface RouteResponse {
   chunks?: string[]
   advancedChunks?: TextChunk[]
   chunkPages?: Array<number | null>
+  chunkPageEnds?: Array<number | null>
   error?: string
   metadata?: {
     pages?: number
@@ -107,6 +121,7 @@ export class PdfDocumentProcessor {
     const chunks = hasChunks ? route.chunks! : [text]
     // Only trust page numbers that line up with the chunks they describe.
     const chunkPages = hasChunks && route.chunkPages?.length === chunks.length ? route.chunkPages : undefined
+    const chunkPageEnds = chunkPages && route.chunkPageEnds?.length === chunks.length ? route.chunkPageEnds : undefined
     const warnings = [...(meta.warnings ?? [])]
     const previews = meta.previews ?? []
 
@@ -118,7 +133,12 @@ export class PdfDocumentProcessor {
 
     let multimodal: MultimodalMetadata
     try {
-      multimodal = await this.extractMultimodal(file, documentId, previews, onProgress)
+      // Optional enrichment: never let it hold the upload hostage.
+      multimodal = await withTimeout(
+        this.extractMultimodal(file, documentId, previews, onProgress),
+        MULTIMODAL_TIMEOUT_MS,
+        "Image/table/equation extraction timed out",
+      )
     } catch (error) {
       logger.warn("Multimodal extraction failed; continuing with text only:", error)
       warnings.push("Multimodal extraction failed; text is still available")
@@ -140,6 +160,7 @@ export class PdfDocumentProcessor {
       chunks,
       advancedChunks: route.advancedChunks,
       chunkPages,
+      chunkPageEnds,
       metadata: {
         documentType: "pdf",
         title: file.name,
@@ -193,7 +214,6 @@ export class PdfDocumentProcessor {
     const buffer = await file.arrayBuffer()
     const pdf = await pdfjs.getDocument({
       data: new Uint8Array(buffer),
-      disableWorker: true,
       isEvalSupported: false,
       useSystemFonts: true,
       stopAtErrors: false,

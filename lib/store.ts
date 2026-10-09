@@ -70,6 +70,8 @@ export interface Document {
   chunks: string[]
   /** 1-based page each chunk starts on, aligned with `chunks` (PDFs only). */
   chunkPages?: Array<number | null>
+  /** 1-based page each chunk ends on (a chunk can span short pages). */
+  chunkPageEnds?: Array<number | null>
   /** Nearest heading / sheet name for each chunk, aligned with `chunks` (non-PDF formats). */
   chunkSections?: Array<string | null>
   embeddings: number[][]

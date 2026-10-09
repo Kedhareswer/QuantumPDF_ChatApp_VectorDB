@@ -9,7 +9,7 @@
  * panel keeps working. PDFs go through PdfDocumentProcessor.
  */
 import type { MultimodalMetadata } from "@/types/multimodal-types"
-import type { TextChunk } from "./advanced-chunking"
+import { findMarkdownHeadings, sectionAtOffset, type TextChunk } from "./advanced-chunking"
 import { extractDocument } from "./anydoc-client"
 import { extensionOf } from "./supported-formats"
 import { DOCXImageExtractor } from "./image-extractor"
@@ -23,6 +23,12 @@ export type { ProcessingProgress }
 export interface DocumentProcessingResult {
   text: string
   chunks: string[]
+  /**
+   * Aligned index-for-index with `chunks`: the nearest Markdown heading at or
+   * before each chunk (sheet name for spreadsheets, heading for Word/ODT/EPUB),
+   * null when there is none.
+   */
+  chunkSections?: Array<string | null>
   advancedChunks?: TextChunk[]
   metadata: {
     documentType: string
@@ -66,7 +72,16 @@ export class DocumentProcessor {
     const extraction = await extractDocument(new Uint8Array(buffer), { fileName: file.name })
 
     const warnings = [...extraction.warnings]
-    const chunks = extraction.chunks.length > 0 ? extraction.chunks : [extraction.text]
+    const hasChunks = extraction.chunks.length > 0
+    const chunks = hasChunks ? extraction.chunks : [extraction.text]
+    // Keep chunkSections aligned with whichever `chunks` array we return: the
+    // whole-text fallback is one chunk starting at offset 0.
+    const chunkSections =
+      hasChunks && extraction.chunkSections.length === chunks.length
+        ? extraction.chunkSections
+        : hasChunks
+          ? chunks.map(() => null)
+          : [sectionAtOffset(findMarkdownHeadings(extraction.text), 0)]
 
     onProgress?.({ stage: "Extracting embedded images...", progress: 75, method: "Image Extraction" })
 
@@ -86,6 +101,7 @@ export class DocumentProcessor {
     return {
       text: extraction.text,
       chunks,
+      chunkSections,
       advancedChunks: extraction.advancedChunks,
       metadata: {
         documentType: extraction.format,

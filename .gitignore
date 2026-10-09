@@ -40,3 +40,6 @@ nul
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Copied from node_modules by scripts/copy-pdf-worker.mjs
+/public/pdf.worker.min.mjs

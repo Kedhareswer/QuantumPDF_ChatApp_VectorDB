@@ -114,9 +114,11 @@ test("upload a PDF, ask a question, get a page-cited, fact-checked answer that s
   await expect(page.getByText("The warranty lasts 24 months from purchase").first()).toBeVisible({ timeout: 60_000 })
   await expect(page.getByText(/Grounded: 100%/).first()).toBeVisible()
 
-  // The answering prompt labelled the warranty chunk with its page.
+  // The answering prompt labelled the chunk with the pages it spans: both pages
+  // are short, so the chunker merges them, and the warranty text is on page 2.
   const answerPrompt = prompts.find((p) => p.includes("<sources>")) ?? ""
-  expect(answerPrompt).toMatch(/\[SOURCE: e2e-handbook\.pdf \| Page 2\]\n[^\n]*warranty/)
+  expect(answerPrompt).toContain("[SOURCE: e2e-handbook.pdf | Pages 1–2]")
+  expect(answerPrompt).toMatch(/Pages 1–2\][\s\S]*warranty/)
 
   // Reload: documents and chat history come back from IndexedDB.
   await page.waitForTimeout(1_000) // let the debounced message save run

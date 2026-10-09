@@ -27,6 +27,8 @@ export interface PdfExtraction {
   advancedChunks: TextChunk[]
   /** 1-based page each chunk starts on, aligned with `chunks` (null if unknown). */
   chunkPages: Array<number | null>
+  /** 1-based page each chunk ends on (chunks can span short pages). */
+  chunkPageEnds: Array<number | null>
   pages: number
   ocrUsed: boolean
   previews: ExtractedImage[]
@@ -98,7 +100,7 @@ export async function extractPdf(
       : { text: (result.text ?? "").trim(), pageStarts: [] as number[] }
 
     if (text.trim()) {
-      const { advancedChunks, chunks, chunkPages } = buildChunks(text, options.fileName, documentId, pageStarts)
+      const { advancedChunks, chunks, chunkPages, chunkPageEnds } = buildChunks(text, options.fileName, documentId, pageStarts)
       const ocrUsed =
         !!options.enableOCR &&
         result.pages.some((page) => page.textItems.some((item) => typeof item.confidence === "number"))
@@ -132,6 +134,7 @@ export async function extractPdf(
         chunks,
         advancedChunks,
         chunkPages: chunkPages ?? chunks.map(() => null),
+        chunkPageEnds: chunkPageEnds ?? chunks.map(() => null),
         pages: result.pages.length,
         ocrUsed,
         previews,
@@ -151,12 +154,13 @@ export async function extractPdf(
   // Fallback engine: serverless-safe text extraction via unpdf.
   const { pageTexts, pages } = await extractTextFallback(buffer)
   const { text, pageStarts } = joinPages(pageTexts)
-  const { advancedChunks, chunks, chunkPages } = buildChunks(text, options.fileName, documentId, pageStarts)
+  const { advancedChunks, chunks, chunkPages, chunkPageEnds } = buildChunks(text, options.fileName, documentId, pageStarts)
   return {
     text: text.trim(),
     chunks,
     advancedChunks,
     chunkPages: chunkPages ?? chunks.map(() => null),
+    chunkPageEnds: chunkPageEnds ?? chunks.map(() => null),
     pages,
     ocrUsed: false,
     previews: [],

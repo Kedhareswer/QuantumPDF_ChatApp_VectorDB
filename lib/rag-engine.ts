@@ -59,6 +59,8 @@ export interface RetrievedChunk {
   semanticImportance?: number
   chunkIndex?: number
   page?: number
+  /** Last page, when the chunk spans several (short) pages. */
+  pageEnd?: number
   /** Heading or sheet name the chunk sits under (non-PDF formats). */
   section?: string
   bbox?: unknown
@@ -167,6 +169,8 @@ export interface Document {
   chunks: string[] | TextChunk[] // Support both simple strings and rich TextChunk objects
   /** 1-based page each chunk starts on, aligned with `chunks` (PDFs only). */
   chunkPages?: Array<number | null>
+  /** 1-based page each chunk ends on (a chunk can span short pages). */
+  chunkPageEnds?: Array<number | null>
   /** Nearest heading / sheet name for each chunk, aligned with `chunks` (non-PDF formats). */
   chunkSections?: Array<string | null>
   embeddings: number[][]
@@ -574,6 +578,7 @@ export class RAGEngine {
       // Optional metadata
       page?: number;
       section?: string;
+      pageEnd?: number;
       bbox?: unknown;
       level?: number;
       chunkType?: string;
@@ -746,10 +751,11 @@ export class RAGEngine {
 
                   // Build enhanced source string with metadata
                   const page = this.pageOf(doc, chunk, chunkIndex)
+                  const pageEnd = this.pageEndOf(doc, chunkIndex, page)
                   const section = this.sectionOf(doc, chunkIndex)
                   let sourceString = `${doc.name || "Unknown Document"} (chunk ${chunkIndex + 1})`
                   if (page !== undefined) {
-                    sourceString = `${doc.name} · p.${page}` + (chunkMetadata?.level ? ` · ${this.formatChunkType(chunkMetadata.type, chunkMetadata.level)}` : '')
+                    sourceString = `${doc.name} · p.${RAGEngine.pageRange(page, pageEnd)}` + (chunkMetadata?.level ? ` · ${this.formatChunkType(chunkMetadata.type, chunkMetadata.level)}` : '')
                   } else if (section !== undefined) {
                     sourceString = `${doc.name} · ${section}`
                   } else if (chunkMetadata?.type) {
@@ -767,6 +773,7 @@ export class RAGEngine {
                     ...(remoteRank !== undefined && { remoteRank }),
                     // Include metadata if available
                     ...(page !== undefined && { page }),
+                    ...(pageEnd !== undefined && { pageEnd }),
                     ...(section !== undefined && { section }),
                     ...(chunkMetadata?.bbox !== undefined && { bbox: chunkMetadata.bbox }),
                     ...(chunkMetadata?.level !== undefined && { level: chunkMetadata.level }),
@@ -2050,7 +2057,9 @@ export class RAGEngine {
       // Label each chunk with its source so the model can cite accurately
       const context = optimizedChunks.map((chunk) => {
         const name = chunk.documentName || chunk.source || 'Unknown'
-        const where = chunk.page != null ? ` | Page ${chunk.page}` : chunk.section ? ` | Section: ${chunk.section}` : ''
+        const where = chunk.page != null
+          ? chunk.pageEnd != null ? ` | Pages ${chunk.page}–${chunk.pageEnd}` : ` | Page ${chunk.page}`
+          : chunk.section ? ` | Section: ${chunk.section}` : ''
         return `[SOURCE: ${name}${where}]\n${chunk.content}`
       }).join("\n\n---\n\n")
       logger.debug("Context length:", context.length, "characters")
@@ -2465,6 +2474,17 @@ Only output the expanded query and alternatives, nothing else.`
     return typeof page === 'number' && page > 0 ? page : undefined
   }
 
+  /** Last page of a chunk that spans several pages; undefined when it sits on one. */
+  private pageEndOf(doc: Document, index: number, start: number | undefined): number | undefined {
+    const end = doc.chunkPageEnds?.[index]
+    return start !== undefined && typeof end === 'number' && end > start ? end : undefined
+  }
+
+  /** "4" or "4–5". */
+  static pageRange(start: number, end?: number): string {
+    return end !== undefined && end > start ? `${start}–${end}` : `${start}`
+  }
+
   /** Heading / sheet name a chunk sits under (non-PDF formats), from the document's chunkSections. */
   private sectionOf(doc: Document, index: number): string | undefined {
     const section = doc.chunkSections?.[index]
@@ -2568,9 +2588,10 @@ Only output the expanded query and alternatives, nothing else.`
           if (combinedScore > 0.05 || matchCount >= 2) {
             const chunkMetadata = typeof chunk === 'object' && 'metadata' in chunk ? chunk.metadata : null
             const page = this.pageOf(doc, chunk, i)
+            const pageEnd = this.pageEndOf(doc, i, page)
             const section = this.sectionOf(doc, i)
             const sourceString = page !== undefined
-              ? `${doc.name} · p.${page}`
+              ? `${doc.name} · p.${RAGEngine.pageRange(page, pageEnd)}`
               : section !== undefined
                 ? `${doc.name} · ${section}`
                 : `${doc.name || "Unknown Document"} (chunk ${i + 1})`
@@ -2586,6 +2607,7 @@ Only output the expanded query and alternatives, nothing else.`
               ...(chunkMetadata || {}),
               chunkIndex: i,
               ...(page !== undefined && { page }),
+              ...(pageEnd !== undefined && { pageEnd }),
               ...(section !== undefined && { section }),
             })
           }
@@ -2644,9 +2666,10 @@ Only output the expanded query and alternatives, nothing else.`
         }
         
         const page = this.pageOf(doc, chunk, i)
+        const pageEnd = this.pageEndOf(doc, i, page)
         const section = this.sectionOf(doc, i)
         const sourceString = page !== undefined
-          ? `${doc.name} · p.${page}`
+          ? `${doc.name} · p.${RAGEngine.pageRange(page, pageEnd)}`
           : section !== undefined
             ? `${doc.name} · ${section}`
             : `${doc.name || "Unknown Document"} (chunk ${i + 1})`
@@ -2661,6 +2684,7 @@ Only output the expanded query and alternatives, nothing else.`
           ...(chunkMetadata || {}),
           chunkIndex: i,
           ...(page !== undefined && { page }),
+          ...(pageEnd !== undefined && { pageEnd }),
           ...(section !== undefined && { section }),
         })
       }
@@ -2923,7 +2947,7 @@ Only output the expanded query and alternatives, nothing else.`
 
 Citation rules:
 - Every factual claim must end with a citation in square brackets
-- Each source passage is labelled [SOURCE: Filename], [SOURCE: Filename | Page N] or [SOURCE: Filename | Section: Name]. Cite it as [Filename], [Filename, p.N] or [Filename, Name] — only with a page or section the label actually shows; never invent page numbers
+- Each source passage is labelled [SOURCE: Filename], [SOURCE: Filename | Page N], [SOURCE: Filename | Pages N–M] or [SOURCE: Filename | Section: Name]. Cite it as [Filename], [Filename, p.N], [Filename, p.N–M] or [Filename, Name] — only with pages or a section the label actually shows; never invent page numbers
 - When a fact comes from multiple passages, cite each: [File1] [File2, p.7]
 - If the passages do not contain enough information to answer, write: "Not found in the provided documents."
 
@@ -3114,7 +3138,7 @@ Output only the final answer — no explanations, no meta-commentary.`
    */
   private enforceCitations(
     response: string,
-    chunks: ReadonlyArray<{ content: string; source: string; documentName?: string; page?: number; section?: string }>
+    chunks: ReadonlyArray<{ content: string; source: string; documentName?: string; page?: number; pageEnd?: number; section?: string }>
   ): string {
     if (/\[[^\]]+\]/.test(response) || chunks.length === 0) return response
 
@@ -3122,7 +3146,7 @@ Output only the final answer — no explanations, no meta-commentary.`
     const chunkWordSets = chunks.map((c) => new Set(words(c.content || '')))
     const labelOf = (c: typeof chunks[number]) => {
       const name = c.documentName || c.source
-      return c.page != null ? `${name}, p.${c.page}` : c.section ? `${name}, ${c.section}` : name
+      return c.page != null ? `${name}, p.${RAGEngine.pageRange(c.page, c.pageEnd)}` : c.section ? `${name}, ${c.section}` : name
     }
 
     let inCode = false
