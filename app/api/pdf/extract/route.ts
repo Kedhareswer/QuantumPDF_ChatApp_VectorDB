@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
       text: extraction.text,
       chunks: extraction.chunks,
       advancedChunks: extraction.advancedChunks,
+      chunkPages: extraction.chunkPages,
       metadata: {
         pages: extraction.pages,
         successfulPages: extraction.pages,

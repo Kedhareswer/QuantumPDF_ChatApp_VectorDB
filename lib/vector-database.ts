@@ -1,43 +1,9 @@
 import { logger } from "./logger"
 import { calculateKeywordScore, enhancedKeywordSimilarity } from "./keyword-scoring"
-import { createZeroVector, getEmbeddingDimension } from "./vector-dimensions"
+import type { SearchOptions, SearchResult, VectorDBConfig, VectorDocument } from "./vector-database-types"
+import { createZeroVector } from "./vector-dimensions"
 
-interface VectorDBConfig {
-  provider: "pinecone" | "weaviate" | "local"
-  apiKey?: string
-  environment?: string
-  indexName?: string
-  url?: string
-  collection?: string
-  dimension?: number
-}
-
-interface VectorDocument {
-  id: string
-  content: string
-  embedding: number[]
-  metadata: {
-    source: string
-    chunkIndex: number
-    documentId: string
-    timestamp: Date
-    [key: string]: unknown
-  }
-}
-
-interface SearchResult {
-  id: string
-  content: string
-  score: number
-  metadata: unknown
-}
-
-interface SearchOptions {
-  mode: "semantic" | "keyword" | "hybrid"
-  filters?: Record<string, unknown>
-  limit?: number
-  threshold?: number
-}
+export type { SearchOptions, SearchResult, VectorDBConfig, VectorDocument }
 
 export abstract class VectorDatabase {
   protected config: VectorDBConfig
@@ -65,7 +31,13 @@ import type { Pinecone as PineconeClient, Index as PineconeIndex } from "@pineco
 
 class PineconeDatabase extends VectorDatabase {
   private pinecone!: PineconeClient
-  private index!: PineconeIndex
+  private index: PineconeIndex | null = null
+  /** Dimension of the existing index, or null when it still has to be created. */
+  private indexDimension: number | null = null
+
+  private get indexName(): string {
+    return this.config.indexName || "pdf-documents"
+  }
 
   async initialize(): Promise<void> {
     try {
@@ -82,30 +54,15 @@ class PineconeDatabase extends VectorDatabase {
         apiKey: this.config.apiKey,
       })
 
-      const indexName = this.config.indexName || "pdf-documents"
-
       try {
-        // Try to get existing index
-        this.index = this.pinecone.index(indexName)
-        await this.index.describeIndexStats()
+        this.index = this.pinecone.index(this.indexName)
+        const stats = await this.index.describeIndexStats()
+        this.indexDimension = stats.dimension ?? null
       } catch {
-        // Index doesn't exist, create it
-        logger.debug(`Creating Pinecone index: ${indexName}`)
-        await this.pinecone.createIndex({
-          name: indexName,
-          dimension: getEmbeddingDimension(this.config.dimension),
-          metric: "cosine",
-          spec: {
-            serverless: {
-              cloud: "aws",
-              region: "us-east-1",
-            },
-          },
-        })
-
-        // Wait for index to be ready
-        await new Promise((resolve) => setTimeout(resolve, 10000))
-        this.index = this.pinecone.index(indexName)
+        // Index doesn't exist yet. It is created on the first upsert, when the
+        // real embedding dimension is known (it differs per embedding model).
+        this.index = null
+        this.indexDimension = null
       }
 
       this.isInitialized = true
@@ -116,25 +73,58 @@ class PineconeDatabase extends VectorDatabase {
     }
   }
 
+  private async ensureIndex(dimension: number): Promise<PineconeIndex> {
+    if (!this.index) {
+      logger.debug(`Creating Pinecone index: ${this.indexName} (dimension ${dimension})`)
+      await this.pinecone.createIndex({
+        name: this.indexName,
+        dimension,
+        metric: "cosine",
+        spec: { serverless: { cloud: "aws", region: "us-east-1" } },
+        waitUntilReady: true,
+        suppressConflicts: true,
+      })
+      this.index = this.pinecone.index(this.indexName)
+      this.indexDimension = dimension
+    }
+    if (this.indexDimension && this.indexDimension !== dimension) {
+      throw new Error(
+        `Pinecone index "${this.indexName}" has dimension ${this.indexDimension}, but the current embedding model produces ${dimension}. ` +
+          `Use a different index name or delete the index.`,
+      )
+    }
+    return this.index
+  }
+
   async addDocuments(documents: VectorDocument[]): Promise<void> {
     if (!this.isInitialized) {
       await this.initialize()
     }
+    if (documents.length === 0) return
 
     try {
-      const vectors = documents.map((doc) => ({
-        id: doc.id,
-        values: doc.embedding,
-        metadata: {
-          content: doc.content.substring(0, 40000), // Pinecone metadata limit
-          source: doc.metadata.source,
-          documentId: doc.metadata.documentId,
-          chunkIndex: doc.metadata.chunkIndex,
-          timestamp: doc.metadata.timestamp.toISOString(),
-        },
-      }))
+      const index = await this.ensureIndex(documents[0].embedding.length)
+      const records = documents.map((doc) => {
+        const ts = doc.metadata.timestamp
+        return {
+          id: doc.id,
+          values: doc.embedding,
+          metadata: {
+            // Pinecone caps metadata at 40KB per record, including the other fields.
+            content: doc.content.substring(0, 30000),
+            source: String(doc.metadata.source ?? ""),
+            documentId: String(doc.metadata.documentId ?? ""),
+            chunkIndex: Number(doc.metadata.chunkIndex ?? 0),
+            // Arrives as a string after the JSON hop through /api/vector-db.
+            timestamp: new Date(ts ?? Date.now()).toISOString(),
+          },
+        }
+      })
 
-      await this.index.upsert(vectors)
+      // Pinecone limits a request to 2MB / 1000 records; 100 keeps large vectors safe.
+      for (let i = 0; i < records.length; i += 100) {
+        await index.upsert({ records: records.slice(i, i + 100) })
+      }
     } catch (error) {
       console.error("Failed to add documents to Pinecone:", error)
       throw error
@@ -145,133 +135,60 @@ class PineconeDatabase extends VectorDatabase {
     if (!this.isInitialized) {
       await this.initialize()
     }
+    if (!this.index) return [] // Nothing has been indexed yet
+
+    const limit = options.limit || 10
+    const hasEmbedding = Array.isArray(embedding) && embedding.length > 0
+    if (options.mode === "semantic" && !hasEmbedding) {
+      console.warn("No embedding provided for semantic search")
+      return []
+    }
+
+    const filter = options.documentIds?.length
+      ? { documentId: { $in: options.documentIds } }
+      : options.filters
+    // Keyword/hybrid re-score a wider pool locally (Pinecone has no text search).
+    const topK = options.mode === "semantic" ? limit : Math.min(1000, limit * (options.mode === "keyword" ? 10 : 5))
 
     try {
-      let results: SearchResult[] = []
+      const response = await this.index.query({
+        vector: hasEmbedding ? embedding : createZeroVector(this.indexDimension ?? this.config.dimension),
+        topK,
+        includeMetadata: true,
+        includeValues: false,
+        ...(filter ? { filter } : {}),
+      })
+
+      const matches = (response.matches ?? []).map((match) => ({
+        id: match.id,
+        content: String(match.metadata?.content ?? ""),
+        semanticScore: hasEmbedding ? match.score ?? 0 : 0,
+        metadata: match.metadata ?? {},
+      }))
 
       if (options.mode === "semantic") {
-        // Pure semantic search using vector similarity
-        if (!embedding || embedding.length === 0) {
-          console.warn("No embedding provided for semantic search")
-          return []
-        }
-
-        const searchParams: unknown = {
-          vector: embedding,
-          topK: options.limit || 10,
-          includeMetadata: true,
-          includeValues: false,
-        }
-
-        if (options.filters) {
-          searchParams.filter = options.filters
-        }
-
-        const pineconeResults = await this.index.query(searchParams)
-        
-        results = pineconeResults.matches?.map((match: unknown) => ({
-          id: match.id,
-          content: match.metadata?.content || "",
-          score: match.score || 0,
-          metadata: {
-            ...match.metadata,
-            searchMode: "semantic"
-          },
-        })) || []
-
-      } else if (options.mode === "keyword") {
-        // Pure keyword search using metadata filtering
-        // Since Pinecone doesn't have native text search, we'll fetch more results and filter locally
-        const searchParams: unknown = {
-          vector: embedding.length > 0 ? embedding : createZeroVector(this.config.dimension), // Use zero vector if no embedding
-          topK: Math.min(1000, (options.limit || 10) * 10), // Fetch more to filter locally
-          includeMetadata: true,
-          includeValues: false,
-        }
-
-        if (options.filters) {
-          searchParams.filter = options.filters
-        }
-
-        const pineconeResults = await this.index.query(searchParams)
-        const allResults = pineconeResults.matches || []
-
-        // Filter results locally using keyword matching
-        const keywordFilteredResults = allResults
-          .map((match: unknown) => {
-            const content = match.metadata?.content || ""
-            const keywordScore = calculateKeywordScore(query, content)
-            
-            return {
-              id: match.id,
-              content: content,
-              score: keywordScore,
-              metadata: {
-                ...match.metadata,
-                searchMode: "keyword",
-                originalPineconeScore: match.score
-              },
-            }
-          })
-          .filter(result => result.score >= (options.threshold || 0.01))
-          .sort((a, b) => b.score - a.score)
-          .slice(0, options.limit || 10)
-
-        results = keywordFilteredResults
-
-      } else if (options.mode === "hybrid") {
-        // Hybrid search - combine semantic and keyword approaches
-        const searchParams: unknown = {
-          vector: embedding.length > 0 ? embedding : createZeroVector(this.config.dimension),
-          topK: Math.min(1000, (options.limit || 10) * 5), // Fetch more for better hybrid results
-          includeMetadata: true,
-          includeValues: false,
-        }
-
-        if (options.filters) {
-          searchParams.filter = options.filters
-        }
-
-        const pineconeResults = await this.index.query(searchParams)
-        const allResults = pineconeResults.matches || []
-
-        // Calculate adaptive hybrid weights based on query characteristics
-        const weights = this.getAdaptiveHybridWeights(query)
-        
-        // Calculate hybrid scores
-        const hybridResults = allResults
-          .map((match: unknown) => {
-            const content = match.metadata?.content || ""
-            const semanticScore = embedding.length > 0 ? (match.score || 0) : 0
-            const keywordScore = calculateKeywordScore(query, content)
-            
-            // Combine scores with adaptive weights
-            const hybridScore = embedding.length > 0 
-              ? (semanticScore * weights.semantic + keywordScore * weights.keyword)
-              : keywordScore // If no embedding, use only keyword score
-
-            return {
-              id: match.id,
-              content: content,
-              score: hybridScore,
-              metadata: {
-                ...match.metadata,
-                searchMode: "hybrid",
-                semanticScore: semanticScore,
-                keywordScore: keywordScore,
-                hybridScore: hybridScore
-              },
-            }
-          })
-          .filter(result => result.score >= (options.threshold || 0.05))
-          .sort((a, b) => b.score - a.score)
-          .slice(0, options.limit || 10)
-
-        results = hybridResults
+        return matches
+          .filter((m) => options.threshold === undefined || m.semanticScore >= options.threshold)
+          .map((m) => ({ id: m.id, content: m.content, score: m.semanticScore, metadata: { ...m.metadata, searchMode: "semantic" } }))
       }
 
-      return results
-
+      const weights = this.getAdaptiveHybridWeights(query)
+      return matches
+        .map((m) => {
+          const keywordScore = calculateKeywordScore(query, m.content)
+          const score = options.mode === "keyword" || !hasEmbedding
+            ? keywordScore
+            : m.semanticScore * weights.semantic + keywordScore * weights.keyword
+          return {
+            id: m.id,
+            content: m.content,
+            score,
+            metadata: { ...m.metadata, searchMode: options.mode, semanticScore: m.semanticScore, keywordScore },
+          }
+        })
+        .filter((r) => r.score >= (options.threshold ?? (options.mode === "keyword" ? 0.01 : 0.05)))
+        .sort((x, y) => y.score - x.score)
+        .slice(0, limit)
     } catch (error) {
       console.error("Failed to search Pinecone:", error)
       throw error
@@ -344,6 +261,8 @@ class PineconeDatabase extends VectorDatabase {
       await this.initialize()
     }
 
+    if (!this.index) return
+
     try {
       await this.index.deleteMany({
         filter: { documentId: { $eq: documentId } },
@@ -358,6 +277,8 @@ class PineconeDatabase extends VectorDatabase {
     if (!this.isInitialized) {
       await this.initialize()
     }
+
+    if (!this.index) return
 
     try {
       await this.index.deleteAll()
@@ -384,73 +305,73 @@ class PineconeDatabase extends VectorDatabase {
   }
 }
 
-import type { WeaviateClient } from "weaviate-ts-client"
+import type { WeaviateClient, WeaviateObject, WhereFilter } from "weaviate-ts-client"
+
+/** "https://host:port" | "host:port" -> client connection params (http for localhost). */
+export function parseWeaviateUrl(url: string | undefined): { scheme: string; host: string } {
+  const raw = (url || "localhost:8080").trim().replace(/\/+$/, "")
+  const match = raw.match(/^(https?):\/\/(.+)$/i)
+  if (match) return { scheme: match[1].toLowerCase(), host: match[2] }
+  return { scheme: /^(localhost|127\.0\.0\.1)(:|$)/.test(raw) ? "http" : "https", host: raw }
+}
+
+interface WeaviateHit {
+  content?: string
+  source?: string
+  documentId?: string
+  chunkIndex?: number
+  _additional?: { id?: string; distance?: number; score?: string | number }
+}
 
 class WeaviateDatabase extends VectorDatabase {
   private client!: WeaviateClient
+  private uuid5!: (identifier: string | number, namespace?: string) => string
+
+  /** Weaviate class names must start with an upper-case letter. */
+  private get className(): string {
+    const raw = (this.config.collection || "Document").replace(/[^A-Za-z0-9_]/g, "")
+    return raw.charAt(0).toUpperCase() + raw.slice(1)
+  }
+
+  private documentFilter(documentIds: string[]): WhereFilter {
+    const operands: WhereFilter[] = documentIds.map((id) => ({ path: ["documentId"], operator: "Equal", valueText: id }))
+    return operands.length === 1 ? operands[0] : { operator: "Or", operands }
+  }
 
   async initialize(): Promise<void> {
     try {
-      const weaviate = await import("weaviate-ts-client")
-
-      this.client = weaviate.default.client({
-        scheme: "https",
-        host: this.config.url || "localhost:8080",
-        ...(this.config.apiKey ? { headers: { Authorization: `Bearer ${this.config.apiKey}` } } : {}),
+      const weaviateModule = await import("weaviate-ts-client")
+      this.uuid5 = weaviateModule.generateUuid5
+      this.client = weaviateModule.default.client({
+        ...parseWeaviateUrl(this.config.url),
+        ...(this.config.apiKey ? { apiKey: new weaviateModule.ApiKey(this.config.apiKey) } : {}),
       })
 
-      // Create schema if it doesn't exist
-      const className = this.config.collection || "Document"
-      const schema = {
-        class: className,
-        properties: [
-          {
-            name: "content",
-            dataType: ["text"],
-          },
-          {
-            name: "source",
-            dataType: ["string"],
-          },
-          {
-            name: "documentId",
-            dataType: ["string"],
-          },
-          {
-            name: "chunkIndex",
-            dataType: ["int"],
-          },
-        ],
+      const existing = await this.client.schema.getter().do()
+      if (!existing.classes?.some((cls) => cls.class === this.className)) {
+        logger.debug(`Creating Weaviate class '${this.className}'...`)
+        try {
+          await this.client.schema
+            .classCreator()
+            .withClass({
+              class: this.className,
+              // The app supplies its own embeddings; no server-side vectorizer.
+              vectorizer: "none",
+              properties: [
+                { name: "content", dataType: ["text"] },
+                { name: "source", dataType: ["text"] },
+                // Exact-match ids, not word-tokenized
+                { name: "documentId", dataType: ["text"], tokenization: "field" },
+                { name: "chunkIndex", dataType: ["int"] },
+              ],
+            })
+            .do()
+        } catch (createError) {
+          // Another request may have created it concurrently.
+          if (!(createError instanceof Error && /already exists/i.test(createError.message))) throw createError
+        }
       }
 
-      // Check if class already exists before attempting creation
-      try {
-        const existingSchema = await this.client.schema.getter().do()
-        const classExists = existingSchema.classes?.some(
-          (cls: { class?: string }) => cls.class === className
-        )
-        
-        if (classExists) {
-          logger.debug(`Weaviate class '${className}' already exists, skipping creation`)
-        } else {
-          logger.debug(`Creating Weaviate class '${className}'...`)
-          await this.client.schema.classCreator().withClass(schema).do()
-          logger.debug(`Weaviate class '${className}' created successfully`)
-        }
-      } catch (schemaError) {
-        // If we can't check the schema, try to create (will fail silently if exists)
-        console.warn("Could not check existing schema, attempting to create class:", schemaError)
-        try {
-          await this.client.schema.classCreator().withClass(schema).do()
-          logger.debug(`Weaviate class '${className}' created`)
-        } catch (createError: unknown) {
-          // Only log if it's not an "already exists" error
-          if (!createError?.message?.includes('already exists')) {
-            console.error("Failed to create Weaviate class:", createError)
-          }
-        }
-      }
-      
       this.isInitialized = true
     } catch (error) {
       console.error("Failed to initialize Weaviate:", error)
@@ -459,22 +380,24 @@ class WeaviateDatabase extends VectorDatabase {
   }
 
   async addDocuments(documents: VectorDocument[]): Promise<void> {
+    if (!this.isInitialized) await this.initialize()
     try {
-      const className = this.config.collection || "Document"
-
-      for (const doc of documents) {
-        await this.client.data
-          .creator()
-          .withClassName(className)
-          .withId(doc.id)
-          .withProperties({
+      for (let i = 0; i < documents.length; i += 100) {
+        const objects: WeaviateObject[] = documents.slice(i, i + 100).map((doc) => ({
+          class: this.className,
+          // Weaviate requires UUIDs; derive a stable one so re-uploads overwrite.
+          id: this.uuid5(doc.id),
+          properties: {
             content: doc.content,
             source: doc.metadata.source,
             documentId: doc.metadata.documentId,
             chunkIndex: doc.metadata.chunkIndex,
-          })
-          .withVector(doc.embedding)
-          .do()
+          },
+          vector: doc.embedding,
+        }))
+        const results = await this.client.batch.objectsBatcher().withObjects(...objects).do()
+        const failed = results.flatMap((r) => r.result?.errors?.error ?? []).map((e) => e.message).filter(Boolean)
+        if (failed.length > 0) throw new Error(`Weaviate rejected ${failed.length} object(s): ${failed[0]}`)
       }
     } catch (error) {
       console.error("Failed to add documents to Weaviate:", error)
@@ -483,70 +406,51 @@ class WeaviateDatabase extends VectorDatabase {
   }
 
   async search(query: string, embedding: number[], options: SearchOptions): Promise<SearchResult[]> {
+    if (!this.isInitialized) await this.initialize()
     try {
-      const className = this.config.collection || "Document"
-
-      let searchQuery = this.client.graphql
+      const hasEmbedding = Array.isArray(embedding) && embedding.length > 0
+      let search = this.client.graphql
         .get()
-        .withClassName(className)
-        .withFields("content source documentId chunkIndex")
+        .withClassName(this.className)
+        .withFields("content source documentId chunkIndex _additional { id distance score }")
         .withLimit(options.limit || 10)
 
-      if (options.mode === "semantic" || options.mode === "hybrid") {
-        searchQuery = searchQuery.withNearVector({
-          vector: embedding,
-          certainty: options.threshold || 0.7,
-        })
+      if (options.documentIds?.length) search = search.withWhere(this.documentFilter(options.documentIds))
+      else if (options.filters) search = search.withWhere(options.filters as WhereFilter)
+
+      // nearVector and bm25 cannot be combined in one query; hybrid is its own operator.
+      if (options.mode === "semantic") {
+        if (!hasEmbedding) return []
+        search = search.withNearVector({ vector: embedding })
+      } else if (options.mode === "keyword" || !hasEmbedding) {
+        search = search.withBm25({ query })
+      } else {
+        search = search.withHybrid({ query, vector: embedding, alpha: 0.5 })
       }
 
-      if (options.mode === "keyword" || options.mode === "hybrid") {
-        searchQuery = searchQuery.withBm25({
-          query: query,
-        })
-      }
+      const result: { data?: { Get?: Record<string, WeaviateHit[] | undefined> } } = await search.do()
+      const hits = result.data?.Get?.[this.className] ?? []
 
-      if (options.filters) {
-        searchQuery = searchQuery.withWhere(options.filters)
-      }
-
-      const result = await searchQuery.do()
-
-      const processedResults = result.data?.Get?.[className]?.map((item: unknown, index: number) => {
-        // Calculate a more realistic score based on search mode
-        let finalScore = 1 - index / (options.limit || 10) // Base score from ranking
-        
-        // Adjust score based on search mode for better representation
-        if (options.mode === "semantic") {
-          finalScore = Math.max(0.5, finalScore) // Semantic results should have decent scores
-        } else if (options.mode === "keyword") {
-          // For keyword search, calculate actual keyword relevance
-          finalScore = calculateKeywordScore(query, item.content)
-        } else if (options.mode === "hybrid") {
-          // For hybrid, this is already a combined score from Weaviate
-          finalScore = Math.max(0.3, finalScore) // Ensure hybrid results have reasonable scores
-        }
-
-        return {
-          id: `${item.documentId}_${item.chunkIndex}`,
-          content: item.content,
-          score: finalScore,
-          metadata: {
-            source: item.source,
-            documentId: item.documentId,
-            chunkIndex: item.chunkIndex,
-            searchMode: options.mode,
-            weaviateRank: index + 1,
-            debug: {
-              originalScore: finalScore,
-              thresholdUsed: options.threshold || 0.7,
+      return hits
+        .map((hit) => {
+          const extra = hit._additional ?? {}
+          // nearVector reports cosine distance; bm25/hybrid report a score.
+          const score = options.mode === "semantic" && typeof extra.distance === "number"
+            ? 1 - extra.distance
+            : Number(extra.score ?? 0)
+          return {
+            id: extra.id ?? `${hit.documentId}_${hit.chunkIndex}`,
+            content: hit.content ?? "",
+            score,
+            metadata: {
+              source: hit.source,
+              documentId: hit.documentId,
+              chunkIndex: hit.chunkIndex,
               searchMode: options.mode,
-              weaviateIndex: index
-            }
-          },
-        }
-      }) || []
-
-      return processedResults
+            },
+          }
+        })
+        .filter((r) => options.threshold === undefined || r.score >= options.threshold)
     } catch (error) {
       console.error("Failed to search Weaviate:", error)
       throw error
@@ -554,17 +458,12 @@ class WeaviateDatabase extends VectorDatabase {
   }
 
   async deleteDocument(documentId: string): Promise<void> {
+    if (!this.isInitialized) await this.initialize()
     try {
-      const className = this.config.collection || "Document"
-
       await this.client.batch
         .objectsBatchDeleter()
-        .withClassName(className)
-        .withWhere({
-          path: ["documentId"],
-          operator: "Equal",
-          valueString: documentId,
-        })
+        .withClassName(this.className)
+        .withWhere(this.documentFilter([documentId]))
         .do()
     } catch (error) {
       console.error("Failed to delete document from Weaviate:", error)
@@ -573,9 +472,10 @@ class WeaviateDatabase extends VectorDatabase {
   }
 
   async clear(): Promise<void> {
+    if (!this.isInitialized) await this.initialize()
     try {
-      const className = this.config.collection || "Document"
-      await this.client.schema.classDeleter().withClassName(className).do()
+      await this.client.schema.classDeleter().withClassName(this.className).do()
+      this.isInitialized = false
       await this.initialize() // Recreate the schema
     } catch (error) {
       console.error("Failed to clear Weaviate collection:", error)
@@ -585,6 +485,7 @@ class WeaviateDatabase extends VectorDatabase {
 
   async testConnection(): Promise<boolean> {
     try {
+      if (!this.isInitialized) await this.initialize()
       await this.client.misc.metaGetter().do()
       return true
     } catch (error) {
@@ -592,9 +493,7 @@ class WeaviateDatabase extends VectorDatabase {
       return false
     }
   }
-
 }
-
 
 class LocalVectorDatabase extends VectorDatabase {
   private documents: VectorDocument[] = []
@@ -623,7 +522,9 @@ class LocalVectorDatabase extends VectorDatabase {
 
     const threshold = getThreshold(options.mode)
 
+    const allowed = options.documentIds?.length ? new Set(options.documentIds) : null
     for (const doc of this.documents) {
+      if (allowed && !allowed.has(doc.metadata.documentId)) continue
       let score = 0
 
       if (options.mode === "semantic") {
@@ -762,69 +663,5 @@ export function createVectorDatabase(config: VectorDBConfig): VectorDatabase {
     case "local":
     default:
       return new LocalVectorDatabase(config)
-  }
-}
-
-// Browser-compatible vector database without Node.js dependencies
-
-export interface VectorEntry {
-  id: string
-  vector: number[]
-  metadata: Record<string, unknown>
-  text: string
-}
-
-export interface BrowserSearchResult {
-  entry: VectorEntry
-  similarity: number
-}
-
-export class BrowserVectorDatabase {
-  private entries: VectorEntry[] = []
-
-  async addEntry(entry: VectorEntry): Promise<void> {
-    this.entries.push(entry)
-  }
-
-  async addEntries(entries: VectorEntry[]): Promise<void> {
-    this.entries.push(...entries)
-  }
-
-  async search(queryVector: number[], limit = 5): Promise<BrowserSearchResult[]> {
-    const results = this.entries
-      .map((entry) => ({
-        entry,
-        similarity: this.cosineSimilarity(queryVector, entry.vector),
-      }))
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit)
-
-    return results
-  }
-
-  async clear(): Promise<void> {
-    this.entries = []
-  }
-
-  async getCount(): Promise<number> {
-    return this.entries.length
-  }
-
-  private cosineSimilarity(a: number[], b: number[]): number {
-    if (a.length !== b.length) return 0
-
-    let dotProduct = 0
-    let normA = 0
-    let normB = 0
-
-    for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i]
-      normA += a[i] * a[i]
-      normB += b[i] * b[i]
-    }
-
-    if (normA === 0 || normB === 0) return 0
-
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB))
   }
 }

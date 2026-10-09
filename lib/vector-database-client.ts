@@ -8,13 +8,21 @@ import type { SearchOptions, SearchResult, VectorDBConfig, VectorDocument } from
 // Using the same config type as the server-side implementation
 export type VectorDBClientConfig = VectorDBConfig;
 
-// Using imported VectorDocument type
-
-// Using imported SearchOptions type
+/** A hit mapped back to the chunk it came from. */
+export interface VectorChunkHit {
+  documentId: string;
+  chunkIndex: number;
+  score: number;
+}
 
 /**
  * Client-side vector database implementation that uses API routes
- * to communicate with the server-side vector database
+ * to communicate with the server-side vector database.
+ *
+ * For the "local" provider the in-browser RAG index (persisted in IndexedDB)
+ * *is* the vector store, so every operation is a no-op here: mirroring it into
+ * a server process's memory only duplicated the data, and that copy was
+ * dropped after five idle minutes anyway.
  */
 export class VectorDatabaseClient {
   private config: VectorDBClientConfig;
@@ -24,80 +32,75 @@ export class VectorDatabaseClient {
     this.config = config;
   }
 
+  /** True when a remote store (Pinecone/Weaviate) backs this client. */
+  get isRemote(): boolean {
+    return this.config.provider !== "local";
+  }
+
   async initialize(): Promise<void> {
-    try {
-      await this.callAPI("initialize", {});
+    if (!this.isRemote) {
       this.isInitialized = true;
-    } catch (error) {
-      console.error("Failed to initialize vector database:", error);
-      throw error;
+      return;
     }
+    await this.callAPI("initialize", {});
+    this.isInitialized = true;
   }
 
   async addDocuments(documents: VectorDocument[]): Promise<void> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
-    try {
-      await this.callAPI("addDocuments", { documents });
-    } catch (error) {
-      console.error("Failed to add documents to vector database:", error);
-      throw error;
-    }
+    if (!this.isRemote || documents.length === 0) return;
+    if (!this.isInitialized) await this.initialize();
+    await this.callAPI("addDocuments", { documents });
   }
 
   async search(query: string, embedding: number[], options: SearchOptions): Promise<SearchResult[]> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
+    if (!this.isRemote) return [];
+    if (!this.isInitialized) await this.initialize();
+    const response = await this.callAPI<{ results?: SearchResult[] }>("search", { query, embedding, options });
+    return Array.isArray(response.results) ? response.results : [];
+  }
 
-    try {
-      const response = await this.callAPI("search", { query, embedding, options });
-      return response.results;
-    } catch (error) {
-      console.error("Failed to search vector database:", error);
-      throw error;
+  /**
+   * Dense nearest-neighbour search returning (documentId, chunkIndex) pairs,
+   * the shape RAGEngine merges into its candidate set.
+   */
+  async searchChunks(embedding: number[], limit: number, documentIds?: string[]): Promise<VectorChunkHit[]> {
+    const results = await this.search("", embedding, { mode: "semantic", limit, documentIds });
+    const hits: VectorChunkHit[] = [];
+    for (const result of results) {
+      const metadata = (typeof result.metadata === "object" && result.metadata !== null ? result.metadata : {}) as Record<string, unknown>;
+      const documentId = metadata.documentId;
+      const chunkIndex = Number(metadata.chunkIndex);
+      if (typeof documentId === "string" && Number.isInteger(chunkIndex)) {
+        hits.push({ documentId, chunkIndex, score: result.score });
+      }
     }
+    return hits;
   }
 
   async deleteDocument(documentId: string): Promise<void> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
-    try {
-      await this.callAPI("deleteDocument", { documentId });
-    } catch (error) {
-      console.error("Failed to delete document from vector database:", error);
-      throw error;
-    }
+    if (!this.isRemote) return;
+    if (!this.isInitialized) await this.initialize();
+    await this.callAPI("deleteDocument", { documentId });
   }
 
   async clear(): Promise<void> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
-
-    try {
-      await this.callAPI("clear", {});
-    } catch (error) {
-      console.error("Failed to clear vector database:", error);
-      throw error;
-    }
+    if (!this.isRemote) return;
+    if (!this.isInitialized) await this.initialize();
+    await this.callAPI("clear", {});
   }
 
   async testConnection(): Promise<boolean> {
+    if (!this.isRemote) return true;
     try {
-      const response = await this.callAPI("testConnection", {});
-      return response.connected;
+      const response = await this.callAPI<{ connected?: boolean }>("testConnection", {});
+      return response.connected === true;
     } catch (error) {
       console.error("Vector database connection test failed:", error);
       return false;
     }
   }
 
-  private async callAPI(action: string, data: unknown): Promise<unknown> {
+  private async callAPI<T = Record<string, unknown>>(action: string, data: unknown): Promise<T> {
     const response = await fetch("/api/vector-db", {
       method: "POST",
       headers: {
@@ -111,10 +114,10 @@ export class VectorDatabaseClient {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = (await response.json().catch(() => ({}))) as { error?: string };
       throw new Error(errorData.error || `API request failed with status ${response.status}`);
     }
 
-    return await response.json();
+    return (await response.json()) as T;
   }
 }

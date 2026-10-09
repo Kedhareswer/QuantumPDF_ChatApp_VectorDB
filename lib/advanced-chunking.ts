@@ -171,20 +171,34 @@ export class AdvancedChunker {
     const sections = this.identifySemanticSections(text)
 
     let chunkIndex = 0
-    for (const section of sections) {
-      const trimmedContent = section.content.trim()
+    // A small section that could not be merged backwards (e.g. the document's
+    // title, or a heading after a full chunk) is carried into the next section
+    // instead of being dropped.
+    let carry: { content: string; startChar: number } | null = null
+    const appendToLast = (content: string, endChar: number): boolean => {
+      const last = chunks[chunks.length - 1]
+      if (!last || last.content.length + content.length >= this.options.maxChunkSize) return false
+      last.content += '\n\n' + content
+      last.metadata.endChar = endChar
+      last.metadata.wordCount = last.content.split(/\s+/).length
+      return true
+    }
 
-      // Skip very small sections
+    for (const rawSection of sections) {
+      const section: { content: string; startChar: number } = carry
+        ? { content: `${carry.content}\n\n${rawSection.content.trim()}`, startChar: carry.startChar }
+        : rawSection
+      carry = null
+      const trimmedContent: string = section.content.trim()
+      if (!trimmedContent) continue
+
       if (trimmedContent.length < this.options.minChunkSize) {
-        // Try to merge with previous chunk if exists
-        if (chunks.length > 0 && chunks[chunks.length - 1].content.length + trimmedContent.length < this.options.maxChunkSize) {
-          chunks[chunks.length - 1].content += '\n\n' + trimmedContent
-          chunks[chunks.length - 1].metadata.endChar = section.startChar + trimmedContent.length
-          chunks[chunks.length - 1].metadata.wordCount = chunks[chunks.length - 1].content.split(/\s+/).length
-          continue
-        } else {
-          continue // Skip if can't merge
+        // Headings belong with what follows them; other fragments with what precedes.
+        const isHeading = this.detectChunkType(trimmedContent) === 'heading'
+        if (isHeading || !appendToLast(trimmedContent, section.startChar + trimmedContent.length)) {
+          carry = { content: trimmedContent, startChar: section.startChar }
         }
+        continue
       }
 
       if (trimmedContent.length <= this.options.maxChunkSize) {
@@ -195,12 +209,20 @@ export class AdvancedChunker {
         // Split large section into smaller chunks with semantic boundaries
         const subChunks = this.splitLargeSection(section)
         subChunks.forEach(subChunk => {
-          if (subChunk.content.trim().length >= this.options.minChunkSize) {
-            chunks.push(this.createChunk(subChunk.content, chunkIndex, subChunk.startChar, documentId, documentName))
-            chunkIndex++
-          }
+          const content = subChunk.content.trim()
+          if (!content) return
+          // A short tail still carries text: attach it rather than drop it.
+          if (content.length < this.options.minChunkSize && appendToLast(content, subChunk.startChar + content.length)) return
+          chunks.push(this.createChunk(content, chunkIndex, subChunk.startChar, documentId, documentName))
+          chunkIndex++
         })
       }
+    }
+
+    if (carry && !appendToLast(carry.content, carry.startChar + carry.content.length)) {
+      // Whole document shorter than minChunkSize (or a trailing fragment that
+      // won't fit): keep it as its own chunk.
+      chunks.push(this.createChunk(carry.content, chunkIndex, carry.startChar, documentId, documentName))
     }
 
     return chunks
@@ -404,7 +426,7 @@ export class AdvancedChunker {
 
         // Start new chunk with overlap
         const overlapSentences = this.getOverlapSentences(currentChunk)
-        currentChunk = overlapSentences + sentence
+        currentChunk = overlapSentences ? `${overlapSentences} ${sentence}` : sentence
         chunkStart = currentPos - overlapSentences.length
       } else {
         currentChunk += (currentChunk ? ' ' : '') + sentence
@@ -421,13 +443,17 @@ export class AdvancedChunker {
   }
 
   private splitIntoSentences(text: string): string[] {
-    return text.match(/[^.!?]+[.!?]+/g) || [text]
+    // The `$` alternative keeps trailing text with no end punctuation (list
+    // items, PDF lines), which the old pattern silently dropped.
+    const sentences = (text.match(/[^.!?]+(?:[.!?]+|$)/g) || []).map((s) => s.trim()).filter(Boolean)
+    return sentences.length > 0 ? sentences : [text]
   }
 
   private getOverlapSentences(text: string): string {
     const sentences = this.splitIntoSentences(text)
     const overlapCount = Math.min(2, sentences.length - 1)
-    return sentences.slice(-overlapCount).join(' ')
+    // slice(-0) would return the whole chunk as "overlap"
+    return overlapCount > 0 ? sentences.slice(-overlapCount).join(' ') : ''
   }
 
   private getAdaptiveChunkSize(paragraph: string): number {
@@ -566,11 +592,62 @@ export const DEFAULT_CHUNK_OPTIONS: ChunkingOptions = {
   adaptiveThreshold: true,
 }
 
-/** Chunk extracted text, dropping any chunk that is only whitespace. */
-export function buildChunks(text: string, fileName?: string, documentId?: string) {
-  const advancedChunks = new AdvancedChunker(DEFAULT_CHUNK_OPTIONS).chunkText(text, documentId, fileName)
-  const chunks = advancedChunks.map((c) => c.content).filter((c) => c.trim().length > 0)
-  return { advancedChunks, chunks }
+/**
+ * 1-based page containing character `offset`, given each page's start offset
+ * in the joined text (ascending). Binary search; null when no pages are known.
+ */
+export function pageAtOffset(pageStarts: number[], offset: number): number | null {
+  if (pageStarts.length === 0) return null
+  let lo = 0
+  let hi = pageStarts.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (pageStarts[mid] <= offset) lo = mid
+    else hi = mid - 1
+  }
+  return lo + 1
+}
+
+/**
+ * Chunk extracted text, dropping any chunk that is only whitespace.
+ *
+ * When `pageStarts` (the character offset where each page begins in `text`) is
+ * given, every chunk is tagged with the page it starts on: `metadata.page` on
+ * the advanced chunks and `chunkPages`, aligned index-for-index with `chunks`.
+ */
+export function buildChunks(text: string, fileName?: string, documentId?: string, pageStarts?: number[]) {
+  const advancedChunks = new AdvancedChunker(DEFAULT_CHUNK_OPTIONS)
+    .chunkText(text, documentId, fileName)
+    .filter((c) => c.content.trim().length > 0)
+
+  if (pageStarts && pageStarts.length > 0) {
+    let searchFrom = 0
+    for (const chunk of advancedChunks) {
+      // startChar can drift once overlap is prepended; locate the chunk's own
+      // text (its first line) and fall back to the recorded offset.
+      const probe = chunk.content.trim().split("\n")[0].slice(0, 80)
+      let offset = probe ? text.indexOf(probe, Math.max(0, searchFrom - 2000)) : -1
+      if (offset === -1) offset = chunk.metadata.startChar
+      searchFrom = offset
+      chunk.metadata.page = pageAtOffset(pageStarts, offset) ?? undefined
+    }
+  }
+
+  const chunks = advancedChunks.map((c) => c.content)
+  const chunkPages = pageStarts && pageStarts.length > 0 ? advancedChunks.map((c) => c.metadata.page ?? null) : undefined
+  return { advancedChunks, chunks, chunkPages }
+}
+
+/** Join per-page texts with blank lines, recording where each page starts. */
+export function joinPages(pageTexts: string[]): { text: string; pageStarts: number[] } {
+  const pageStarts: number[] = []
+  let text = ""
+  for (const page of pageTexts) {
+    if (text) text += "\n\n"
+    pageStarts.push(text.length)
+    text += page.trim()
+  }
+  return { text, pageStarts }
 }
 
 export type ExtractionQuality = "high" | "medium" | "low" | "none"

@@ -1,4 +1,4 @@
-import { AIClient } from "@/lib/ai-client"
+import { AIClient, type AIProvider } from "@/lib/ai-client"
 import { EnhancedURLProcessor } from "@/lib/enhanced-url-processor"
 import { createVectorDatabase } from "@/lib/vector-database"
 import type { VectorDBConfig } from "@/lib/vector-database-types"
@@ -75,6 +75,121 @@ interface SourceItem {
   citations?: number
   openAccess?: boolean
 }
+
+// Metadata stored alongside local vector-DB chunks (SearchResult.metadata is untyped)
+interface LocalChunkMetadata {
+  documentId?: string | number
+  chunkIndex?: number
+  source?: string
+  timestamp?: string | Date
+}
+
+// --- External search API response shapes (only the fields read below) ---
+interface RxivPaper {
+  doi?: string
+  preprint_id: string
+  title?: string
+  abstract?: string
+  authors?: string
+  version?: string | number
+  date?: string
+}
+interface RxivResponse { collection?: RxivPaper[] }
+
+interface DoajArticle {
+  id: string
+  bibjson?: {
+    identifier?: { id?: string }[]
+    title?: string
+    link?: { url?: string }[]
+    abstract?: string
+    author?: { name: string }[]
+    year?: string
+  }
+}
+interface DoajResponse { results?: DoajArticle[] }
+
+interface CrossrefWork {
+  DOI: string
+  title?: string[]
+  URL?: string
+  abstract?: string
+  author?: { given?: string; family?: string }[]
+  published?: { 'date-parts'?: number[][] }
+  'is-referenced-by-count'?: number
+}
+interface CrossrefResponse { message?: { items?: CrossrefWork[] } }
+
+interface HnHit {
+  objectID: string
+  title?: string
+  story_title?: string
+  url?: string
+  story_url?: string
+  comment_text?: string
+  story_text?: string
+  _highlightResult?: { title?: { value?: string } }
+}
+interface HnResponse { hits?: HnHit[] }
+
+interface OpenAlexWork {
+  id?: string
+  doi?: string
+  openalex?: string
+  ids?: { openalex?: string; doi?: string }
+  display_name?: string
+  title?: string
+  biblio?: { title?: string }
+  authorships?: { author?: { display_name?: string } }[]
+  primary_location?: { landing_page_url?: string; is_oa?: boolean }
+  open_access?: { oa_url?: string; is_oa?: boolean }
+  publication_date?: string
+  publication_year?: number
+  cited_by_count?: number
+}
+interface OpenAlexResponse { results?: OpenAlexWork[]; works?: OpenAlexWork[] }
+
+interface SemanticScholarPaper {
+  paperId?: string
+  title: string
+  url?: string
+  openAccessPdf?: { url?: string } | null
+  externalIds?: { DOI?: string }
+  authors?: { name: string }[]
+  year?: number
+  citationCount?: number
+}
+interface SemanticScholarResponse { data?: SemanticScholarPaper[] }
+
+interface PubmedSearchResponse { esearchresult?: { idlist?: string[] } }
+interface PubmedSummary {
+  title?: string
+  authors?: { name?: string }[]
+  pubdate?: string
+}
+interface PubmedSummaryResponse {
+  result?: { uids?: string[]; [uid: string]: PubmedSummary | string[] | undefined }
+}
+
+interface RedditPost {
+  id?: string
+  url?: string
+  permalink?: string
+  created_utc?: number
+  title?: string
+  selftext?: string
+}
+interface RedditResponse { data?: { children?: { data?: RedditPost }[] } }
+
+interface GithubRepo {
+  id: number
+  full_name?: string
+  name: string
+  html_url: string
+  description?: string | null
+  updated_at?: string
+}
+interface GithubSearchResponse { items?: GithubRepo[] }
 
 // Utilities
 const enc = new TextEncoder()
@@ -294,7 +409,7 @@ async function localSearchProvider(query: string, maxResults: number, cfg?: Vect
     await vdb.initialize()
 
     // Create AI client for embeddings
-    const ai = new AIClient({ provider: aiConf.provider as unknown, apiKey: aiConf.apiKey, model: aiConf.model, baseUrl: aiConf.baseUrl })
+    const ai = new AIClient({ provider: aiConf.provider as AIProvider, apiKey: aiConf.apiKey, model: aiConf.model, baseUrl: aiConf.baseUrl })
     let embedding: number[] = []
     try {
       embedding = await ai.generateEmbedding(query)
@@ -307,14 +422,16 @@ async function localSearchProvider(query: string, maxResults: number, cfg?: Vect
     const results = await vdb.search(query, embedding, { mode: "hybrid", limit: maxResults, threshold: 0.05 })
     // Map to SourceItem
     return results.map((r) => {
-      const docId = r?.metadata?.documentId || r.id
-      const chunkIndex = r?.metadata?.chunkIndex ?? 0
-      const sourceName = r?.metadata?.source || "Local Document"
+      const meta: LocalChunkMetadata | undefined =
+        r?.metadata && typeof r.metadata === 'object' ? (r.metadata as LocalChunkMetadata) : undefined
+      const docId = meta?.documentId || r.id
+      const chunkIndex = meta?.chunkIndex ?? 0
+      const sourceName = meta?.source || "Local Document"
       const url = `https://local.documents/${encodeURIComponent(String(docId))}?chunk=${encodeURIComponent(String(chunkIndex))}`
       const snippet = (r.content || "").slice(0, 280).replace(/\s+/g, ' ').trim()
       // Timestamp
       let publishedAt: string | undefined
-      const ts = r?.metadata?.timestamp
+      const ts = meta?.timestamp
       if (ts) {
         try { publishedAt = typeof ts === 'string' ? new Date(ts).toISOString() : (ts instanceof Date ? ts.toISOString() : undefined) } catch {}
       }
@@ -592,12 +709,12 @@ async function biorxivSearch(query: string, maxResults: number): Promise<SourceI
     const url = `https://api.biorxiv.org/details/biorxiv/2020-01-01/2025-12-31/${maxResults}?format=json`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: unknown = await res.json()
+    const data = (await res.json()) as RxivResponse | null
     const papers = data?.collection || []
-    return papers.filter((p: unknown) => 
+    return papers.filter((p) => 
       (p.title?.toLowerCase().includes(query.toLowerCase()) || 
        p.abstract?.toLowerCase().includes(query.toLowerCase()))
-    ).slice(0, maxResults).map((p: unknown) => ({
+    ).slice(0, maxResults).map((p) => ({
       id: p.doi || p.preprint_id,
       provider: 'biorxiv' as const,
       title: p.title || 'bioRxiv preprint',
@@ -615,12 +732,12 @@ async function medrxivSearch(query: string, maxResults: number): Promise<SourceI
     const url = `https://api.medrxiv.org/details/medrxiv/2020-01-01/2025-12-31/${maxResults}?format=json`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: unknown = await res.json()
+    const data = (await res.json()) as RxivResponse | null
     const papers = data?.collection || []
-    return papers.filter((p: unknown) => 
+    return papers.filter((p) => 
       (p.title?.toLowerCase().includes(query.toLowerCase()) || 
        p.abstract?.toLowerCase().includes(query.toLowerCase()))
-    ).slice(0, maxResults).map((p: unknown) => ({
+    ).slice(0, maxResults).map((p) => ({
       id: p.doi || p.preprint_id,
       provider: 'medrxiv' as const,
       title: p.title || 'medRxiv preprint',
@@ -638,17 +755,17 @@ async function doajSearch(query: string, maxResults: number): Promise<SourceItem
     const url = `https://doaj.org/api/search/articles/${encodeURIComponent(query)}?pageSize=${maxResults}`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: unknown = await res.json()
+    const data = (await res.json()) as DoajResponse | null
     const results = data?.results || []
-    return results.map((r: unknown) => {
-      const bibjson = r.bibjson || {}
+    return results.map((r) => {
+      const bibjson: NonNullable<DoajArticle['bibjson']> = r.bibjson || {}
       return {
-        id: r.id || bibjson.identifier?.[0]?.id,
+        id: r.id || bibjson.identifier?.[0]?.id || '',
         provider: 'doaj' as const,
         title: bibjson.title || 'DOAJ Article',
         url: bibjson.link?.[0]?.url || `https://doaj.org/article/${r.id}`,
         snippet: bibjson.abstract || '',
-        authors: bibjson.author?.map((a: unknown) => a.name).slice(0, 5) || [],
+        authors: bibjson.author?.map((a) => a.name).slice(0, 5) || [],
         publishedAt: toISO(bibjson.year ? `${bibjson.year}-01-01` : undefined),
         openAccess: true
       }
@@ -690,15 +807,15 @@ async function crossrefSearch(query: string, maxResults: number): Promise<Source
     const url = `https://api.crossref.org/works?query=${encodeURIComponent(query)}&rows=${maxResults}&sort=relevance&order=desc`
     const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0 (mailto:support@example.com)' } })
     if (!res.ok) return []
-    const data: unknown = await res.json()
+    const data = (await res.json()) as CrossrefResponse | null
     const items = data?.message?.items || []
-    return items.map((item: unknown) => ({
+    return items.map((item) => ({
       id: item.DOI,
       provider: 'crossref' as const,
       title: item.title?.[0] || 'CrossRef Work',
       url: item.URL || `https://doi.org/${item.DOI}`,
       snippet: item.abstract || '',
-      authors: item.author?.map((a: unknown) => `${a.given || ''} ${a.family || ''}`.trim()).slice(0, 5) || [],
+      authors: item.author?.map((a) => `${a.given || ''} ${a.family || ''}`.trim()).slice(0, 5) || [],
       publishedAt: toISO(item.published?.['date-parts']?.[0] ? `${item.published['date-parts'][0].join('-')}` : undefined),
       citations: typeof item['is-referenced-by-count'] === 'number' ? item['is-referenced-by-count'] : undefined
     }))
@@ -709,8 +826,8 @@ async function hnSearch(query: string, maxResults: number): Promise<SourceItem[]
   const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&hitsPerPage=${maxResults}`
   const res = await fetch(url)
   if (!res.ok) return []
-  const data: unknown = await res.json()
-  const hits: unknown[] = data?.hits || []
+  const data = (await res.json()) as HnResponse | null
+  const hits: HnHit[] = data?.hits || []
   return hits.map(h => ({
     id: h.objectID,
     provider: "hn" as const,
@@ -737,12 +854,12 @@ async function openalexSearch(query: string, maxResults: number): Promise<Source
     const url = `https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${maxResults}&filter=is_oa:true,type:journal-article&sort=cited_by_count:desc`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: unknown = await res.json()
-    const works: unknown[] = data?.results || data?.works || []
-    return works.slice(0, maxResults).map((w: unknown) => {
+    const data = (await res.json()) as OpenAlexResponse | null
+    const works: OpenAlexWork[] = data?.results || data?.works || []
+    return works.slice(0, maxResults).map((w) => {
       const id = w.id || w.doi || w.openalex || w.ids?.openalex || w.ids?.doi || w.display_name
       const title = w.display_name || w.title || (w.biblio?.title || '')
-      const authors = Array.isArray(w.authorships) ? w.authorships.map((a: unknown) => a?.author?.display_name).filter(Boolean) : []
+      const authors = Array.isArray(w.authorships) ? w.authorships.map((a) => a?.author?.display_name).filter((n): n is string => Boolean(n)) : []
       const url = w.primary_location?.landing_page_url || w.open_access?.oa_url || (w.doi ? `https://doi.org/${w.doi.replace(/^doi:/i,'')}` : (w.id || ''))
       const publishedAt = toISO(w.publication_date || (w.publication_year ? `${w.publication_year}-01-01` : undefined))
       const citations = typeof w.cited_by_count === 'number' ? w.cited_by_count : undefined
@@ -758,11 +875,11 @@ async function semanticScholarSearch(query: string, maxResults: number): Promise
     const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${maxResults}&fields=title,year,authors,url,openAccessPdf,citationCount`
     const res = await fetch(url)
     if (!res.ok) return []
-    const data: unknown = await res.json()
-    const items: unknown[] = data?.data || []
-    return items.map((p: unknown) => {
+    const data = (await res.json()) as SemanticScholarResponse | null
+    const items: SemanticScholarPaper[] = data?.data || []
+    return items.map((p) => {
       const url = p.openAccessPdf?.url || p.url || (p.externalIds?.DOI ? `https://doi.org/${p.externalIds.DOI}` : '')
-      const authors = Array.isArray(p.authors) ? p.authors.map((a: unknown) => a.name) : []
+      const authors = Array.isArray(p.authors) ? p.authors.map((a) => a.name) : []
       const publishedAt = toISO(p.year ? `${p.year}-01-01` : undefined)
       const citations = typeof p.citationCount === 'number' ? p.citationCount : undefined
       const openAccess = !!p.openAccessPdf?.url
@@ -777,21 +894,21 @@ async function pubmedSearch(query: string, maxResults: number): Promise<SourceIt
     const esearch = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmax=${maxResults}&retmode=json&sort=relevance&term=${encodeURIComponent(query)}`
     const r1 = await fetch(esearch)
     if (!r1.ok) return []
-    const j1: unknown = await r1.json()
+    const j1 = (await r1.json()) as PubmedSearchResponse | null
     const ids: string[] = j1?.esearchresult?.idlist || []
     if (!ids.length) return []
     const esum = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&id=${ids.join(',')}`
     const r2 = await fetch(esum)
     if (!r2.ok) return []
-    const j2: unknown = await r2.json()
+    const j2 = (await r2.json()) as PubmedSummaryResponse | null
     const out: SourceItem[] = []
-    const result = j2?.result || {}
+    const result: NonNullable<PubmedSummaryResponse['result']> = j2?.result || {}
     const uids: string[] = result?.uids || []
     for (const id of uids.slice(0, maxResults)) {
       const it = result[id]
-      if (!it) continue
+      if (!it || Array.isArray(it)) continue
       const title = it.title || `PubMed ${id}`
-      const authors = Array.isArray(it.authors) ? it.authors.map((a: unknown) => a.name).filter(Boolean) : []
+      const authors = Array.isArray(it.authors) ? it.authors.map((a) => a.name).filter((n): n is string => Boolean(n)) : []
       const url = `https://pubmed.ncbi.nlm.nih.gov/${id}/`
       const publishedAt = toISO(it.pubdate)
       out.push({ id, provider: 'pubmed', title, url, authors, publishedAt })
@@ -806,10 +923,10 @@ async function redditSearch(query: string, maxResults: number): Promise<SourceIt
     const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&sort=relevance&t=all&limit=${maxResults}`
     const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
     if (!res.ok) return []
-    const data: unknown = await res.json()
-    const children: unknown[] = data?.data?.children || []
-    return children.slice(0, maxResults).map((c: unknown) => {
-      const d = c.data || {}
+    const data = (await res.json()) as RedditResponse | null
+    const children = data?.data?.children || []
+    return children.slice(0, maxResults).map((c) => {
+      const d: RedditPost = c.data || {}
       const url = d.url || `https://www.reddit.com${d.permalink || ''}`
       const publishedAt = toISO(d.created_utc ? new Date(d.created_utc * 1000) : undefined)
       return { id: String(d.id || url), provider: 'reddit' as const, title: d.title || 'Reddit', url, snippet: d.selftext?.slice(0, 300) || '', publishedAt, openAccess: true }
@@ -823,9 +940,9 @@ async function githubSearch(query: string, maxResults: number): Promise<SourceIt
     const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=${maxResults}`
     const res = await fetch(url, { headers: { 'User-Agent': 'QuantumPDF-ChatApp/1.0' } })
     if (!res.ok) return []
-    const data: unknown = await res.json()
-    const items: unknown[] = data?.items || []
-    return items.map((r: unknown) => ({ id: String(r.id), provider: 'github' as const, title: r.full_name || r.name, url: r.html_url, snippet: r.description || '', publishedAt: toISO(r.updated_at), openAccess: true }))
+    const data = (await res.json()) as GithubSearchResponse | null
+    const items: GithubRepo[] = data?.items || []
+    return items.map((r) => ({ id: String(r.id), provider: 'github' as const, title: r.full_name || r.name, url: r.html_url, snippet: r.description || '', publishedAt: toISO(r.updated_at), openAccess: true }))
   } catch { return [] }
 }
 

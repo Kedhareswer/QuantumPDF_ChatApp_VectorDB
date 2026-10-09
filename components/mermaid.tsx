@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-// @ts-expect-error - mermaid has no TS types in this project
 import mermaid from "mermaid"
 
 interface MermaidProps {

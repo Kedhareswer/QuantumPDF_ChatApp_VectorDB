@@ -30,6 +30,8 @@ export interface PDFProcessingResult {
   text: string
   chunks: string[]
   advancedChunks?: TextChunk[]
+  /** 1-based page each chunk starts on, aligned with `chunks`. */
+  chunkPages?: Array<number | null>
   metadata: {
     documentType: "pdf"
     title?: string
@@ -58,6 +60,7 @@ interface RouteResponse {
   text?: string
   chunks?: string[]
   advancedChunks?: TextChunk[]
+  chunkPages?: Array<number | null>
   error?: string
   metadata?: {
     pages?: number
@@ -100,7 +103,10 @@ export class PdfDocumentProcessor {
 
     const meta = route.metadata ?? {}
     const text = route.text
-    const chunks = route.chunks && route.chunks.length > 0 ? route.chunks : [text]
+    const hasChunks = !!route.chunks && route.chunks.length > 0
+    const chunks = hasChunks ? route.chunks! : [text]
+    // Only trust page numbers that line up with the chunks they describe.
+    const chunkPages = hasChunks && route.chunkPages?.length === chunks.length ? route.chunkPages : undefined
     const warnings = [...(meta.warnings ?? [])]
     const previews = meta.previews ?? []
 
@@ -133,6 +139,7 @@ export class PdfDocumentProcessor {
       text,
       chunks,
       advancedChunks: route.advancedChunks,
+      chunkPages,
       metadata: {
         documentType: "pdf",
         title: file.name,

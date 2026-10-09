@@ -34,6 +34,9 @@ export interface SearchResult {
 
 export interface SearchOptions {
   mode: "semantic" | "keyword" | "hybrid";
+  /** Restrict results to these document ids (translated to each backend's filter syntax). */
+  documentIds?: string[];
+  /** Raw backend-specific filter (Pinecone metadata filter / Weaviate where). Prefer documentIds. */
   filters?: Record<string, unknown>;
   limit?: number;
   threshold?: number;

@@ -1,3 +1,4 @@
+import type { AIClient } from "./ai-client"
 import { logger } from "./logger"
 /**
  * Advanced Query Processing Module
@@ -101,26 +102,28 @@ class QueryResponseCache {
   }
 
   /**
-   * Normalize query for cache key generation
-   * Handles variations in phrasing, punctuation, and whitespace
+   * Normalize query for cache key generation: case, punctuation and whitespace
+   * only. Word order and short tokens are meaning-bearing ("section 4" vs
+   * "section 7", "did Alice pay Bob" vs "did Bob pay Alice"), so both are kept.
    */
   private normalizeQuery(query: string): string {
     return query
       .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
       .trim()
-      .replace(/[^\w\s]/g, ' ')  // Remove punctuation
-      .replace(/\s+/g, ' ')       // Normalize whitespace
-      .split(' ')
-      .filter(word => word.length > 2) // Remove short words
-      .sort()                     // Sort for order-independence
-      .join(' ')
   }
 
   /**
-   * Generate document hash for cache invalidation
+   * Generate document hash for cache invalidation (copy-sorts; never mutates the caller's array)
    */
   generateDocumentHash(documentIds: string[]): string {
-    return documentIds.sort().join('|')
+    return [...documentIds].sort().join('|')
+  }
+
+  /** One entry per (question, document scope) so differently-scoped answers don't evict each other. */
+  private keyFor(query: string, documentHash: string): string {
+    return `${this.normalizeQuery(query)}::${documentHash}`
   }
 
   /**
@@ -129,7 +132,7 @@ class QueryResponseCache {
   get(query: string, documentHash: string): CachedResponse | null {
     if (!this.config.cacheEnabled) return null
 
-    const normalizedQuery = this.normalizeQuery(query)
+    const normalizedQuery = this.keyFor(query, documentHash)
     const entry = this.cache.get(normalizedQuery)
 
     if (!entry) return null
@@ -161,7 +164,7 @@ class QueryResponseCache {
   set(query: string, response: CachedResponse, documentHash: string): void {
     if (!this.config.cacheEnabled) return
 
-    const normalizedQuery = this.normalizeQuery(query)
+    const normalizedQuery = this.keyFor(query, documentHash)
 
     // Evict old entries if cache is full (LRU-style)
     if (this.cache.size >= this.config.maxCacheSize) {
@@ -217,7 +220,8 @@ class QueryResponseCache {
     
     for (const [key, entry] of this.cache.entries()) {
       // Check if any of the document IDs are in the entry's hash
-      if (documentIds.some(id => entry.documentHash.includes(id))) {
+      const ids = entry.documentHash.split('|')
+      if (documentIds.some(id => ids.includes(id))) {
         this.cache.delete(key)
         invalidated++
       }
@@ -251,7 +255,7 @@ class QueryResponseCache {
 export class QueryProcessor {
   private cache: QueryResponseCache
   private config: QueryProcessorConfig
-  private aiClient: unknown // Will be injected
+  private aiClient: AIClient | null = null // Injected by RAGEngine.initialize
 
   constructor(config: Partial<QueryProcessorConfig> = {}) {
     this.config = {
@@ -271,7 +275,7 @@ export class QueryProcessor {
   /**
    * Set the AI client for LLM operations
    */
-  setAIClient(client: unknown): void {
+  setAIClient(client: AIClient): void {
     this.aiClient = client
   }
 
@@ -344,35 +348,36 @@ export class QueryProcessor {
       confidence: 0.8
     }
 
-    // Apply LLM-based query rewriting if enabled and beneficial
-    if (this.config.rewriteEnabled && this.aiClient && complexity !== 'simple') {
-      try {
-        const rewriteResult = await this.rewriteQuery(query, queryType)
-        analysis.rewrittenQuery = rewriteResult.rewrittenQuery
-        analysis.alternativeQueries = rewriteResult.alternatives
-        analysis.confidence = rewriteResult.confidence
-      } catch (error) {
-        console.warn('Query rewriting failed, using original:', error)
-      }
-    }
+    // Rewriting, HyDE and step-back are independent LLM calls: run them
+    // concurrently (they used to be awaited one after another, tripling latency).
+    const [rewriteResult, hypotheticalAnswer, stepBackQuestion] = await Promise.all([
+      this.config.rewriteEnabled && this.aiClient && complexity !== 'simple'
+        ? this.rewriteQuery(query, queryType).catch((error) => {
+            console.warn('Query rewriting failed, using original:', error)
+            return null
+          })
+        : null,
+      requiresHyDE && this.config.hydeEnabled && this.aiClient
+        ? this.generateHypotheticalAnswer(query, queryType).catch((error) => {
+            console.warn('HyDE generation failed:', error)
+            return undefined
+          })
+        : undefined,
+      requiresStepBack && this.config.stepBackEnabled && this.aiClient
+        ? this.generateStepBackQuestion(query, queryType).catch((error) => {
+            console.warn('Step-back generation failed:', error)
+            return undefined
+          })
+        : undefined,
+    ])
 
-    // Generate HyDE hypothetical answer if needed
-    if (requiresHyDE && this.config.hydeEnabled && this.aiClient) {
-      try {
-        analysis.hypotheticalAnswer = await this.generateHypotheticalAnswer(query, queryType)
-      } catch (error) {
-        console.warn('HyDE generation failed:', error)
-      }
+    if (rewriteResult) {
+      analysis.rewrittenQuery = rewriteResult.rewrittenQuery
+      analysis.alternativeQueries = rewriteResult.alternatives
+      analysis.confidence = rewriteResult.confidence
     }
-
-    // Generate step-back question if needed
-    if (requiresStepBack && this.config.stepBackEnabled && this.aiClient) {
-      try {
-        analysis.stepBackQuestion = await this.generateStepBackQuestion(query, queryType)
-      } catch (error) {
-        console.warn('Step-back generation failed:', error)
-      }
-    }
+    if (hypotheticalAnswer) analysis.hypotheticalAnswer = hypotheticalAnswer
+    if (stepBackQuestion) analysis.stepBackQuestion = stepBackQuestion
 
     return analysis
   }
@@ -545,7 +550,7 @@ Only output the formatted result, nothing else.`
         { role: "user" as const, content: prompt }
       ]
 
-      const response = await this.aiClient.generateText(messages, { temperature: 0.3 })
+      const response = await this.aiClient.generateText(messages, { temperature: 0.3, effort: "low" })
       
       // Parse response
       const rewrittenMatch = response.match(/REWRITTEN:\s*(.+)/i)
@@ -610,7 +615,7 @@ Constraints: use domain-specific terms, include concrete details, write as docum
         { role: "user" as const, content: prompt }
       ]
 
-      const response = await this.aiClient.generateText(messages, { temperature: 0.5 })
+      const response = await this.aiClient.generateText(messages, { temperature: 0.5, effort: "low" })
       
       // Clean up the response
       const hypotheticalAnswer = response
@@ -657,7 +662,7 @@ Examples:
         { role: "user" as const, content: prompt }
       ]
 
-      const response = await this.aiClient.generateText(messages, { temperature: 0.3 })
+      const response = await this.aiClient.generateText(messages, { temperature: 0.3, effort: "low" })
       
       // Clean up the response
       const stepBackQuestion = response
@@ -713,7 +718,7 @@ Only output the questions or CLEAR, nothing else.`
         { role: "user" as const, content: prompt }
       ]
 
-      const response = await this.aiClient.generateText(messages, { temperature: 0.3 })
+      const response = await this.aiClient.generateText(messages, { temperature: 0.3, effort: "low" })
       
       if (response.trim().toUpperCase() === 'CLEAR') {
         return []

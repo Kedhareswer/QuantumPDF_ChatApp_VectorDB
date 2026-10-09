@@ -1,3 +1,4 @@
+import type { DocumentMetadata } from "./rag-engine"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
@@ -13,7 +14,7 @@ interface RetrievedChunk {
   chunkType?: string
 }
 
-interface Message {
+export interface Message {
   id: string
   role: "user" | "assistant"
   content: string
@@ -56,14 +57,18 @@ interface Message {
   }
 }
 
-interface Document {
+export interface Document {
   id: string
   name: string
   content: string
   chunks: string[]
+  /** 1-based page each chunk starts on, aligned with `chunks` (PDFs only). */
+  chunkPages?: Array<number | null>
   embeddings: number[][]
+  /** AIClient.embeddingSpaceId the embeddings were produced in. */
+  embeddingSpace?: string
   uploadedAt: Date
-  metadata?: unknown
+  metadata?: DocumentMetadata
 }
 
 export type AIProvider =
@@ -139,6 +144,8 @@ interface AppState {
   addDocument: (document: Document) => void
   removeDocument: (id: string) => void
   clearDocuments: () => void
+  /** Replace documents and messages with a persisted session (see lib/session-persistence.ts). */
+  restoreSession: (session: { documents: Document[]; messages: Message[] }) => void
   setAIConfig: (config: AIConfig) => void
   setVectorDBConfig: (config: VectorDBConfig) => void
   setIsProcessing: (processing: boolean) => void
@@ -200,6 +207,8 @@ export const useAppStore = create<AppState>()(
         })),
 
       clearDocuments: () => set({ documents: [] }),
+
+      restoreSession: ({ documents, messages }) => set({ documents, messages }),
 
       setAIConfig: (config) => {
         // Validate provider and fallback to openai if invalid

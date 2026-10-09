@@ -6,11 +6,10 @@ import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from 'react-markdown'
 import { formatCitationsForDisplay } from '@/lib/citation-format'
 import remarkGfm from 'remark-gfm'
-// @ts-expect-error - missing types
 import remarkMath from 'remark-math'
-// @ts-expect-error - missing types
 import Mermaid from '@/components/mermaid'
-import type { Components } from 'react-markdown'
+import type { Components, ExtraProps } from 'react-markdown'
+import type { RAGEngine } from '@/lib/rag-engine'
 import rehypeKatex from 'rehype-katex'
 
 import { ChunkVisualization } from "@/components/chunk-visualization"
@@ -103,6 +102,8 @@ interface Message {
   }
 }
 
+type MarkdownCodeProps = React.ComponentPropsWithoutRef<'code'> & ExtraProps & { inline?: boolean }
+
 interface ChatInterfaceProps {
   messages: Message[]
   onSendMessage: (content: string, options?: {
@@ -116,7 +117,7 @@ interface ChatInterfaceProps {
   onNewSession: () => void
   isProcessing: boolean
   disabled: boolean
-  ragEngine?: unknown // Add ragEngine prop for diagnostics
+  ragEngine?: Pick<RAGEngine, 'runDiagnostics'> // Add ragEngine prop for diagnostics
   documentContext?: unknown
   aiClient?: unknown
   embeddingStatus?: {
@@ -267,7 +268,7 @@ function MessageContent({ content }: { content: string }) {
             <div key={part.id} className="markdown-content">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex as unknown]}
+                rehypePlugins={[rehypeKatex]}
                 components={{
                   // Custom styling for markdown elements
                   h1: ({ children }) => <h1 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4 mt-4 sm:mt-6 first:mt-0 break-words">{children}</h1>,
@@ -285,9 +286,9 @@ function MessageContent({ content }: { content: string }) {
                       {children}
                     </blockquote>
                   ),
-                  code: (props: unknown) => {
+                  code: (props: MarkdownCodeProps) => {
                     const { inline, children, ...rest } = props;
-                    const className: unknown = (props as unknown).className || ''
+                    const className = props.className || ''
                     const langMatch = /language-(\w+)/.exec(className)
                     const language = langMatch ? langMatch[1] : undefined
                     const codeString = String(children).trim()
@@ -436,7 +437,7 @@ export function ChatInterface({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      handleSubmitStreaming(e as unknown)
+      handleSubmitStreaming(e)
     }
   }
 
@@ -587,7 +588,7 @@ export function ChatInterface({
 ## Document Analysis
 ${diagnostics.documents.length === 0 
   ? '❌ No documents found' 
-  : diagnostics.documents.map((doc: unknown, i: number) => 
+  : diagnostics.documents.map((doc, i: number) => 
     `**${i + 1}. ${doc.name}**
 - Chunks: ${doc.chunksCount}
 - Embeddings: ${doc.embeddingsCount}
@@ -636,13 +637,13 @@ ${diagnostics.documents.length === 0
     onSendMessage(text, {
       useContext,
       showThinking: enhancedOptions.showThinking,
-      complexityLevel: enhancedOptions.complexityLevel === 'auto' ? undefined : (enhancedOptions.complexityLevel as unknown),
+      complexityLevel: enhancedOptions.complexityLevel === 'auto' ? undefined : (enhancedOptions.complexityLevel as 'simple' | 'normal' | 'complex'),
       documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined
     })
     
     // Add to query history
-    if (typeof window !== 'undefined' && (window as unknown).__addQueryToHistory) {
-      (window as unknown).__addQueryToHistory(text)
+    if (typeof window !== 'undefined' && window.__addQueryToHistory) {
+      window.__addQueryToHistory(text)
     }
   }
 

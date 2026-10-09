@@ -63,14 +63,14 @@ export function SystemStatus({
 
     const avgResponseTime = assistantMessages.length
       ? Math.round(
-          assistantMessages.reduce((sum, msg) => {
+          assistantMessages.reduce<number>((sum, msg) => {
             const metadata = asRecord(asRecord(msg).metadata) as AssistantMetadata
             return sum + (metadata.responseTime || 0)
           }, 0) / assistantMessages.length,
         )
       : 0
 
-    const documentChunks = safeDocuments.reduce((sum, doc) => {
+    const documentChunks = safeDocuments.reduce<number>((sum, doc) => {
       const chunks = asRecord(doc).chunks
       return sum + (Array.isArray(chunks) ? chunks.length : 0)
     }, 0)

@@ -29,6 +29,25 @@ interface Document {
   metadata?: unknown
 }
 
+/** Fields the library reads from `Document.metadata`, which the store types as `unknown`. */
+interface DocumentMetadata {
+  processingMethod?: string
+  aiProvider?: string
+  confidence?: number
+  size?: number
+  fileSize?: number
+  type?: string
+  extractionQuality?: string
+  pages?: number
+  title?: string
+  isFallback?: boolean
+}
+
+function getMetadata(doc: Document): DocumentMetadata | undefined {
+  const { metadata } = doc
+  return metadata && typeof metadata === "object" ? (metadata as DocumentMetadata) : undefined
+}
+
 interface DocumentLibraryProps {
   documents: Document[]
   onRemoveDocument: (id: string) => void
@@ -65,12 +84,12 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
   }
 
   const getProcessingMethod = (doc: Document) => {
-    return doc.metadata?.processingMethod || doc.metadata?.aiProvider || "Standard"
+    return getMetadata(doc)?.processingMethod || getMetadata(doc)?.aiProvider || "Standard"
   }
 
   const getConfidenceScore = (doc: Document) => {
     // Ensure confidence is between 0 and 1, and handle various formats
-    const confidence = doc.metadata?.confidence || 0
+    const confidence = getMetadata(doc)?.confidence || 0
     if (confidence > 1) {
       // If confidence is already a percentage (>1), convert to 0-1 range
       return Math.min(confidence / 100, 1)
@@ -81,8 +100,8 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
   const getTotalSize = () => {
     return documents.reduce((total, doc) => {
       // Try multiple possible size sources
-      const size = doc.metadata?.size || 
-                  doc.metadata?.fileSize || 
+      const size = getMetadata(doc)?.size || 
+                  getMetadata(doc)?.fileSize || 
                   doc.content?.length || 
                   (doc.chunks?.join('').length || 0)
       return total + size
@@ -180,15 +199,15 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
         documents: documents.map(doc => ({
           id: doc.id,
           name: doc.name,
-          size: doc.metadata?.size || 0,
-          type: doc.metadata?.type || "unknown",
+          size: getMetadata(doc)?.size || 0,
+          type: getMetadata(doc)?.type || "unknown",
           uploadedAt: doc.uploadedAt,
           chunks: doc.chunks || [],
           metadata: doc.metadata || {},
           processingStats: {
             method: getProcessingMethod(doc),
             confidence: getConfidenceScore(doc),
-            quality: doc.metadata?.extractionQuality || "unknown"
+            quality: getMetadata(doc)?.extractionQuality || "unknown"
           }
         }))
       }
@@ -234,8 +253,8 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
 
       documents.forEach((doc, index) => {
         markdown += `## ${index + 1}. ${doc.name}\n\n`
-        markdown += `- **Size:** ${formatFileSize(doc.metadata?.size || 0)}\n`
-        markdown += `- **Type:** ${doc.metadata?.type || "unknown"}\n`
+        markdown += `- **Size:** ${formatFileSize(getMetadata(doc)?.size || 0)}\n`
+        markdown += `- **Type:** ${getMetadata(doc)?.type || "unknown"}\n`
         markdown += `- **Uploaded:** ${new Date(doc.uploadedAt).toLocaleDateString()}\n`
         markdown += `- **Chunks:** ${doc.chunks?.length || 0}\n`
         markdown += `- **Processing Method:** ${getProcessingMethod(doc)}\n`
@@ -600,17 +619,17 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
                       <span className="text-gray-600 font-medium">Embeddings:</span>
                       <div className="font-mono font-bold">{doc.embeddings?.length || 0}</div>
                     </div>
-                    {doc.metadata?.pages && (
+                    {getMetadata(doc)?.pages && (
                       <div className="space-y-1">
                         <span className="text-gray-600 font-medium">Pages:</span>
-                        <div className="font-mono font-bold">{doc.metadata.pages}</div>
+                        <div className="font-mono font-bold">{getMetadata(doc)?.pages}</div>
                       </div>
                     )}
-                    {doc.metadata?.title && (
+                    {getMetadata(doc)?.title && (
                       <div className="space-y-1">
                         <span className="text-gray-600 font-medium">Title:</span>
-                        <div className="font-mono font-bold truncate" title={doc.metadata.title}>
-                          {doc.metadata.title}
+                        <div className="font-mono font-bold truncate" title={getMetadata(doc)?.title}>
+                          {getMetadata(doc)?.title}
                         </div>
                       </div>
                     )}
@@ -626,7 +645,7 @@ export function DocumentLibrary({ documents, onRemoveDocument, isLoading = false
                     </ScrollArea>
                   </div>
 
-                  {doc.metadata?.isFallback && (
+                  {getMetadata(doc)?.isFallback && (
                     <Alert className="border-yellow-500 bg-yellow-50">
                       <AlertDescription className="text-sm">
                         <strong>Note:</strong> This document was processed using fallback methods. The original PDF
